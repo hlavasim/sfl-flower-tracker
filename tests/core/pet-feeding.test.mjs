@@ -143,20 +143,18 @@ test("section=pets attaches a feeding table priced from the same map as prices/d
   }
 });
 
-// The page renders the table from a template literal that no unit test would otherwise
-// touch. Slice that block out of flowers.html and run it against a payload row, so a
-// typo (or a silent revert to the old plain food list) shows up as a red test.
-const PAGE = new URL("../../flowers.html", import.meta.url);
+// The PETS page renders the feeding table through the 🐶 pet-cards widget (widgets/pets.mjs): run
+// its detail cell against a payload row, so a typo (or a silent revert to the plain food list)
+// shows up as a red test. Only the feeding part is checked here.
+import { petCards } from "../../widgets/pets.mjs";
 
 function renderFeedingBlock(pet) {
-  const html = readFileSync(PAGE, "utf8");
-  const start = html.indexOf("// Feeding table — today's requests");
-  const end = html.indexOf("} else if (pet.foods.length > 0) {", start);
-  assert.ok(start > 0 && end > start, "feeding block not found in flowers.html");
-  const body = html.slice(start, end) + "}";
-  return new Function("pet", "escHTML", "sflIcon",
-    "let content = '';\n" + body + "\nreturn content;"
-  )(pet, (s) => String(s).replace(/[&<>\"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])), () => "<i></i>");
+  const p = { name: "Barkley", petType: null, species: null, level: 1, xp: 0, energy: 0, isNft: false, calc: {}, ...pet };
+  const out = petCards.build({ pets: { pets: [p], p2pPrices: {}, fetchBoosts: {} } }, { icon: (n) => `<img data-i="${n}">`, flower: "<i></i>" }, {});
+  const html = out.rows[0].detailHtml;
+  const start = html.indexOf('<div class="v-pet-sec">Feeding</div>');
+  if (start < 0) return "";
+  return html.slice(start, html.indexOf("fed today", start) + "fed today".length);
 }
 
 test("the page renders the feeding rows, not the old plain food list", () => {
@@ -168,38 +166,38 @@ test("the page renders the feeding rows, not the old plain food list", () => {
     ],
   });
 
-  assert.match(out, /FEEDING/);
-  // A single table, so every column shares one track and the numbers line up between
-  // rows — per-row grids sized their columns independently and looked scrambled.
-  assert.equal((out.match(/<table class="pet-feed-table">/g) || []).length, 1);
+  assert.match(out, /Feeding/);
+  // A single table, so every column shares one track and the numbers line up between rows.
+  assert.equal((out.match(/<table class="w-table w-compact v-pet-t">/g) || []).length, 1);
   assert.equal((out.match(/<tr/g) || []).length, 4, "one header row + one row per request");
   for (const row of out.split("<tr").slice(2)) {
     assert.equal((row.match(/<td/g) || []).length, 5, "row does not have all five cells");
   }
-  assert.match(out, /<tr class="pet-best">/, "best row not highlighted");
-  assert.match(out, /pet-fed/, "fed row not dimmed");
-  assert.match(out, /pet-feed-tier easy/);
-  assert.match(out, /pet-feed-tier hard/);
+  assert.match(out, /<tr class="w-st-ready">/, "best row not highlighted");
+  assert.match(out, /<tr class="w-st-done">/, "fed row not dimmed");
+  assert.match(out, /v-pill v-ok">EASY</);
+  assert.match(out, /v-pill v-bad">HARD</);
+  // every food carries its icon
+  for (const f of ["Rhubarb Tart", "Grape Juice", "Cheese"]) assert.match(out, new RegExp(`<img data-i="${f}">${f}`));
   assert.match(out, /17,207/, "efficiency not formatted");
   assert.match(out, /0\.0020/, "sub-cent cost needs 4 decimals or it reads as 0.00");
   assert.match(out, /1\.280/, "cost above a cent should read at 3 decimals");
   assert.match(out, /1\/3 fed today/);
   assert.doesNotMatch(out, /undefined|NaN/, "template produced undefined/NaN");
-  // Units belong in the header; repeating them in every cell is what made the numbers
-  // hard to read. And the column is per SFL — the app's currency label everywhere else.
+  // Units belong in the header; repeating them in every cell is what made the numbers hard to read.
   assert.doesNotMatch(out, /\d+ &#x26A1;<\/td>|\d+ xp<\/td>/, "units repeated in the cells");
-  assert.doesNotMatch(out, /FLOWER/, "the rest of the app labels this currency SFL");
   // The value bar is scaled against the best row of this pet.
-  assert.match(out, /pet-feed-bar" style="width:100%/, "best row's bar should be full width");
-  const bars = [...out.matchAll(/pet-feed-bar" style="width:(\d+)%/g)].map((m) => Number(m[1]));
+  const bars = [...out.matchAll(/<i class="v-ok" style="width:(\d+)%"><\/i>/g)].map((m) => Number(m[1]));
   assert.deepEqual(bars, [100, 4], "bars not proportional to the best value (unpriced row gets none)");
-  // The unpriced row still renders, with an em dash instead of a fake price. Counted over
-  // the rows only — the footer note carries an em dash of its own.
-  const rowsOnly = out.split("pet-feed-note")[0];
-  assert.equal((rowsOnly.match(/&#x2014;/g) || []).length, 2, "unpriced row should dash BOTH cost and value");
+  // The unpriced row still renders, with an em dash instead of a fake price — over the rows only.
+  const rowsOnly = out.split("v-rm-note")[0];
+  assert.equal((rowsOnly.match(/—/g) || []).length, 2, "unpriced row should dash BOTH cost and value");
 });
 
-test("a pet with no feeding rows falls back to the old food list instead of blanking", () => {
-  const out = renderFeedingBlock({ foods: ["Mashed Potato"], feeding: [] });
-  assert.equal(out, "", "empty feeding must fall through to the else-if branch");
+test("a pet with no feeding rows falls back to the food list (with icons) instead of blanking", () => {
+  assert.equal(renderFeedingBlock({ foods: ["Mashed Potato"], feeding: [] }), "");
+  const p = { name: "Barkley", petType: null, level: 1, xp: 0, energy: 0, isNft: false, calc: {}, foods: ["Mashed Potato"], feeding: [] };
+  const html = petCards.build({ pets: { pets: [p], p2pPrices: {} } }, { icon: (n) => `<img data-i="${n}">` }, {}).rows[0].detailHtml;
+  assert.match(html, /Food requests/);
+  assert.match(html, /<img data-i="Mashed Potato">Mashed Potato/);
 });

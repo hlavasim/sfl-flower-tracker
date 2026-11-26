@@ -866,7 +866,7 @@ test("the whole ascension ladder is offered, in an order the game will let you b
 
   // 1. Labels are spelled out: "A1 · Expansion 31", not "A1 · e31".
   for (const r of asc) {
-    assert.ok(/^(A\d+ · Expansion \d+|Ascension A\d+|Upgrade na .+|\w+ Expansion \d+)$/.test(r.name), `label: ${r.name}`);
+    assert.ok(/^(A\d+ · Expansion \d+|Ascension A\d+|Upgrade to .+|\w+ Expansion \d+)$/.test(r.name), `label: ${r.name}`);
     assert.ok(!/· e\d/.test(r.name), `${r.name}: no bare e-number`);
   }
 
@@ -904,7 +904,7 @@ test("the whole ascension ladder is offered, in an order the game will let you b
 
   // 6. A step that grants nothing earning cannot be a row, so its cost is rolled into the next one
   //    and named there — reaching that expansion means paying for it too.
-  if (firstEarning !== out.steps[0]) assert.ok(/přes /.test(first.boost), `says what it goes through: ${first.boost}`);
+  if (firstEarning !== out.steps[0]) assert.ok(/via /.test(first.boost), `says what it goes through: ${first.boost}`);
 });
 
 // ── date-gated ascensions ──

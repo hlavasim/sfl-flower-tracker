@@ -76,8 +76,6 @@
     /* Roadmap pick: a faint checkbox that only shows up on hover or once ticked. */
     .rm-pick { opacity: 0.18; cursor: pointer; margin: 0 3px 0 0; vertical-align: middle; width: 11px; height: 11px; }
     tr:hover .rm-pick, .rm-pick:checked { opacity: 0.9; }
-    #rm-pick-total { position: sticky; bottom: 0; z-index: 5; background: rgba(20,14,8,0.94); border-top: 1px solid rgba(255,255,255,0.08);
-      padding: 5px 8px; font-size: 0.55rem; color: var(--text-dim); font-family: 'Courier New', monospace; }
 
     /* ── Nav Bar ── */
     .nav-bar {
@@ -2876,6 +2874,71 @@
       background: linear-gradient(135deg, transparent 50%, var(--border-brown) 50%, var(--border-brown) 60%, transparent 60%, transparent 75%, var(--border-brown) 75%); }
     .w-resize:hover { background: linear-gradient(135deg, transparent 50%, var(--sunpetal) 50%, var(--sunpetal) 60%, transparent 60%, transparent 75%, var(--sunpetal) 75%); }
     @media (max-width: 700px) { .w-board > .w-frame { grid-column: span 12 !important; } .w-resize { display: none; } }
+
+    /* ROADMAP / BUDS / PETS widgets (widgets/roadmap.mjs, buds.mjs, pets.mjs) */
+    .v-item { white-space: nowrap; }
+    .v-item img, .v-rm-legend img, .v-pet-chip img { height: 1.2em; vertical-align: -0.2em; margin-right: 3px; }
+    .v-rm-stack { display: flex; height: 14px; border-radius: 999px; overflow: hidden; margin: 0 0 8px; background: var(--c-line); }
+    .v-rm-stack > i { display: block; height: 100%; }
+    .v-rm-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--c-muted); }
+    .v-rm-note { margin-top: 8px; font-size: 12px; line-height: 1.5; }
+    .v-rm-neg { color: var(--c-red); }
+    .v-rm-gapok { color: var(--c-yellow); }
+    .v-rm-cond { color: var(--c-blue); }
+    .v-rm-group { color: #b08cd8; }
+    .v-rm-link { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--c-dim); cursor: pointer; white-space: nowrap; }
+    .v-rm-rank { display: inline-flex; gap: 6px; align-items: center; color: var(--c-dim); }
+    .v-rm-rank input { opacity: 0.5; margin: 0; cursor: pointer; }
+    .v-rm-rank input:checked, .v-rm-rank input:hover { opacity: 1; }
+    .v-rm-val { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+    .v-rm-val .v-bar { min-width: 60px; width: 100%; }
+    .v-rm-types { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
+    .v-rm-off { opacity: 0.45; text-decoration: line-through; }
+    .v-rm-picks { position: sticky; bottom: 0; z-index: 5; margin-top: 10px; padding: 8px 12px; background: var(--c-card2); border-radius: 10px; }
+    .v-rm-more { margin-top: 8px; }
+    .v-rm-more > summary { cursor: pointer; color: var(--c-muted); font-size: 12px; }
+    .v-rm-how, .v-rm-chips { font-size: 12px; color: var(--c-muted); line-height: 1.6; margin-top: 6px; }
+    .v-rm-chips { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+    .v-rm-line { padding: 3px 0; border-top: 1px solid var(--c-row); font-size: 12px; }
+    .v-name b + .v-pill { margin-left: 4px; }
+    /* the ROADMAP page's own panels (profitability, skills, gifts, deliveries, animals, settings) */
+    .v-rm-page { font-family: var(--c-font); color: var(--c-text); }
+    .v-rm-page .pixel-panel { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 14px; box-shadow: none; image-rendering: auto; }
+    .v-rm-page .pixel-font, .v-rm-page [style*="Press Start"] { font-family: var(--c-font) !important; letter-spacing: 0; }
+    .v-rm-sec { margin: 12px 0; background: var(--c-card); border: 1px solid var(--c-line); border-radius: 14px; padding: 10px 14px; }
+    .v-rm-sec > summary { cursor: pointer; font-size: 15px; font-weight: 600; color: var(--c-text); }
+    .v-rm-sec > div { margin-top: 10px; }
+    .v-rm-buy { margin: 12px 0; }
+    .v-rm-tabs { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin: 16px 0 8px; font-size: 15px; }
+    .v-rm-tabbtns { margin-left: auto; display: flex; gap: 6px; }
+    .v-rm-tabbtns .dash-toggle-btn { font-family: var(--c-font); font-size: 13px; padding: 6px 14px; border-radius: 999px; background: var(--c-card);
+      border: 1px solid var(--c-line); color: var(--c-muted); box-shadow: none; }
+    .v-rm-tabbtns .dash-toggle-btn.on { background: var(--c-text); color: var(--c-bg); border-color: var(--c-text); font-weight: 600; }
+    .v-rm-warn { margin: 8px 0; padding: 8px 12px; border-radius: 10px; background: rgba(224,179,74,0.12); color: var(--c-yellow); font-size: 13px; }
+    .v-pet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+    .v-pet-card { background: var(--c-card2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+    .v-pet-missing { opacity: 0.7; }
+    .v-pet-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .v-pet-chips { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 12px; }
+    .v-pet-chip small { color: var(--c-dim); }
+    .v-pet-unique { color: #b08cd8; }
+    .v-pet-moon { color: var(--c-blue); }
+    .v-pet-lines { display: flex; flex-direction: column; gap: 6px; }
+    .v-pet-line { display: grid; grid-template-columns: minmax(120px, 1fr) auto 120px; gap: 10px; align-items: center; }
+    .v-pet-best { background: rgba(95,179,107,0.10); border-radius: 10px; padding: 6px 10px; margin: 6px 0; }
+    .v-pet-sec { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--c-dim); margin: 10px 0 4px; }
+    .v-pet-t { width: 100%; }
+    .v-pet-xp { margin: 8px 0; font-size: 12px; }
+    .v-pet-perk { display: flex; gap: 8px; align-items: baseline; font-size: 12px; padding: 2px 0; }
+    .v-pet-desc { flex: 1; }
+    .v-pet-done { color: var(--c-green); }
+    .v-pet-next { color: var(--c-yellow); font-weight: 600; }
+    .v-pet-na { opacity: 0.45; text-decoration: line-through; }
+    .v-pet-delta { margin-left: auto; white-space: nowrap; font-size: 11.5px; }
+    .v-bud-myth { color: #ff66ff; font-weight: 700; }
+    .v-bud-rare { color: #ff8800; font-weight: 700; }
+    .v-bud-green { color: var(--c-green); }
+    .v-bud-basic { color: var(--c-blue); }
 
 </style>
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -14834,7 +14897,7 @@
         let tickets = 0; try { tickets = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
         rv += tickets * TV;
         for (const [it, q] of Object.entries(r.items || {})) { if (it === ticketName) continue; rv += (KEY_CHEST[it] ? roadmapKeyValue(it) : (p2pPrices[it] || estItem(it) || 0)) * q; }
-        dels.push({ from: o.from, needs: Object.entries(o.items || {}).map(([i, q]) => i === "coins" ? (q.toLocaleString() + " coins") : (q + "\u00d7 " + i)).join(", "), cost, tickets, rv, net: rv - cost });
+        dels.push({ from: o.from, needs: Object.entries(o.items || {}).map(([i, q]) => i === "coins" ? (q.toLocaleString() + " coins") : (q + "\u00d7 " + `<img class="inline-icon" src="${getItemIcon(i)}" onerror="this.style.display='none'" alt="">` + escHTML(i))).join(", "), cost, tickets, rv, net: rv - cost });
       }
       dels.sort((a, b) => b.net - a.net);
 
@@ -14861,7 +14924,7 @@
       if (dels.length) {
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:6px 0 3px">DELIVERIES (${dels.length} pending)</div>`;
         h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td style="padding:0 6px">from</td><td style="padding:0 6px">give</td><td style="padding:0 6px;text-align:right">reward</td><td style="padding:0 6px;text-align:right">cost</td><td style="padding:0 6px;text-align:right">tickets</td><td style="text-align:right">net</td></tr>`;
-        for (const d of dels.slice(0, 14)) h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:2px 6px;white-space:nowrap">${escHTML(d.from)}</td><td style="padding:2px 6px;color:var(--text-dim)">${escHTML(d.needs)}</td><td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(d.rv)}</td><td style="padding:2px 6px;text-align:right;color:var(--red)">${d.cost > 0.001 ? "\u2212" + roadmapFmtFlower(d.cost) : "0"}</td><td style="padding:2px 6px;text-align:right;color:var(--sunpetal)">${d.tickets || ""}</td><td style="padding:2px 0 2px 6px;text-align:right">${fmtNet(d.net)}</td></tr>`;
+        for (const d of dels.slice(0, 14)) h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:2px 6px;white-space:nowrap">${escHTML(d.from)}</td><td style="padding:2px 6px;color:var(--text-dim)">${d.needs}</td><td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(d.rv)}</td><td style="padding:2px 6px;text-align:right;color:var(--red)">${d.cost > 0.001 ? "\u2212" + roadmapFmtFlower(d.cost) : "0"}</td><td style="padding:2px 6px;text-align:right;color:var(--sunpetal)">${d.tickets || ""}</td><td style="padding:2px 0 2px 6px;text-align:right">${fmtNet(d.net)}</td></tr>`;
         h += `</table>`;
       }
       if (bos.length) {
@@ -14909,7 +14972,7 @@
         h += `<tr style="border-top:1px solid #222${within ? "" : ";opacity:0.45"}">
           <td style="padding:3px 6px;white-space:nowrap">${escHTML(r.npc)}</td>
           <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.flower)} <span style="color:var(--text-dim);font-size:0.5rem">${r.pts}pt\u00b7${r.growDays.toFixed(0)}d</span></td>
-          <td style="padding:3px 6px;white-space:nowrap;color:var(--text-dim)">${r.liked ? escHTML(r.liked.f) + ' <span style="font-size:0.5rem">' + r.liked.pts + 'pt\u00b7' + r.liked.days.toFixed(0) + 'd</span>' : "\u2014"}</td>
+          <td style="padding:3px 6px;white-space:nowrap;color:var(--text-dim)">${r.liked ? `<img class="inline-icon" src="${getItemIcon(r.liked.f)}" onerror="this.style.display='none'" alt="">` + escHTML(r.liked.f) + ' <span style="font-size:0.5rem">' + r.liked.pts + 'pt\u00b7' + r.liked.days.toFixed(0) + 'd</span>' : "\u2014"}</td>
           <td style="padding:3px 6px;color:var(--text-dim)">${escHTML(r.repLabel)}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.repVal)}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">+${roadmapFmtFlower(r.perGift)}</td>
@@ -15078,30 +15141,6 @@
     }
 
     // Income-engine hero: current FLOWER/day + source breakdown + the biggest levers (buys + free moves).
-    function roadmapIncomeHeroHtml(settings, sim, startIncome) {
-      // currentProd is served by section=roadmap (same engine that computed sim)
-      const prod = (_roadmapServer && _roadmapServer.currentProd) || { total: 0, breakdown: [] };
-      const total = startIncome > 0 ? startIncome : (prod.total || 0);
-      const bd = (prod.breakdown || []).filter(b => b.sfl > 0.01).sort((a, b) => b.sfl - a.sfl);
-      const catColor = { trees:"#63c74d", stone:"#9a8060", iron:"#c4a882", gold:"#FFD700", crimstone:"#FF6B6B", crops:"#30D158", fruits:"#FF69B4", greenhouse:"#5DADE2", chickens:"#FFD60A", cows:"#C8A2C8", sheep:"#B07CD8", bees:"#FFD700", fishing:"#5DADE2", obsidian:"#8b6914", flowers:"#FF69B4", oil:"#8b6914", pets:"#F5A9BC", cropMachine:"#E67E22", buds:"#9ACD32" };
-      const lbl = (c) => c === "cropMachine" ? "Crop Machine" : c === "buds" ? "Buds" : ((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c);
-      let bar = "", legend = "";
-      const barBase = bd.reduce((s, b) => s + b.sfl, 0);
-      for (const b of bd) { const pct = barBase > 0 ? Math.max(1, b.sfl / barBase * 100) : 0; const c = catColor[b.cat] || "#8b6914"; bar += `<div style="width:${pct}%;background:${c}" title="${lbl(b.cat)} ${roadmapFmtFlower(b.sfl)}/d"></div>`; legend += `<span style="white-space:nowrap;margin-right:12px"><span style="display:inline-block;width:8px;height:8px;background:${c};border-radius:2px;vertical-align:middle"></span> ${escHTML(lbl(b.cat))} ${roadmapFmtFlower(b.sfl)}</span>`; }
-      let h = `<div class="pixel-panel" style="padding:14px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.55rem;color:var(--text-secondary);margin-bottom:8px">YOUR INCOME RIGHT NOW</div>`;
-      h += `<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:10px"><div style="font-size:1.7rem;font-weight:bold;color:var(--sunpetal);line-height:1">${roadmapFmtFlower(total)} ${sflIcon()}<span style="font-size:0.65rem;color:var(--text-dim)"> /day</span></div><div style="font-size:0.6rem;color:var(--text-dim)">\u2192 <b style="color:var(--green)">${roadmapFmtFlower(sim.finalRate)}/day</b> after the plan: ${sim.econSteps} buys for ${roadmapFmtFlower(sim.econCost)} ${sflIcon()}, done in ~${roadmapFmtDays((sim.timeline || []).filter(t => t.kind === "econ").reduce((a, t) => Math.max(a, t.atDay || 0), 0))}${sim.wealth != null ? ` \u00b7 <span title="FLOWER v ruce za ${sim.horizonYears} let: hotovost ${roadmapFmtFlower(sim.cashAtHorizon)} + za kolik se pak prodají koupená NFT ${roadmapFmtFlower(sim.resaleAtHorizon)}. Počítá s tím, že celý příjem kromě výběru do BTC investuješ podle plánu.">in hand after ${sim.horizonYears} y: <b style="color:var(--sunpetal)">${roadmapFmtFlower(sim.wealth)} ${sflIcon()}</b></span>` : ""}${sim.withdrawPerDay > 0 ? ` <span style="font-size:0.5rem">(\u2212${roadmapFmtFlower(sim.withdrawPerDay)}/day to BTC)</span>` : ""}${sim.beyondCount ? ` <span style="font-size:0.5rem">\u00b7 ${sim.beyondCount} items don\u2019t pay back within ${sim.horizonYears} y</span>` : ""}</div></div>`;
-      if (bd.length) { h += `<div style="display:flex;height:16px;border-radius:4px;overflow:hidden;border:1px solid var(--border-brown);margin-bottom:6px">${bar}</div><div style="font-size:0.5rem;color:var(--text-dim);line-height:1.9">${legend}</div>`; }
-      // Oil and lava pits burn resources for expansions/nodes: shown as what comes off the gross.
-      const inputs = (prod.inputs || []).filter(x => x.sfl < -0.01);
-      if (inputs.length) {
-        const inLbl = { oil: "Oil", obsidian: "Lava pit" };
-        h += `<div style="font-size:0.55rem;color:var(--text-secondary);margin-top:6px">výdělek <b>${roadmapFmtFlower(prod.gross || 0)}</b>${inputs.map(x => ` <span style="color:var(--red)">− ${escHTML(inLbl[x.cat] || x.cat)} ${roadmapFmtFlower(-x.sfl)}</span>`).join("")} = <b style="color:var(--sunpetal)">${roadmapFmtFlower(total)} /day</b> <span style="font-size:0.48rem;color:var(--text-dim)">(oil a obsidian děláš na expanze a nody, neprodáváš je — jejich provoz je náklad)</span></div>`;
-      }
-      h += `</div>`;
-      return h;
-    }
-
     function roadmapMiningDetail(c, r, f) {
       const res = MINE_RES[c], T = MINE_TOOL[c];
       const toolName = Object.keys(TOOL_TO_CAT).find(k => TOOL_TO_CAT[k] === c) || "tool";
@@ -15228,8 +15267,8 @@
         for (const x of parts) if (!_sold.has(x.it)) { _sold.add(x.it); _sellTotal += x.q * x.p * _keep; }
         const qty = parts.map((x) => Math.floor(x.q).toLocaleString("cs-CZ")).join(" + ");
         const tip = parts.map((x) => `${x.it}: ${Math.floor(x.q)} × ${x.p} = ${roadmapFmtFlower(x.q * x.p * _keep)} po poplatku`
-          + (_LIMITED[x.it] ? ` (máš ${Math.floor(x.have)}, prodat jde 1 kus týdně${x.q < 1 ? " — tento týden už prodáno" : ""})` : "")).join(" · ");
-        const lim = parts.some((x) => _LIMITED[x.it]) ? `<div style="color:var(--text-dim);font-size:0.46rem">${parts.some((x) => _LIMITED[x.it] && x.q < 1) ? "tento týden prodáno" : "limit 1/týden"}</div>` : "";
+          + (_LIMITED[x.it] ? ` (you have ${Math.floor(x.have)}, 1 a week can be sold${x.q < 1 ? " — already sold this week" : ""})` : "")).join(" · ");
+        const lim = parts.some((x) => _LIMITED[x.it]) ? `<div style="color:var(--text-dim);font-size:0.46rem">${parts.some((x) => _LIMITED[x.it] && x.q < 1) ? "sold this week" : "limit 1/week"}</div>` : "";
         // Two products (Wool + Merino Wool) do not fit the column on one line: their counts go above.
         const q = parts.length > 1 ? `<div style="color:var(--text-dim);font-size:0.48rem">${qty}</div>` : `<span style="color:var(--text-dim)">${qty}</span> `;
         return `<span title="${escHTML(tip)}">${q}~<b style="color:var(--sunpetal)">${roadmapFmtFlower(v)}</b>${sflIcon()}${lim}</span>`;
@@ -15239,7 +15278,7 @@
         if (!g.keepOrder) g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
         h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:12px 0 3px">${g.title}</div>`;
         if (g.note) h += `<div style="font-size:0.5rem;color:var(--text-dim);margin:0 0 4px;line-height:1.5">${g.note}</div>`;
-        h += `<div style="overflow-x:auto"><table style="width:100%;min-width:480px;border-collapse:collapse;font-size:0.58rem;table-layout:fixed"><colgroup><col style="width:auto"><col style="width:74px"><col style="width:74px"><col style="width:74px"><col style="width:112px"></colgroup><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td><td style="text-align:right" title="Kolik toho máš v inventáři ~ kolik FLOWER bys za to dostal, kdybys to prodal teď (p2p cena po poplatku).">sell</td></tr>`;
+        h += `<div style="overflow-x:auto"><table style="width:100%;min-width:480px;border-collapse:collapse;font-size:0.58rem;table-layout:fixed"><colgroup><col style="width:auto"><col style="width:74px"><col style="width:74px"><col style="width:74px"><col style="width:112px"></colgroup><tr style="color:var(--text-dim);font-size:0.5rem"><td></td><td style="text-align:right;padding:0 6px">gives/d</td><td style="text-align:right;padding:0 6px">cost/d</td><td style="text-align:right">net/d</td><td style="text-align:right" title="What you hold in the inventory ~ the FLOWER you would get selling it now (p2p price after the fee).">sell</td></tr>`;
         for (const r of g.rows) {
           const pos = r.net > 0.001, neg = r.net < -0.001;
           const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
@@ -15256,7 +15295,7 @@
         }
         h += `</table></div>`;
       }
-      if (_sellTotal > 0) h += `<div style="margin-top:10px;text-align:right;font-size:0.62rem;color:var(--text-secondary)">Celkem na prodej teď: <b style="color:var(--sunpetal);font-size:0.72rem">~${roadmapFmtFlower(_sellTotal)}</b>${sflIcon()} <span style="font-size:0.5rem;color:var(--text-dim)">(každá surovina jednou, Obsidian jen co jde prodat tento týden)</span></div>`;
+      if (_sellTotal > 0) h += `<div style="margin-top:10px;text-align:right;font-size:0.62rem;color:var(--text-secondary)">For sale now in total: <b style="color:var(--sunpetal);font-size:0.72rem">~${roadmapFmtFlower(_sellTotal)}</b>${sflIcon()} <span style="font-size:0.5rem;color:var(--text-dim)">(each resource once, Obsidian only what can be sold this week)</span></div>`;
       h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">sell = what you hold now ~ FLOWER if you sold it all today (p2p price less the ${Math.round((1 - _keep) * 100)} % fee; a big sale would move the price). gives = gross sale value of a day's production; cost = feed+sickness (animals) / oil+seeds (crop machine) / wood (salt) / tools+seeds (mining,crops \u2014 free when coins are free). At full activity (not scaled by your harvest frequency).</div>`;
       h += `</div></div>`;
       return h;
@@ -15396,24 +15435,6 @@
      * at each step the cheapest-payback step available NOW is taken. So an entry always sits
      * below whatever it depends on, and the cumulative column is a real running total.
      */
-    // Which row types the Table view hides. Persisted like the other roadmap toggles so the
-    // choice survives a reload; unknown names are ignored rather than trusted.
-    const LS_ROADMAP_HIDDEN_TYPES = "sfl_roadmap_hidden_types";
-    function _roadmapHiddenTypes() {
-      try {
-        const v = JSON.parse(localStorage.getItem(LS_ROADMAP_HIDDEN_TYPES) || "[]");
-        return new Set(Array.isArray(v) ? v.filter(x => typeof x === "string") : []);
-      } catch { return new Set(); }
-    }
-    window._roadmapToggleType = function (ty) {
-      const h = _roadmapHiddenTypes();
-      if (h.has(ty)) h.delete(ty); else h.add(ty);
-      try { localStorage.setItem(LS_ROADMAP_HIDDEN_TYPES, JSON.stringify([...h])); } catch {}
-      // Re-render the view only. The plan is unchanged, so nothing needs recomputing — this used
-      // to refetch and recompute the whole roadmap on every click.
-      if (_roadmapServer) _renderRoadmapContentWith(_roadmapServer); else renderRoadmapContent();
-    };
-
     function roadmapAllUpgradesHtml(settings) {
       const ps = powerState || {};
       const sr = ps.skillRanks || {}, bv = ps.boostValues || {};
@@ -15506,7 +15527,7 @@
       // all upgrades (shard+point cut) and L1-only (points cut — base skills cost no shards).
       const _asc = (ps.farm && ps.farm.island && ps.farm.island.ascensionLevel) || 0;
       const _msN = Math.max(0, Math.min(4, _skillMilestoneAhead || 0));
-      const _msName = (n) => n === 0 ? "teď" : "A" + (_asc + n);
+      const _msName = (n) => n === 0 ? "now" : "A" + (_asc + n);
       let _projSh = shardsHave; for (let a = _asc + 1; a <= _asc + _msN; a++) _projSh += 3 * (1 + Math.min(a + 2, 12));
       const _projPt = freePts + 50 * _msN;
       const _l1 = _skillLadderMode === "l1";
@@ -15518,18 +15539,18 @@
       // Where the money runs out at the projected budget — whichever currency binds first.
       const affordable = shown.filter(o => o._cP <= _projPt && (_l1 || o._cS <= _projSh)).length;
 
-      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${shown.length} step${shown.length === 1 ? "" : "s"}${_l1 ? " (jen L1)" : ""} · ${_cp} skill point${_cp === 1 ? "" : "s"}${_l1 ? "" : ` · ${_cs} Ascension Shard${_cs === 1 ? "" : "s"}`} · +${roadmapFmtFlower(_shownGain)}/day</b> if you took the lot. ${_msN > 0 ? `Do <b>${_msName(_msN)}</b> budeš mít` : "You have"} <b style="color:var(--green)">${_projPt} point${_projPt === 1 ? "" : "s"}</b>${_l1 ? " (jen L1 — bez shardů)" : ` and <b style="color:${_projSh ? "var(--green)" : "var(--red)"}">${_projSh} shard${_projSh === 1 ? "" : "s"}</b>`}. ROI prices points only — shards are not tradable, so they have no price. ${ps.valueBasis === "measured"
+      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${shown.length} step${shown.length === 1 ? "" : "s"}${_l1 ? " (L1 only)" : ""} · ${_cp} skill point${_cp === 1 ? "" : "s"}${_l1 ? "" : ` · ${_cs} Ascension Shard${_cs === 1 ? "" : "s"}`} · +${roadmapFmtFlower(_shownGain)}/day</b> if you took the lot. ${_msN > 0 ? `By <b>${_msName(_msN)}</b> you will have` : "You have"} <b style="color:var(--green)">${_projPt} point${_projPt === 1 ? "" : "s"}</b>${_l1 ? " (L1 only — no shards)" : ` and <b style="color:${_projSh ? "var(--green)" : "var(--red)"}">${_projSh} shard${_projSh === 1 ? "" : "s"}</b>`}. ROI prices points only — shards are not tradable, so they have no price. ${ps.valueBasis === "measured"
         ? `Values are priced at your <b>measured</b> throughput${ps.effMeta && ps.effMeta.days > 1 ? ` (${ps.effMeta.snaps} snapshots over ${ps.effMeta.days.toFixed(1)} days)` : ""}, not the theoretical ceiling.`
         : `Values are at <b>theoretical</b> throughput — no farm history reached the server, so measured could not be computed.`}</div>`;
       h += `<div style="display:flex;gap:14px;align-items:center;margin:0 0 8px;flex-wrap:wrap">
-        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span style="font-size:0.46rem;color:var(--text-dim)">budget k:</span>${[0, 1, 2, 3, 4].map(n => { const on = n === _msN; return `<button onclick="_roadmapSetSkillMilestone(${n})" title="${n === 0 ? "co máš teď" : "co našetříš do ascension " + _msName(n) + ": +" + (50 * n) + " pt a shardy z bandů"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${_msName(n)}</button>`; }).join("")}</div>
-        <div style="display:flex;gap:4px;align-items:center"><span style="font-size:0.46rem;color:var(--text-dim)">zobrazit:</span>${[["all", "Vše"], ["l1", "Jen L1"]].map(([m, lbl]) => { const on = (_skillLadderMode || "all") === m; return `<button onclick="_roadmapSetSkillLadderMode('${m}')" title="${m === "l1" ? "jen base skilly (L1) — stojí jen pointy, čára podle volných pointů" : "všechny upgrady (L1 i rank-upy) — čára podle pointů i shardů"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${lbl}</button>`; }).join("")}</div>
+        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span style="font-size:0.46rem;color:var(--text-dim)">budget at:</span>${[0, 1, 2, 3, 4].map(n => { const on = n === _msN; return `<button onclick="_roadmapSetSkillMilestone(${n})" title="${n === 0 ? "what you have now" : "what you will have saved by ascension " + _msName(n) + ": +" + (50 * n) + " pt and the bands' shards"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${_msName(n)}</button>`; }).join("")}</div>
+        <div style="display:flex;gap:4px;align-items:center"><span style="font-size:0.46rem;color:var(--text-dim)">show:</span>${[["all", "All"], ["l1", "L1 only"]].map(([m, lbl]) => { const on = (_skillLadderMode || "all") === m; return `<button onclick="_roadmapSetSkillLadderMode('${m}')" title="${m === "l1" ? "base skills only (L1) — they cost points only, the line follows the free points" : "every upgrade (L1 and rank-ups) — the line follows points and shards"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${lbl}</button>`; }).join("")}</div>
       </div>`;
       // Column order is mobile-first: number, name, then the two figures you actually decide
       // on (FLOWER/d and per point) so they fit inside a ~390px screen without scrolling.
       // tree·cost / ROI / cumulative sit to their right, reachable by horizontal scroll.
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow-x:auto"><div style="min-width:566px">`;
-      h += `<div style="display:flex;gap:6px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:20px"></span><span style="flex:1 0 148px">skill</span><span style="min-width:52px;text-align:right;white-space:nowrap">FLOWER/d</span><span style="min-width:60px;text-align:right;white-space:nowrap;color:var(--sunpetal);font-weight:bold" title="Podle tohoto sloupce je seznam řazený, od nejlepšího. FLOWER/den ÷ všechny body, které tě ta položka stojí (včetně odemčení tieru).">▼ per point</span><span style="min-width:108px;white-space:nowrap">tree · cost</span><span style="min-width:40px;text-align:right" title="Návratnost ve dnech, včetně bodů na odemčení tieru. Je to jen převrácená hodnota sloupce vedle — cena bodu je pro všechny řádky stejná, takže řazení podle ROI a podle FLOWER/d na bod dává TOTÉŽ pořadí.">ROI</span><span style="min-width:72px;text-align:right;white-space:nowrap">cumulative</span></div>`;
+      h += `<div style="display:flex;gap:6px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:20px"></span><span style="flex:1 0 148px">skill</span><span style="min-width:52px;text-align:right;white-space:nowrap">FLOWER/d</span><span style="min-width:60px;text-align:right;white-space:nowrap;color:var(--sunpetal);font-weight:bold" title="The list is sorted by this column, best first. FLOWER/day ÷ every point the item costs you (unlocking its tier included).">▼ per point</span><span style="min-width:108px;white-space:nowrap">tree · cost</span><span style="min-width:40px;text-align:right" title="Payback in days, the tier-unlock points included. It is just the inverse of the column beside it — a point costs the same on every row, so sorting by ROI and by FLOWER/d per point gives the SAME order.">ROI</span><span style="min-width:72px;text-align:right;white-space:nowrap">cumulative</span></div>`;
       shown.forEach((r, i) => {
         if (i === affordable) {
           const why = (!_l1 && shown[i]._cS > _projSh && shown[i]._cP <= _projPt)
@@ -15541,7 +15562,7 @@
         const roiD = r.roiAll != null ? r.roiAll : r.roi;   // unlock-aware
         const roiTxt = roiD < 400 ? Math.round(roiD) + "d" : (roiD / 365).toFixed(1) + "r";
         const dim = i >= affordable ? "opacity:0.55;" : "";
-        const gate = r.gap > 0 ? ` <span style="color:#e8a060;font-size:0.42rem" title="Tier se otevře teprve až ve stromě ${escHTML(r.tree)} bude o ${r.gap} bodů víc (body za tier 3 se nepočítají). Cena i ROI to už zahrnují: ${r.points} + ${r.gap} = ${r.ptsAll} bodů.">🔒+${r.gap}pt</span>` : "";
+        const gate = r.gap > 0 ? ` <span style="color:#e8a060;font-size:0.42rem" title="The tier opens only once the ${escHTML(r.tree)} tree has ${r.gap} more points (tier 3 points don’t count). The cost and ROI include them: ${r.points} + ${r.gap} = ${r.ptsAll} points.">🔒+${r.gap}pt</span>` : "";
         /*
          * Click a row to see what the skill actually does. The toggle walks to the next
          * sibling instead of taking the skill name as an argument — several skill names carry
@@ -15550,19 +15571,19 @@
          * the wishlist's ✕ silently dead. No name, no escaping problem.
          */
         const TOGGLE = "var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none';";
-        h += `<div onclick="${TOGGLE}" title="klikni pro detail" style="display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;cursor:pointer;${dim}"><span style="color:var(--text-dim);min-width:20px">${i + 1}.</span><b style="flex:1 0 148px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:var(--green);font-weight:bold;min-width:52px;text-align:right;white-space:nowrap">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:var(--sunpetal);font-weight:bold;font-size:0.5rem;min-width:60px;text-align:right;white-space:nowrap" title="${roadmapFmtFlower(r.delta)}/d ÷ ${r.ptsAll} bodů — podle tohoto je seznam řazený">+${roadmapFmtFlower(r.perPt)}/pt</span><span style="color:${col};font-size:0.45rem;min-width:108px;white-space:nowrap">${escHTML(r.tree || "")} · ${r.gap > 0 ? `<b style="color:#e8a060">${r.ptsAll}</b>` : r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:${roiColorFor(roiD)};font-size:0.45rem;min-width:40px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:72px;text-align:right;white-space:nowrap">${r._cP}pt${r._cS ? " · " + r._cS + "◆" : ""}</span></div>`;
+        h += `<div onclick="${TOGGLE}" title="click for the detail" style="display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;cursor:pointer;${dim}"><span style="color:var(--text-dim);min-width:20px">${i + 1}.</span><b style="flex:1 0 148px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:var(--green);font-weight:bold;min-width:52px;text-align:right;white-space:nowrap">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:var(--sunpetal);font-weight:bold;font-size:0.5rem;min-width:60px;text-align:right;white-space:nowrap" title="${roadmapFmtFlower(r.delta)}/d ÷ ${r.ptsAll} points — the list is sorted by this">+${roadmapFmtFlower(r.perPt)}/pt</span><span style="color:${col};font-size:0.45rem;min-width:108px;white-space:nowrap">${escHTML(r.tree || "")} · ${r.gap > 0 ? `<b style="color:#e8a060">${r.ptsAll}</b>` : r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:${roiColorFor(roiD)};font-size:0.45rem;min-width:40px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:72px;text-align:right;white-space:nowrap">${r._cP}pt${r._cS ? " · " + r._cS + "◆" : ""}</span></div>`;
 
         const catRows = Object.entries(r.byCat || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
         const sd = SKILL_TREE_DATA[r.name] || {};
         h += `<div style="display:none;padding:6px 10px 8px 30px;border-bottom:1px solid #20190f;background:#120d07;font-size:0.47rem;color:var(--text-secondary);line-height:1.8">
-          <div><span style="color:var(--text-dim)">co to dělá:</span> <b>${escHTML(r.text || sd.buff || "—")}</b></div>
-          ${r.lvl === 1 && sd.debuff ? `<div><span style="color:var(--text-dim)">nevýhoda:</span> <span style="color:var(--red)">${escHTML(sd.debuff)}</span></div>` : ""}
-          ${r.lvl > 1 ? `<div style="color:var(--text-dim)">rank ${r.lvl} z ${(sr[r.name] || {}).maxLevel || "?"} · ${r.points} bodů + ${r.shards} shard${r.shards === 1 ? "" : "ů"}</div>`
-                      : `<div style="color:var(--text-dim)">koupě skillu · tier ${r.tier || 1} · ${r.points} bod${r.points === 1 ? "" : "ů"}</div>`}
+          <div><span style="color:var(--text-dim)">what it does:</span> <b>${escHTML(r.text || sd.buff || "—")}</b></div>
+          ${r.lvl === 1 && sd.debuff ? `<div><span style="color:var(--text-dim)">drawback:</span> <span style="color:var(--red)">${escHTML(sd.debuff)}</span></div>` : ""}
+          ${r.lvl > 1 ? `<div style="color:var(--text-dim)">rank ${r.lvl} of ${(sr[r.name] || {}).maxLevel || "?"} · ${r.points} points + ${r.shards} shard${r.shards === 1 ? "" : "s"}</div>`
+                      : `<div style="color:var(--text-dim)">skill purchase · tier ${r.tier || 1} · ${r.points} point${r.points === 1 ? "" : "s"}</div>`}
           ${catRows.length ? `<div><span style="color:var(--text-dim)">rozpad:</span> ${catRows.map(([c, v]) => `${escHTML((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c)} <b style="color:${v >= 0 ? "var(--green)" : "var(--red)"}">${v >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(v))}/d</b>`).join(" · ")}</div>` : ""}
-          <div><span style="color:var(--text-dim)">za bod:</span> <b style="color:var(--sunpetal)">+${roadmapFmtFlower(r.perPt)}/d na skill point</b> <span style="color:var(--text-dim)">(${roadmapFmtFlower(r.delta)} ÷ ${r.ptsAll} bodů)</span></div>
-          <div style="color:var(--text-dim)">cena bodů ≈ ${roadmapFmtFlower(sflPerPt * r.ptsAll)} ${sflIcon()} · zaplatí se za ${roiTxt}</div>
-          ${r.gap > 0 ? `<div style="color:#e8a060">🔒 tier zatím není otevřený — chybí ${r.gap} bod${r.gap === 1 ? "" : "ů"} ve stromě ${escHTML(r.tree)} (body za tier 3 se nepočítají). Cena i ROI výš to zahrnují: ${r.points} vlastních + ${r.gap} na odemčení = <b>${r.ptsAll}</b>. Ty odemykací body si samy něco vydělají, což tady nepočítám — takže je to spíš pesimistické.</div>` : ""}
+          <div><span style="color:var(--text-dim)">per point:</span> <b style="color:var(--sunpetal)">+${roadmapFmtFlower(r.perPt)}/d per skill point</b> <span style="color:var(--text-dim)">(${roadmapFmtFlower(r.delta)} ÷ ${r.ptsAll} points)</span></div>
+          <div style="color:var(--text-dim)">the points cost ≈ ${roadmapFmtFlower(sflPerPt * r.ptsAll)} ${sflIcon()} · pays back in ${roiTxt}</div>
+          ${r.gap > 0 ? `<div style="color:#e8a060">🔒 the tier isn’t open yet — ${r.gap} point${r.gap === 1 ? "" : "s"} missing in the ${escHTML(r.tree)} tree (tier 3 points don’t count). The cost and ROI above include them: ${r.points} own + ${r.gap} to unlock = <b>${r.ptsAll}</b>. The unlocking points earn something themselves, which isn’t counted here — so this is rather pessimistic.</div>` : ""}
         </div>`;
       });
       h += `</div></div>`;
@@ -15640,8 +15661,8 @@
       const sel = _roadmapScenarios();
       const fl = (v) => `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(2)}`;
       let h = `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:8px">`;
-      h += `<span style="font-size:0.5rem;color:var(--text-dim)">Počítat s:</span>`;
-      h += `<button class="dash-toggle-btn ${sel.length ? "" : "on"}" onclick='_roadmapToggleScenario("")' title="Co farma dělá teď, bez scénářů.">${sel.length ? "\u25cb" : "\u25c9"} Realita</button>`;
+      h += `<span style="font-size:0.5rem;color:var(--text-dim)">Count with:</span>`;
+      h += `<button class="dash-toggle-btn ${sel.length ? "" : "on"}" onclick='_roadmapToggleScenario("")' title="What the farm does now, no scenarios.">${sel.length ? "\u25cb" : "\u25c9"} Reality</button>`;
       for (const r of rows) {
         // Only offer what can actually be started. unpriced / no room are facts no purchase fixes.
         if (!r.flips) continue;
@@ -15649,7 +15670,7 @@
         // the toggle key the server matches, the category only when there is no crop choice.
         const key = r.product || r.cat;
         const isOn = sel.includes(key);
-        const tip = `${r.label}: teď ${fl(r.nowNet)} FLOWER/den, do plusu od ${r.flipCost != null ? roadmapFmtFlower(r.flipCost) : "?"} FLOWER, se vším ${fl(r.net)}/den. Přepnutím tabulka ukáže všechno, co tuhle činnost boostuje.`;
+        const tip = `${r.label}: now ${fl(r.nowNet)} FLOWER/day, in profit from ${r.flipCost != null ? roadmapFmtFlower(r.flipCost) : "?"} FLOWER, with everything ${fl(r.net)}/day. Switching shows everything that boosts this activity.`;
         h += `<button class="dash-toggle-btn ${isOn ? "on" : ""}" onclick='_roadmapToggleScenario("${key}")' title="${escHTML(tip)}">${isOn ? "\u25c9" : "\u25cb"} \u{1F331} ${escHTML(r.label)} <span style="opacity:0.6">${fl(r.net)}/d</span></button>`;
       }
       const blocked = rows.filter((r) => !r.flips);
@@ -15674,29 +15695,29 @@
       const col = (v) => v > 0 ? "var(--green)" : v < 0 ? "var(--red)" : "var(--text-dim)";
       const badge = (ty) => `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${ty === "Wearable" ? "#2a3a5a" : "#3a2a5a"};color:var(--text-dim)">${ty === "Wearable" ? "W" : "C"}</span>`;
       let h = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:14px">`;
-      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">\u{1F331} ${escHTML(plan.label)} \u2014 kdy\u017e do toho p\u016fjde\u0161</div>`;
-      h += `<div style="font-size:0.55rem;margin-bottom:8px">te\u010f <b style="color:${col(plan.nowNet)}">${fl(plan.nowNet)}</b> ${sflIcon("0.65em")}/den`
-        + (plan.flipCost != null ? ` \u00b7 do plusu od <b>${roadmapFmtFlower(plan.flipCost)}</b> ${sflIcon("0.65em")}` : "")
-        + ` \u00b7 v\u0161ech ${plan.picked.length} vylep\u0161en\u00ed za <b>${roadmapFmtFlower(plan.cost)}</b> ${sflIcon("0.65em")} \u2192 <b style="color:${col(plan.net)}">${fl(plan.net)}</b> ${sflIcon("0.65em")}/den`
-        + `<span style="color:var(--text-dim);font-size:0.47rem"> \u00b7 te\u010f ${plan.count}${plan.atMax > plan.count ? `, po\u010d\u00edt\u00e1no na max ${plan.atMax}` : ""}</span></div>`;
+      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--lily);margin-bottom:4px">\u{1F331} ${escHTML(plan.label)} \u2014 if you take it up</div>`;
+      h += `<div style="font-size:0.55rem;margin-bottom:8px">now <b style="color:${col(plan.nowNet)}">${fl(plan.nowNet)}</b> ${sflIcon("0.65em")}/day`
+        + (plan.flipCost != null ? ` \u00b7 in profit from <b>${roadmapFmtFlower(plan.flipCost)}</b> ${sflIcon("0.65em")}` : "")
+        + ` \u00b7 all ${plan.picked.length} upgrades for <b>${roadmapFmtFlower(plan.cost)}</b> ${sflIcon("0.65em")} \u2192 <b style="color:${col(plan.net)}">${fl(plan.net)}</b> ${sflIcon("0.65em")}/day`
+        + `<span style="color:var(--text-dim);font-size:0.47rem"> \u00b7 now ${plan.count}${plan.atMax > plan.count ? `, counted at the max ${plan.atMax}` : ""}</span></div>`;
       h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.6rem">`;
       h += `<thead><tr style="color:var(--text-secondary);text-align:left">
         <th style="padding:4px 6px">#</th>
         <th style="padding:4px 6px">Item</th>
         <th style="padding:4px 6px">Boost</th>
-        <th style="padding:4px 6px;text-align:right" title="Kupn\u00ed cena v FLOWER \u2014 floor na marketplace.">Cost ${sflIcon()}</th>
-        <th style="padding:4px 6px;text-align:right" title="Kolik ta polo\u017eka p\u0159id\u00e1 T\u00c9HLE \u010dinnosti za den.">+${sflIcon()}/day</th>
-        <th style="padding:4px 6px;text-align:right" title="Cena \u00f7 p\u0159\u00ednos \u2014 za jak dlouho se polo\u017eka sama zaplat\u00ed.">Payback</th>
-        <th style="padding:4px 6px;text-align:right" title="Kumulativn\u00ed cena, kdy\u017e kupuje\u0161 shora dol\u016f.">&Sigma; Cost ${sflIcon()}</th>
-        <th style="padding:4px 6px;text-align:right" title="\u010cist\u00fd v\u00fdd\u011blek T\u00c9HLE \u010dinnosti za den po n\u00e1kupu \u2014 teoreticky, na pln\u00fd stav.">FL/day</th>
+        <th style="padding:4px 6px;text-align:right" title="Buy price in FLOWER \u2014 the marketplace floor.">Cost ${sflIcon()}</th>
+        <th style="padding:4px 6px;text-align:right" title="What the item adds to THIS activity per day.">+${sflIcon()}/day</th>
+        <th style="padding:4px 6px;text-align:right" title="Price \u00f7 gain \u2014 how long the item takes to pay for itself.">Payback</th>
+        <th style="padding:4px 6px;text-align:right" title="Cumulative price, buying top to bottom.">&Sigma; Cost ${sflIcon()}</th>
+        <th style="padding:4px 6px;text-align:right" title="Net earnings of THIS activity per day after the buy \u2014 theoretical, at full scale.">FL/day</th>
       </tr></thead><tbody>`;
-      h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;color:var(--text-dim)">0</td><td style="padding:3px 6px;color:var(--text-dim)">te\u010f (bez n\u00e1kup\u016f)</td><td></td><td></td><td></td><td></td><td></td><td style="padding:3px 6px;text-align:right;color:${col(plan.nowNet)};font-weight:bold">${fl(plan.nowNet)}</td></tr>`;
+      h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;color:var(--text-dim)">0</td><td style="padding:3px 6px;color:var(--text-dim)">now (no buys)</td><td></td><td></td><td></td><td></td><td></td><td style="padding:3px 6px;text-align:right;color:${col(plan.nowNet)};font-weight:bold">${fl(plan.nowNet)}</td></tr>`;
       for (let i = 0; i < plan.picked.length; i++) {
         const x = plan.picked[i];
         const after = x.netAfter == null ? null : x.netAfter;
         h += `<tr style="border-top:1px solid #222${x.crosses ? ";background:rgba(46,160,67,0.10)" : ""}">
           <td style="padding:3px 6px;color:var(--text-dim)">${i + 1}</td>
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(x.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(x.name)} ${badge(x.type)}${x.crosses ? ` <span style="color:var(--green);font-size:0.45rem">\u2190 tady p\u0159ekl\u00e1p\u00ed do plusu</span>` : ""}</td>
+          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(x.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(x.name)} ${badge(x.type)}${x.crosses ? ` <span style="color:var(--green);font-size:0.45rem">\u2190 turns profitable here</span>` : ""}</td>
           <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${escHTML((x.boost || "").split("\n").join(" \u00b7 "))}</td>
           <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(x.floor)}</td>
           <td style="padding:3px 6px;text-align:right;color:var(--green)">+${roadmapFmtFlower(x.gain)}</td>
@@ -15706,7 +15727,7 @@
         </tr>`;
       }
       h += `</tbody></table></div>`;
-      h += `<div style="margin-top:6px;font-size:0.5rem;color:var(--text-dim);line-height:1.6">V\u0161echno, co ${escHTML(plan.label)} boostuje, se\u0159azen\u00e9 podle p\u0159\u00ednosu za FLOWER (p\u0159epo\u010d\u00edt\u00e1v\u00e1no po ka\u017ed\u00e9m kroku \u2014 synergie se nedubluj\u00ed). Po\u010d\u00edt\u00e1no <b>teoreticky a na pln\u00fd stav</b> \u2014 nam\u011b\u0159en\u00e1 efektivita \u010dinnosti, kterou ned\u011bl\u00e1\u0161, je z definice 0. Ceny jsou marketplace floor.</div>`;
+      h += `<div style="margin-top:6px;font-size:0.5rem;color:var(--text-dim);line-height:1.6">Everything that boosts ${escHTML(plan.label)}, sorted by gain per FLOWER (recomputed after every step \u2014 synergies don\u2019t double). Counted <b>theoretically and at full scale</b> \u2014 the measured efficiency of an activity you don\u2019t run is 0 by definition. Prices are the marketplace floor.</div>`;
       h += `</div>`;
       return h;
     }
@@ -15734,7 +15755,7 @@
           if (ing) costSfl = _shrineIngredientCostSfl(ing, ps.p2pPrices || {}, ps.p2pPrices || {});
         } catch (e) {}
         const costStr = w.renew
-          ? `${Object.entries(w.renew.ingredients).map(([k, v]) => `${v}× ${escHTML(k)}`).join(' + ')} + ${w.renew.coins.toLocaleString()} coins${costSfl != null ? ` (≈${costSfl.toFixed(2)} FLOWER v materiálu)` : ''}`
+          ? `${Object.entries(w.renew.ingredients).map(([k, v]) => `${v}× <img class="inline-icon" src="${getItemIcon(k)}" onerror="this.style.display='none'" alt="">${escHTML(k)}`).join(' + ')} + ${w.renew.coins.toLocaleString()} coins${costSfl != null ? ` (≈${costSfl.toFixed(2)} FLOWER in materials)` : ''}`
           : null;
         // "Nemáš postavený" and "nemáš vůbec" are different jobs: one is a click, the other a
         // trip to the shop. held comes from the inventory, placed from the four collectible maps.
@@ -15744,9 +15765,9 @@
           now: uncovered || missingButHeld, warn: uncovered || w.kind === 'none', gain: null, unit: null,
           note: w.kind === 'none'
             ? (missingButHeld
-                ? `máš ho v truhle, ale není postavený — ${escHTML(w.prevents)} tě zasáhne bez ochrany`
-                : `nemáš žádný — ${escHTML(w.prevents)} tě zasáhne bez ochrany${costStr ? `. Weather Shop: ${costStr}` : ''}`)
-            : `${w.spent} z ${w.owned} spotřebovaných${w.pending ? `, ${w.pending} se staví` : ''}${uncovered ? ' — proti ' + escHTML(w.prevents) + ' teď nejsi krytý' : `, krytí zbývá ${w.active}x`}${costStr ? `. Obnova: ${costStr}` : ''}`,
+                ? `you have it in the chest but it isn’t placed — ${escHTML(w.prevents)} hits you unprotected`
+                : `you have none — ${escHTML(w.prevents)} hits you unprotected${costStr ? `. Weather Shop: ${costStr}` : ''}`)
+            : `${w.spent} of ${w.owned} used up${w.pending ? `, ${w.pending} being built` : ''}${uncovered ? ' — you are not covered against ' + escHTML(w.prevents) + ' now' : `, ${w.active}x cover left`}${costStr ? `. Renewal: ${costStr}` : ''}`,
         });
       }
       /*
@@ -15787,7 +15808,7 @@
         const ing = Object.entries(r.sh.ingredients || {}).map(([k, v]) => `${v}x ${escHTML(k)}`).join(', ');
         rows.push({
           what: `Obnovit ${escHTML(r.x.name)}`, now: true, warn: true, gain: r.perDay, unit: null,
-          note: `${escHTML(r.sh.effect)} — za ${r.sh.duration_d} dní vydělá ${roadmapFmtFlower(r.perDay * r.sh.duration_d)}, stojí ${roadmapFmtFlower(r.cost)}${ing ? ` (${ing})` : ''}, čistě +${roadmapFmtFlower(r.netTotal)}`,
+          note: `${escHTML(r.sh.effect)} — earns ${roadmapFmtFlower(r.perDay * r.sh.duration_d)} in ${r.sh.duration_d} days, costs ${roadmapFmtFlower(r.cost)}${ing ? ` (${ing})` : ''}, net +${roadmapFmtFlower(r.netTotal)}`,
         });
       }
       // A shrine still running is not listed, however little is left: the owner wants it here only
@@ -15797,8 +15818,8 @@
       rows.sort((a, b) => (b.gain || -Infinity) - (a.gain || -Infinity));
 
       let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">\u23F3 CO VYPRŠELO \u2014 obnovit</div>`;
-      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Jen věci, které sami doběhnou a přestanou platit \u2014 svatyně (7 dní) a ochrana proti živelným událostem. Ostatní periodické úkoly odsud vyřazeny: nepoužívaly se.</div>`;
+      h += `<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">\u23F3 Expired \u2014 renew</div>`;
+      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Only things that run out by themselves and stop working \u2014 shrines (7 days) and protection against weather events. The other periodic tasks were dropped from here: nobody used them.</div>`;
       h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow:hidden">`;
       rows.forEach((r, i) => {
         const val = r.gain != null && isFinite(r.gain)
@@ -15806,7 +15827,7 @@
           : (r.unit ? `<b style="color:var(--sunpetal)">${r.unit}</b>` : `<span style="color:var(--text-dim)">\u2014</span>`);
         h += `<div style="display:flex;gap:8px;align-items:baseline;padding:5px 8px;border-bottom:1px solid #20190f;font-size:0.55rem">`;
         h += `<span style="min-width:18px;color:var(--text-dim)">${r.warn ? '\u26A0' : (r.now ? '\u25B8' : '\u00B7')}</span>`;
-        h += `<b style="flex:1;min-width:0">${r.what}${r.approx ? ' <span style="font-size:0.42rem;color:var(--text-dim)">přibližné</span>' : ''}${r.unpriced ? ' <span style="font-size:0.42rem;color:var(--yellow)">chybí cena</span>' : ''}</b>`;
+        h += `<b style="flex:1;min-width:0">${r.what}${r.approx ? ' <span style="font-size:0.42rem;color:var(--text-dim)">approximate</span>' : ''}${r.unpriced ? ' <span style="font-size:0.42rem;color:var(--yellow)">no price</span>' : ''}</b>`;
         h += `<span style="min-width:74px;text-align:right">${val}</span></div>`;
         h += `<div style="padding:0 8px 5px 26px;border-bottom:1px solid #20190f;font-size:0.45rem;color:var(--text-dim)">${r.note}</div>`;
       });
@@ -15933,11 +15954,8 @@
 
     async function renderRoadmap(data) {
       const app = document.getElementById("app");
-      let html = `<div class="header pixel-panel pixel-font">
-        <h1>NFT ROADMAP</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-      </div>`;
-      html += `<div id="roadmap-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Building roadmap…</div></div></div>`;
+      let html = _wPageHead("🗺 NFT Roadmap", `Farm #${escHTML(FARM_ID)} · the buy order that compounds FLOWER income fastest`);
+      html += `<div id="roadmap-content" class="v-rm-page"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Building roadmap…</div></div></div>`;
       app.innerHTML = html;
 
       try {
@@ -15962,9 +15980,9 @@
        */
       await _pricesReady(powerState.exchangeRates);
 
-      // History slice for the eff computation — fetched ONCE; section=roadmap recomputes
-      // eff + production + simulation server-side on every settings change.
-      _roadmapSnapshotsCache = await _roadmapFetchHistorySlim();
+      // The history slice for the eff computation is the store's roadmapHistory (kept 10 min, so a
+      // settings change re-runs only section=roadmap); a page load reads it again.
+      __store.invalidate({ res: "roadmapHistory", farm: FARM_ID });
       await renderRoadmapContent();
     }
 
@@ -16016,19 +16034,6 @@
      * The book (floor / best offer for the whole catalogue) comes from marketplace-orderbook?book=1,
      * refreshed every 5 minutes; the owner's own offers from farm.trades.offers (per-unit = sfl/qty).
      */
-    // Listed buds' marketplace floors { "<id>": floor }, POSTed to section=roadmap so the buy path
-    // can offer buds (compute cannot read the marketplace DB). Once per page; {} on failure.
-    let _rmBudFloors = null;
-    async function _rmLoadBudFloors() {
-      if (_rmBudFloors) return _rmBudFloors;
-      try {
-        const r = await fetch("/api/marketplace-orderbook?budfloors=1");
-        const floors = {};
-        if (r.ok) for (const i of (await r.json()).items || []) floors[i.id] = i.floor;
-        _rmBudFloors = floors;
-      } catch (e) { return {}; }
-      return _rmBudFloors;
-    }
     let _rmBook = null;
     async function _rmLoadBook() {
       try {
@@ -16036,74 +16041,34 @@
         if (r.ok) _rmBook = await r.json();
       } catch (e) { /* the column shows — */ }
     }
-    function _rmMyOffers() {
-      const out = {};
-      const offers = (powerState && powerState.farm && powerState.farm.trades && powerState.farm.trades.offers) || {};
-      for (const o of Object.values(offers)) {
-        if (!o || o.fulfilledAt || o.clearedAt) continue;
-        for (const [name, qty] of Object.entries(o.items || {})) {
-          const unit = (+o.sfl || 0) / (+qty || 1);
-          if (!out[name] || unit > out[name].unit) out[name] = { unit, qty: +qty || 1 };
-        }
-      }
-      return out;
-    }
     /*
-     * Roadmap picks: tick rows (faint checkbox left of the rank) to see, at the bottom, what they
-     * cost bought now at the floor vs via offers, and the FLOWER/day they add. Kept per browser.
+     * Roadmap picks: tick rows (the checkbox by the rank) to see, under the buy path, what they cost
+     * bought now at the floor vs via offers and the FLOWER/day they add. Kept per browser; the
+     * 🛒 buy-path widget reads them (ctx.picks) on the page and on a board alike.
      */
     let _rmPicks = new Set((() => { try { return JSON.parse(localStorage.getItem("sfl_rm_picks") || "[]"); } catch (e) { return []; } })());
-    let _rmRowData = {};
-    function _rmRenderPickTotal() {
-      const el = document.getElementById("rm-pick-total");
-      if (!el) return;
-      const rows = [..._rmPicks].map((n) => _rmRowData[n]).filter(Boolean);
-      if (!rows.length) { el.style.display = "none"; el.innerHTML = ""; return; }
-      const now = rows.reduce((a, r) => a + r.now, 0), off = rows.reduce((a, r) => a + r.offer, 0), val = rows.reduce((a, r) => a + r.value, 0);
-      const f = (v) => Math.round(v).toLocaleString("en-US");
-      const pb = (c) => val > 0 ? ` (${roadmapFmtDays(c / val)})` : "";
-      el.style.display = "block";
-      el.innerHTML = `✓ ${rows.length} vybráno · buy now <b style="color:var(--text-secondary)">${f(now)} 🌸</b>${pb(now)} · via offers <b style="color:var(--green)">${f(off)} 🌸</b>${pb(off)}${now > 0 ? ` <span style="color:var(--sunpetal)">−${Math.round((1 - off / now) * 100)} %</span>` : ""} · +${val.toFixed(2)} 🌸/day · <span style="cursor:pointer;color:var(--lily)" onclick="_rmClearPicks()">zrušit</span>`;
-    }
     window._rmTogglePick = function (name, on) {
       if (on) _rmPicks.add(name); else _rmPicks.delete(name);
       try { localStorage.setItem("sfl_rm_picks", JSON.stringify([..._rmPicks])); } catch (e) {}
-      _rmRenderPickTotal();
+      if (window._wRerender) window._wRerender();
     };
     window._rmClearPicks = function () {
       _rmPicks.clear();
       try { localStorage.removeItem("sfl_rm_picks"); } catch (e) {}
-      document.querySelectorAll(".rm-pick").forEach((c) => { c.checked = false; });
-      _rmRenderPickTotal();
+      if (window._wRerender) window._wRerender();
     };
-    // The price the Offer cell shows: your own offer if you have one, else the best bid to beat.
-    // Payback "at offer" uses it — what the item pays back if an offer at that price is accepted.
-    function _rmOfferPrice(name, myOffers) {
-      const mine = myOffers[name];
-      if (mine) return mine.unit;
-      const m = _rmBook && _rmBook.items && _rmBook.items[name];
-      return (m && m.b != null) ? m.b : null;
-    }
-    function _rmOfferCell(name, myOffers) {
-      const m = _rmBook && _rmBook.items && _rmBook.items[name];
-      const mine = myOffers[name];
-      if (!m) return mine ? `<span title="Tvoje nabídka ${roadmapFmtFlower(mine.unit)} — trh pro tuhle položku nemá data">🟠 ${roadmapFmtFlower(mine.unit)}</span>` : `<span style="color:var(--text-dim)">—</span>`;
-      const bid = m.b, ask = m.f;
-      const gap = (bid != null && ask) ? Math.round((ask - bid) / ask * 100) : null;
-      const book = `best offer ${bid != null ? roadmapFmtFlower(bid) : "none"} (${m.oc} nabídek) · floor ${ask != null ? roadmapFmtFlower(ask) : "—"} (${m.lc} listingů)${gap != null ? ` · mezera ${gap} %` : ""}${m.ls != null ? ` · poslední prodej ${roadmapFmtFlower(m.ls)}` : ""}`;
-      let icon, price, tip;
-      if (mine && (bid == null || mine.unit >= bid - 1e-9)) {
-        icon = "🟢"; price = mine.unit;
-        tip = `Tvoje nabídka ${roadmapFmtFlower(mine.unit)}${mine.qty > 1 ? ` ×${mine.qty}` : ""} je nejvyšší${bid != null && Math.abs(mine.unit - bid) < 1e-9 ? " (nebo sdílí první místo)" : ""}. ${book}`;
-      } else if (mine) {
-        icon = "🟠"; price = mine.unit;
-        tip = `Přebitá: tvoje ${roadmapFmtFlower(mine.unit)}, nejvyšší ${roadmapFmtFlower(bid)} (o ${roadmapFmtFlower(bid - mine.unit)} víc). ${book}`;
-      } else {
-        icon = "⚪"; price = bid;
-        tip = `Nemáš nabídku. ${book}`;
-      }
-      const href = `https://sunflower-land.com/play/#/marketplace/${m.c}/${m.id}`;
-      return `<a href="${href}" target="_blank" rel="noopener" title="${escHTML(tip + " · klik = otevřít v marketplace")}" style="white-space:nowrap;color:inherit;text-decoration:none;border-bottom:1px dotted var(--text-dim)">${icon} ${price != null ? roadmapFmtFlower(price) : "—"}${gap != null ? ` <span style="font-size:0.45rem;color:${gap >= 15 ? "var(--sunpetal)" : "var(--text-dim)"}">−${gap}%</span>` : ""}</a>`;
+    // What the ROADMAP widgets need from the page (called once _wCtxMap exists).
+    function _rmRegisterWCtx() {
+      const icon = (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.2em;vertical-align:-0.2em;margin-right:3px">`;
+      const ctx = () => {
+        const s = getRoadmapSettings();
+        return { icon, flower: sflIcon(), catIcon: (c) => catIcon(c, "1.1em"),
+          catLabel: (c) => (c === "cropMachine" ? "Crop Machine" : c === "buds" ? "Buds" : ((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c)),
+          picks: () => [..._rmPicks], showCosmetic: !!s.showCosmetic, maxPrice: s.maxPrice || 0 };
+      };
+      _wCtxMap["roadmap-income"] = ctx;
+      _wCtxMap["roadmap-buy-path"] = ctx;
+      _wCtxMap["roadmap-offers"] = ctx;
     }
     /*
      * Roadmap settings as sent to section=roadmap. The planner does not reinvest what the repay plan
@@ -16125,17 +16090,13 @@
       try {
         // The scenario view renders client-side from `startup` — the simulation stays pure
         // reality, so no scenario parameter travels with the request.
-        const q = `products=${encodeURIComponent(JSON.stringify(getSavedPowerProducts()))}&roadmap=${encodeURIComponent(_rmServerSettingsJson())}`;
-        const bookP = _rmLoadBook();
-        const budFloors = await _rmLoadBudFloors();
-        const weeks = await _sideWeeks();
-        const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=roadmap&${q}`, {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ snapshots: _roadmapSnapshotsCache || [], budFloors, weeks }),
-        });
-        if (!rp.ok) throw new Error(`compute roadmap ${rp.status}`);
-        const d = (await rp.json()).data || {};
-        await bookP;
+        // The store's roadmap resource
+        // POSTs history, bud floors and weeks with the settings as they are now (force: a settings
+        // change must recompute); the book is the store's too, shared with LEVELING.
+        const [re, be] = await Promise.all([__store.get({ res: "roadmap", farm: FARM_ID }, { force: true }), __store.get({ res: "book" })]);
+        if (be && be.data) _rmBook = be.data;
+        if (re.status !== "ok" || !re.data) throw new Error(re.error || "compute roadmap");
+        const d = re.data;
         const inf = (v) => (v == null ? Infinity : v);
         for (const t of (d.sim.timeline || [])) { t.roi = inf(t.roi); t.atDay = inf(t.atDay); }
         for (const r of (d.sim.ranked || [])) { r.roi = inf(r.roi); r.atDay = inf(r.atDay); }
@@ -16163,21 +16124,27 @@
       if (!el || !roadmapState) return;
       const settings = getRoadmapSettings();
       const startIncome = server.startIncome;
-      const sim = server.sim;
-      const sflUsd = (powerState.exchangeRates && powerState.exchangeRates.sflUsd) || 0;
-      const usd = v => sflUsd > 0 ? ` <span style="color:var(--text-dim)">($${(v * sflUsd).toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>` : "";
+      // The income hero, the buy path and the offers are widgets (widgets/roadmap.mjs), the same as
+      // their pinned copies; what reads the POWER state (profitability, skills, gifts, deliveries,
+      // animals, settings) stays page HTML. A widget's own change repaints only its frame.
+      window._wRerender = () => {
+        if (getPage() !== "roadmap" || !_roadmapServer) return;
+        for (const t of ["roadmap-income", "roadmap-buy-path", "roadmap-offers"]) { const n = document.getElementById("rmw-" + t); if (n) n.innerHTML = _rmWidget(t); }
+      };
+      window._wRefresh = refresh;
+      const _w = (t) => `<div id="rmw-${t}">${_rmWidget(t)}</div>`;
 
       let h = "";
 
-      h += roadmapIncomeHeroHtml(settings, sim, startIncome);
+      h += _w("roadmap-income");
 
       // ── What to farm / mine now (per-category profitability) ──
-      const _rmCollapse = (title, inner) => inner ? `<details style="margin-bottom:12px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--sunpetal)">\u25b8 ${title}</summary><div style="margin-top:8px">${inner}</div></details>` : "";
+      const _rmCollapse = (title, inner) => inner ? `<details class="v-rm-sec"><summary>${title}</summary><div>${inner}</div></details>` : "";
       h += roadmapProfitabilityHtml(settings);
       // ── Buy path: Table or Skills (toggle) ──
-      h += `<div style="margin-bottom:16px">`;
+      h += `<div class="v-rm-buy">`;
       h += roadmapPeriodicHtml();
-      h += `<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap"><div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal)">YOUR BUY PATH — what to buy next, in order</div><div style="margin-left:auto;display:flex;gap:4px"><button id="bp-tab-table" onclick="_roadmapBuyView('table')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:var(--sunpetal);color:#1a120a;cursor:pointer;font-weight:bold">☰ Table</button><button id="bp-tab-skills" onclick="_roadmapBuyView('skills')" style="font-size:0.5rem;padding:3px 11px;border:1px solid var(--border-brown);border-radius:5px;background:#241a10;color:var(--text-secondary);cursor:pointer">⭐ Skills</button></div></div>`;
+      h += `<div class="v-rm-tabs"><b>Your buy path</b><span class="v-dim">what to buy next, in order</span><span class="v-rm-tabbtns"><button id="bp-tab-table" class="dash-toggle-btn on" onclick="_roadmapBuyView('table')">☰ Table</button><button id="bp-tab-skills" class="dash-toggle-btn" onclick="_roadmapBuyView('skills')">⭐ Skills</button></span></div>`;
       {
         const _effReal = settings.effMode === "real";
         const _pct = (c) => Math.round(roadmapEffFactor(c, settings) * 100);
@@ -16185,57 +16152,9 @@
       }
       h += `<div id="buy-table">`;
       if (!(startIncome > 0)) {
-        h += `<div class="pixel-panel" style="padding:10px;margin-bottom:14px;color:var(--yellow);font-size:0.6rem">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
+        h += `<div class="v-rm-warn">Set a positive "Start FLOWER/day" to get time estimates. The ORDER below is still correct (sorted by ROI payback).</div>`;
       }
 
-      /*
-       * One entry per type. The badge fell through to "C" for anything it did not know, so an
-       * ascension expansion was labelled a Collectible.
-       */
-      const rowTypeMeta = {
-        Collectible: { label: "C",     full: "NFT collectibles",          bg: "#3a2a5a", icon: "\ud83d\uddbc\ufe0f" },
-        Wearable:    { label: "W",     full: "Wearables",                 bg: "#2a3a5a", icon: "\ud83d\udc55" },
-        Skill:       { label: "SKILL", full: "Skilly a ascension ranky",  bg: "#3a2a5a", icon: "\u2b50" },
-        Node:        { label: "NODE",  full: "Nody (koupit / slou\u010dit)", bg: "#1f3a2a", icon: "\u26cf\ufe0f" },
-        Ascension:   { label: "EXP",   full: "Ascension expanze",         bg: "#4a2a2a", icon: "\ud83d\uddfa\ufe0f" },
-        // Rows that exist only because a scenario is switched on \u2014 an activity you do not run yet.
-        Scenario:    { label: "START", full: "Rozjezd nov\u00e9 \u010dinnosti",   bg: "#1f3a2a", icon: "\ud83c\udf31" },
-        // A listed bud: worth only what it adds over your best bud per resource (the game counts one).
-        Bud:         { label: "BUD",   full: "Budy (1 nejlep\u0161\u00ed na surovinu)", bg: "#2a3a1f", icon: "\ud83c\udf31" },
-      };
-      /*
-       * Row icon. Every row used to call getItemIcon(r.name), which only resolves for real items \u2014
-       * "A1 \u00b7 Expansion 31" and "Tough Tree \u2192 Level 2" find nothing, the onerror hides the broken
-       * image, and those rows ended up with no icon at all. So the four generated types get their
-       * type's emoji, and only the two that ARE marketplace items keep the artwork.
-       *
-       * Skills are the one case worth a lookup: the rank rows are named "<Skill> \u2192 Level N", and the
-       * base skill DOES have art. Try it, and fall back to the star by hiding a failed image behind
-       * the emoji rather than leaving a gap.
-       */
-      const rowIcon = (r) => {
-        const meta = rowTypeMeta[r.type] || rowTypeMeta.Collectible;
-        if (r.type === "Collectible" || r.type === "Wearable") {
-          return `<img class="inline-icon" src="${getItemIcon(r.name)}" onerror="this.style.display='none'" alt="" title="${escHTML(meta.full)}">`;
-        }
-        const emoji = `<span style="font-size:0.85em" title="${escHTML(meta.full)}">${meta.icon}</span>`;
-        if (r.type !== "Skill") return emoji;
-        const base = (r.name || "").replace(/ \u2192 Level \d+$/, "");
-        // The emoji sits underneath; the image covers it when it loads and vanishes when it does not.
-        return `<span style="position:relative;display:inline-block;width:1.15em;text-align:center">${emoji}`
-          + `<img class="inline-icon" src="${getItemIcon(base)}" onerror="this.style.display='none'" alt=""`
-          + ` title="${escHTML(meta.full)}" style="position:absolute;left:0;top:0;width:100%;background:#160f08"></span>`;
-      };
-      /*
-       * Type filters. The list mixes five kinds of action now (NFTs, wearables, skills, nodes,
-       * ascension expansions) and on a high-level farm the skills alone are 30+ rows, so hiding a
-       * kind is the difference between a usable list and scrolling past them to reach the NFTs.
-       *
-       * Hidden types are dropped from the RENDER only. The order, the cumulative cost and the ETAs
-       * still come from the full list, because filtering the plan itself would quietly change the
-       * answer rather than the view — and the row numbers stay the true positions so it is visible
-       * that something was skipped.
-       */
       h += roadmapScenarioBarHtml();
       // A chosen scenario REPLACES the reality table — only what moves that one activity.
       const _scSel = _roadmapScenarios();
@@ -16243,138 +16162,7 @@
       if (_scPlan) {
         h += roadmapScenarioTableHtml(_scPlan);
       } else {
-      const _rmHidden = _roadmapHiddenTypes();
-      const _rmCounts = {};
-      for (const r of (sim.ranked || [])) { const t = r.type || "Collectible"; _rmCounts[t] = (_rmCounts[t] || 0) + 1; }
-      const _rmShown = (sim.ranked || []).filter(r => !_rmHidden.has(r.type || "Collectible")).length;
-      h += `<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-        <span style="font-size:0.5rem;color:var(--text-dim)">Zobrazit:</span>
-        ${Object.keys(rowTypeMeta).filter(t => _rmCounts[t]).map(t => {
-          const on = !_rmHidden.has(t);
-          // The emoji goes on the button too, so the filter row doubles as the icon legend.
-          return `<button class="dash-toggle-btn ${on ? "on" : ""}" onclick="_roadmapToggleType('${t}')" title="${escHTML(rowTypeMeta[t].full)}">${on ? "\u2611" : "\u2610"} ${rowTypeMeta[t].icon} ${escHTML(rowTypeMeta[t].full)} <span style="opacity:0.6">${_rmCounts[t]}</span></button>`;
-        }).join("")}
-        ${_rmHidden.size ? `<span style="font-size:0.47rem;color:var(--sunpetal)">skryto ${(sim.ranked || []).length - _rmShown} z ${(sim.ranked || []).length} \u2014 po\u0159ad\u00ed, \u03a3 Cost i ETA se po\u010d\u00edtaj\u00ed z cel\u00e9ho seznamu</span>` : ""}
-      </div>`;
-
-      // \u2500\u2500 Unified ranked list: IN PLAN + CONDITIONAL by payback; cosmetics in a tail \u2500\u2500
-      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.6rem">`;
-      h += `<thead><tr style="color:var(--text-secondary);text-align:left">
-        <th style="padding:4px 6px">#</th>
-        <th style="padding:4px 6px">Item</th>
-        <th style="padding:4px 6px">Boost</th>
-        <th style="padding:4px 6px;text-align:right" title="Kupní cena v FLOWER — floor na marketplace, u craftu odvozená z materiálu.">Cost ${sflIcon()}</th>
-        <th style="padding:4px 6px;text-align:right" title="Nejlepší nabídka (bid) na marketplace a stav tvé nabídky: 🟢 tvoje je nejvyšší · 🟠 máš nabídku, ale někdo nabízí víc · ⚪ nemáš nabídku (cena = nejvyšší bid). −X % = o kolik je bid pod floor (žlutě od 15 %, kde se vyplatí nabízet). Najeď myší pro detail.">Offer</th>
-        <th style="padding:4px 6px;text-align:right" title="Kolik ti ta položka přidá za den, v FLOWER.">+${sflIcon()}/day</th>
-        <th style="padding:4px 6px;text-align:right" title="Řazeno podle návratnosti. U kroků, které tvoří řadu (ascension expanze, Level 2 → 3), se řadí podle návratnosti CELÉ řady až sem — ten krok nejde koupit dřív než ty před ním. Tahle hodnota je pak pod vlastní návratností jako ‚v řadě‘.">Payback</th>
-        <th style="padding:4px 6px;text-align:right" title="O kolik FLOWER budeš mít po ${settings.horizonYears} letech víc, když tohle koupíš ve chvíli, kdy na to podle plánu našetříš: výnos do konce horizontu − cena + za kolik se NFT pak prodá (podle cenového pásma, nad 10k nic). Záporné = nevyplatí se.">Za ${settings.horizonYears} let ${sflIcon()}</th>
-        <th style="padding:4px 6px;text-align:right" title="Kumulativní cena v FLOWER, když kupuješ shora dolů.">&Sigma; Cost ${sflIcon()}</th>
-        <th style="padding:4px 6px;text-align:right">FL/day</th>
-        <th style="padding:4px 6px;text-align:right">ETA</th>
-      </tr></thead><tbody>`;
-      const typeBadge = ty => { const d = rowTypeMeta[ty] || rowTypeMeta.Collectible; return `<span style="font-size:0.5rem;padding:1px 4px;border-radius:3px;background:${d.bg};color:var(--text-dim)" title="${escHTML(d.full)}">${d.label}</span>`; };
-      const _myOffers = _rmMyOffers();
-      _rmRowData = {};
-      let rank = 0, _rmBeyondShown = false, _rmCondShown = false;
-      for (const r of (sim.ranked || [])) {
-        rank++;   // counts the FULL order, so a visible row keeps its real position
-        if (_rmHidden.has(r.type || "Collectible")) continue;
-        const isPlan = r.status === "plan", isBeyond = r.status === "beyond";
-        if (r.status === "conditional" && !_rmCondShown) {
-          _rmCondShown = true;
-          h += `<tr><td colspan="11" style="padding:8px 6px 3px;font-size:0.55rem;color:#e8c060;border-top:2px solid #4a4020">▼ Podmíněné — zvedají činnost, kterou teď ziskově neprovozuješ. Hodnota platí, jen pokud ji rozjedeš.</td></tr>`;
-        }
-        if (isBeyond && !_rmBeyondShown) {
-          _rmBeyondShown = true;
-          h += `<tr><td colspan="11" style="padding:8px 6px 3px;font-size:0.55rem;color:#e8a060;border-top:2px solid #5a3a20">\u25bc Nevyplatí se do ${settings.horizonYears} let \u2014 do ${settings.horizonYears}. roku by vydělaly méně, než stojí (po odečtení prodeje NFT). Řazeno podle návratnosti.</td></tr>`;
-        }
-        const stBadge = isPlan
-          ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0;font-weight:bold">IN PLAN</span>`
-          : isBeyond
-            ? `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a2418;color:#e8a060;font-weight:bold" title="Do ${settings.horizonYears} let nevydělá aspoň 10 % své ceny — nevyplatí se.">&gt; ${settings.horizonYears} LET</span>`
-            : `<span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#3a3220;color:#e8c060;font-weight:bold" title="${escHTML(r.reason || "")}">CONDITIONAL</span>`;
-        const boostTxt = escHTML((r.boost || "").split("\n").join(" \u00b7 ")) + ((isPlan || isBeyond) ? "" : ` <span style="color:var(--lily)">\u00b7 ${escHTML(r.reason || "only if you run that activity")}</span>`);
-        const marg = `+${roadmapFmtFlower(r.value)}` + ((isPlan || isBeyond) ? "" : ` <span style="color:var(--text-dim)">if used</span>`);
-        {
-          const _trade = !r.type || r.type === "Collectible" || r.type === "Wearable" || r.type === "Bud";
-          const _op = _trade ? _rmOfferPrice(r.name, _myOffers) : null;
-          _rmRowData[r.name] = { now: r.floor || 0, offer: (_op > 0 ? _op : (r.floor || 0)), value: r.value || 0 };
-        }
-        h += `<tr style="border-top:1px solid #222">
-          <td style="padding:3px 6px;color:var(--text-dim);white-space:nowrap"><input type="checkbox" class="rm-pick" title="Vybrat do součtu dole" ${_rmPicks.has(r.name) ? "checked" : ""} onchange="_rmTogglePick(${escHTML(JSON.stringify(r.name))},this.checked)">${rank}</td>
-          <td style="padding:3px 6px;white-space:nowrap">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8" title="Patří ke skupině nad sebou — kupuje se s ní.">\u21b3</span> ` : ""}${rowIcon(r)} ${r.type === "Bud" && r.budId ? `<a href="https://sunflower-land.com/play/#/marketplace/buds/${r.budId}" target="_blank" rel="noopener" style="color:inherit" title="${escHTML(r.budTraits || "")} · otevřít v marketplace">${escHTML(r.name)}</a>` : escHTML(r.name)} ${typeBadge(r.type)} ${stBadge}${isPlan && r.bundle && r.horizonGain !== 0 ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#2a1f3a;color:#b08cd8;font-weight:bold" title="Tyhle ${r.bundle} položky se vyplatí jen spolu (třeba krok ascension, který sám nic nedá, před krokem, který vydělá). Kupují se naráz, zisk je za celou skupinu.">SKUPINA \u00d7${r.bundle}</span>` : ""}${r.skillTakeNow ? ` <span style="font-size:0.45rem;padding:1px 4px;border-radius:3px;background:#1f3a2a;color:#7fe0a0" title="Skill pointy na tohle už máš — můžeš vzít hned. Cena je i tak spočtená z XP, které ten point stál: držet point ho nedělá zdarma, stejně jako držet FLOWER nedělá NFT zdarma.">MůžEŠ HNED</span>` : ""}</td>
-          <td style="padding:3px 6px;color:var(--text-dim);max-width:240px">${boostTxt}</td>
-          <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.floor)}</td>
-          <td style="padding:3px 6px;text-align:right">${(!r.type || r.type === "Collectible" || r.type === "Wearable" || r.type === "Bud") ? _rmOfferCell(r.name, _myOffers) : `<span style="color:var(--text-dim)">—</span>`}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--green)">${marg}</td>
-          <td style="padding:3px 6px;text-align:right">${roadmapFmtDays(r.roi)}${(() => {
-            if (!(!r.type || r.type === "Collectible" || r.type === "Wearable" || r.type === "Bud") || !(r.value > 0)) return "";
-            const op = _rmOfferPrice(r.name, _myOffers);
-            if (!(op > 0)) return "";
-            const p2y = r.value * 730.5;   // the offer price whose payback is exactly 2 years
-            return ` <span style="font-size:0.5rem;color:var(--text-dim)" title="Návratnost, pokud koupíš za cenu nabídky (${roadmapFmtFlower(op)} FLOWER) místo floor ${roadmapFmtFlower(r.floor)}: ${roadmapFmtFlower(op)} ÷ ${roadmapFmtFlower(r.value)}/den. Pro návratnost přesně 2 roky nabídni nejvýš ${roadmapFmtFlower(p2y)} FLOWER (${roadmapFmtFlower(r.value)}/den × 730,5 dne).">(${roadmapFmtDays(op / r.value)} offer · 2y ≤ ${roadmapFmtFlower(p2y)})</span>`;
-          })()}${
-            /*
-             * A chain row is POSITIONED by its prefix payback — what it costs to get here including
-             * every step you must do first — not by its own. Without showing that, the column looks
-             * unsorted: "A1 Expansion 33" reads 28d sitting below a 61d row, and the table appears
-             * to be lying. The second figure is the one the order actually uses.
-             */
-            (r.prefixRoi != null && Math.abs(r.prefixRoi - r.roi) > 1)
-              ? `<div style="font-size:0.45rem;color:var(--text-dim)" title="Řadí se podle návratnosti CELÉ řady až sem: ${roadmapFmtFlower(r.prefixCost)} FLOWER za všechny kroky včetně tohohle. Vlastní návratnost tohohle kroku je ${roadmapFmtDays(r.roi)}, ale nejde ho koupit dřív než ty před ním.">v řadě ${roadmapFmtDays(r.sortRoi)}</div>`
-              : ""
-          }</td>
-          <td style="padding:3px 6px;text-align:right;color:${r.horizonGain > 0 ? "var(--green)" : "#e07070"}" title="${r.resale > 0 ? `včetně prodeje NFT na konci za ${roadmapFmtFlower(r.resale)}` : ""}">${isPlan && r.bundle && r.horizonGain === 0 ? `<span style="color:#b08cd8">ve skupině</span>` : r.horizonGain != null && isFinite(r.horizonGain) ? (r.horizonGain > 0 ? "+" : "\u2212") + roadmapFmtFlower(Math.abs(r.horizonGain)) + (!r.bundle && r.floor > 0 ? ` <span style="font-size:0.45rem;opacity:0.75" title="výsledek za ${settings.horizonYears} let jako % z nákupní ceny ${roadmapFmtFlower(r.floor)}">(${r.horizonGain >= 0 ? "+" : "\u2212"}${Math.round(Math.abs(r.horizonGain) / r.floor * 100)} %)</span>` : "") : "\u2014"}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtFlower(r.cumCost) : "\u2014"}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--sunpetal)">${isPlan ? roadmapFmtFlower(r.rateAfter) : "\u2014"}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isPlan ? roadmapFmtDate(r.atDay) : "\u2014"}</td>
-        </tr>`;
-      }
-      h += `</tbody></table></div>`;
-      h += `<div id="rm-pick-total" style="display:none"></div>`;
-      h += `<div style="margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.6"><b style="color:#7fe0a0">IN PLAN</b> = the buy order that leaves the most FLOWER in hand after ${settings.horizonYears} years, top to bottom (\u03a3 Cost + ETA assume you reinvest income minus the BTC withdrawal, buying each item once it is saved up). <b style="color:#e8a060">&gt; ${settings.horizonYears} LET</b> = earns something, but not its price back within the horizon. <b style="color:#e8c060">CONDITIONAL</b> = boosts a category not in your profitable mix yet (e.g. crimstone below break-even) \u2014 ranked by what it WOULD add at full scale, so nothing is hidden. <b>+FL/day is each item\u2019s value added to your CURRENT farm</b>, so it doesn\u2019t depend on what you buy first (\u03a3 Cost &amp; ETA then assume you buy down the list, reinvesting income).</div>`;
-
-      // Cosmetic tail (boost present but no FLOWER value) \u2014 collapsed
-      const cosmeticRows = (sim.timeline || []).filter(x => x.kind === "cosmetic");
-      if (cosmeticRows.length) {
-        if (settings.showCosmetic) {
-          h += `<details style="margin-top:12px"><summary style="cursor:pointer;font-size:0.55rem;color:var(--text-secondary)">${cosmeticRows.length} no-FLOWER-value boost NFTs (qualitative / net \u2264 0) \u2014 cheapest first</summary><div style="overflow-x:auto;margin-top:6px"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tbody>`;
-          for (const m of cosmeticRows.slice(0, 100)) {
-            h += `<tr style="border-top:1px solid #222"><td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(m.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(m.name)} ${typeBadge(m.type)}</td><td style="padding:3px 6px;color:var(--text-dim);max-width:260px">${escHTML((m.boost || "").split("\n").join(" \u00b7 "))}${m.reason ? `<div style="font-style:italic;margin-top:2px">${escHTML(m.reason)}</div>` : ""}</td><td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(m.floor)}</td></tr>`;
-          }
-          h += `</tbody></table></div></details>`;
-        } else {
-          h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${cosmeticRows.length} boost NFTs with no FLOWER value hidden \u2014 tick \u201cShow no-value boosts\u201d in Settings to list them.</div>`;
-        }
-      }
-
-      if (sim.noBoostCount) {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Excluded ${sim.noBoostCount} no-boost collectibles / decorations (Coin Aura, banners, bears…) — they generate no FLOWER, so they're not part of this profit roadmap.</div>`;
-      }
-      if (sim.tail && sim.tail.length) {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">+ ${sim.tail.length} NFTs above your ${roadmapFmtFlower(settings.maxPrice)} ${sflIcon()} price cap (${roadmapFmtFlower(sim.tailCost)} ${sflIcon()} total) — excluded from the plan &amp; totals above.</div>`;
-      }
-
-      // ── Untradeable ──
-      if (sim.untradeable && sim.untradeable.length) {
-        h += `<div style="margin-top:14px"><span style="cursor:pointer;font-size:0.6rem;color:var(--text-secondary)" onclick="_roadmapToggleUntradeable()">▸ ${sim.untradeable.length} NFTs with no realistic market (no floor, or troll-priced &gt;500k) — excluded</span>`;
-        h += `<div id="rm-untradeable" style="display:none;margin-top:6px;font-size:0.55rem;color:var(--text-dim);line-height:1.7">${sim.untradeable.map(u => escHTML(u.name)).join(" · ")}</div></div>`;
-      }
-
-      // ── Model notes ──
-      h += `<div class="pixel-panel" style="margin-top:18px;padding:12px;font-size:0.55rem;color:var(--text-dim);line-height:1.7">
-        <div class="pixel-font" style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">HOW THIS IS CALCULATED</div>
-        • <b>Order</b> = the most FLOWER in hand after your horizon (default 5 years). Each step buys the item that adds the most FLOWER-at-the-horizon per FLOWER spent, given what you already own, as soon as it is saved up; the plan stops when nothing still pays for itself in time. Income the repay plan takes to BTC is not reinvested. NFT resale at the end is measured on the market by price bucket (listing price after the 10 % fee, value change per year from the last six months; nothing above 10k, where nothing sells).<br>
-        • <b>Coins are free</b> (when you hold &gt;10k) — coin-priced costs like axes &amp; seeds aren't charged, since coins don't convert to FLOWER. So coin-only activities like trees get cheaper.<br>
-        • <b>Obsidian</b> sells only ~1/week, so its income is capped at one obsidian (minus a lava ignition) per week — its ROI lands near the bottom.<br>
-        • <b>Net, not gross</b> — every category subtracts its running costs (animal feed &amp; sickness, crop/fruit/flower seeds, mining tools, lava-pit fuel) before counting. A loss-making activity (e.g. low-level sheep where feed ≥ wool) nets 0, and an animal boost only scores once it actually flips that category positive.<br>
-        • <b>Boost value</b> = the floored net FLOWER/day the boost adds, vs what you already own (stacking synergy included) × your real harvest efficiency.<br>
-        • <b>Efficiency</b> = your actual May-2026 harvest sessions/day ÷ theoretical, computed per category from history — crops, flowers, fruits, greenhouse, animals, trees &amp; all mining. A category you didn\'t harvest in May scores 0% (its NFTs aren\'t profit for you); bees/fishing (no session signal) use your average activity.<br>
-        • <b>Synergy</b> — after each simulated purchase, every same-category item's marginal is recomputed, so diminishing returns between stacking boosts are captured.<br>
-        • <b>Scope</b> — only NFTs that carry a boost are on the path; a no-boost decoration (Coin Aura, banners, bears) generates no FLOWER so it's excluded from the plan and the totals. Boost NFTs with no measurable FLOWER value (pet XP, cheers, net ≤ 0) are bought last, cheapest first.<br>
-        • <b>Always live</b> — ownership is read from your farm and floor prices from the marketplace on every load. Buy an item (or a price moves) and hit ↻ Refresh: it drops off the list, income &amp; ETAs recompute, and the buy order re-sorts automatically.<br>
-        • <b>Prices</b> are marketplace floor in FLOWER. Listings above 500k FLOWER (more than half of all FLOWER in existence) are treated as troll / no-liquidity and dropped; use the Max-price cap to also park other expensive items out of the plan. Estimates assume you reinvest all FLOWER into NFTs.
-      </div>`;
+      h += _w("roadmap-buy-path") + _w("roadmap-offers");
       }
 
       h += `</div>`;
@@ -16385,7 +16173,7 @@
       h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
       h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
       // ── Controls ──
-      h += `<details style="margin-bottom:14px"><summary style="cursor:pointer;padding:9px 12px;background:#1c160f;border:1px solid var(--border-brown);border-radius:8px;font-family:'Press Start 2P',monospace;font-size:0.55rem;color:var(--text-secondary)">⚙ SETTINGS &amp; ASSUMPTIONS — income source, efficiency sliders, restocks, ticket value, filters</summary><div style="margin-top:8px">`;
+      h += `<details class="v-rm-sec"><summary>⚙ Settings &amp; assumptions — income source, efficiency sliders, restocks, ticket value, filters</summary><div>`;
       h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
       h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
       h += `<label>Start FLOWER/day: <input type="number" id="rm-income" value="${startIncome.toFixed(2)}" step="1" min="0" style="width:88px" onchange="_roadmapSetIncome(this.value)"> <span style="color:var(--text-dim)">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button onclick="_roadmapResetIncome()" style="font-size:0.55rem">reset</button></label>`;
@@ -16395,12 +16183,12 @@
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
       h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
       h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value: <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" style="width:52px" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
-      h += `<label title="Plán maximalizuje FLOWER v ruce po tolika letech: co se do té doby nevrátí, do plánu nepatří.">Horizont: <input type="number" value="${settings.horizonYears}" min="1" step="1" style="width:46px" onchange="_roadmapSetHorizon(this.value)"> let</label>`;
+      h += `<label title="The plan maximises FLOWER in hand after this many years: what doesn’t pay back by then stays out of the plan.">Horizon: <input type="number" value="${settings.horizonYears}" min="1" step="1" style="width:46px" onchange="_roadmapSetHorizon(this.value)"> years</label>`;
       {
         const autoW = parseFloat(localStorage.getItem("sfl_repay_daily_flower"));
-        h += `<label title="Kolik FLOWER denně odchází do BTC (repay plán) — to se do nákupů neinvestuje. Prázdné = automaticky z repay plánu v Investment Trackeru.">Výběr do BTC: <input type="number" value="${settings.withdrawPerDay != null ? settings.withdrawPerDay : ""}" placeholder="${isFinite(autoW) && autoW > 0 ? "auto " + roadmapFmtFlower(autoW) : "0"}" min="0" step="1" style="width:72px" onchange="_roadmapSetWithdraw(this.value)"> /den</label>`;
+        h += `<label title="How much FLOWER a day goes to BTC (the repay plan) — it is not reinvested into buys. Empty = automatically from the repay plan in the Investment Tracker.">BTC withdrawal: <input type="number" value="${settings.withdrawPerDay != null ? settings.withdrawPerDay : ""}" placeholder="${isFinite(autoW) && autoW > 0 ? "auto " + roadmapFmtFlower(autoW) : "0"}" min="0" step="1" style="width:72px" onchange="_roadmapSetWithdraw(this.value)"> /day</label>`;
       }
-      h += `<label title="Jak se mění hodnota NFT za rok, když ji na konci horizontu prodáváš. Prázdné = změřeno z trhu podle cenového pásma (−19 až −47 % ročně; nad 10k se NFT neprodá). 1 = hodnota se drží.">Hodnota NFT/rok: <input type="number" value="${settings.nftDriftPerYear != null ? settings.nftDriftPerYear : ""}" placeholder="z dat" min="0" max="2" step="0.05" style="width:58px" onchange="_roadmapSetDrift(this.value)"></label>`;
+      h += `<label title="How an NFT’s value changes per year when you sell it at the end of the horizon. Empty = measured on the market by price bucket (−19 to −47 % a year; above 10k an NFT doesn’t sell). 1 = the value holds.">NFT value/year: <input type="number" value="${settings.nftDriftPerYear != null ? settings.nftDriftPerYear : ""}" placeholder="from data" min="0" max="2" step="0.05" style="width:58px" onchange="_roadmapSetDrift(this.value)"></label>`;
       h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
       h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
       h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
@@ -16418,9 +16206,15 @@
       h += `</div></details>`;
 
       el.innerHTML = h;
-      _rmRenderPickTotal();
       el.insertAdjacentHTML("afterbegin", '<div id="nodeacq-roadmap"></div>');
       _mountNodeAcq("nodeacq-roadmap");
+    }
+
+    // One ROADMAP widget's frame from the last section=roadmap payload.
+    function _rmWidget(type) {
+      if (typeof __widgets === "undefined") return _wMissing(type);
+      return __widgets.renderPage(type, { data: { roadmap: _roadmapServer, book: _rmBook, farm: powerState && powerState.farm },
+        ctx: _wCtx(type), fresh: __wFresh(__store.peek({ res: "roadmap", farm: FARM_ID })) });
     }
 
     window._roadmapSetIncome = function(v) { const n = parseFloat(v); saveRoadmapSettings({ startIncome: isFinite(n) && n >= 0 ? n : null }); renderRoadmapContent(); };
@@ -16488,7 +16282,6 @@
     window._roadmapSetHorizon = function(v) { const n = parseFloat(v); saveRoadmapSettings({ horizonYears: isFinite(n) && n > 0 ? n : 5 }); renderRoadmapContent(); };
     window._roadmapSetWithdraw = function(v) { const n = parseFloat(v); saveRoadmapSettings({ withdrawPerDay: v === "" || !isFinite(n) ? null : Math.max(0, n) }); renderRoadmapContent(); };
     window._roadmapSetDrift = function(v) { const n = parseFloat(v); saveRoadmapSettings({ nftDriftPerYear: v === "" || !isFinite(n) ? null : Math.max(0, n) }); renderRoadmapContent(); };
-    window._roadmapToggleUntradeable = function() { const e = document.getElementById("rm-untradeable"); if (e) e.style.display = e.style.display === "none" ? "block" : "none"; };
     window._roadmapBuyView = function(v) {
       const divs = { table: document.getElementById("buy-table"), skills: document.getElementById("buy-skills") };
       const tabs = { table: document.getElementById("bp-tab-table"), skills: document.getElementById("bp-tab-skills") };
@@ -16498,7 +16291,7 @@
       const view = v === "skills" ? "skills" : "table";
       for (const k of ["table", "skills"]) {
         if (divs[k]) divs[k].style.display = (k === view) ? "block" : "none";
-        const tb = tabs[k]; if (tb) { const on = (k === view); tb.style.background = on ? "var(--sunpetal)" : "#241a10"; tb.style.color = on ? "#1a120a" : "var(--text-secondary)"; tb.style.fontWeight = on ? "bold" : "normal"; }
+        const tb = tabs[k]; if (tb) tb.classList.toggle("on", k === view);
       }
     };
 
@@ -18627,6 +18420,7 @@
     // What a widget needs from the page beyond its data: saved settings of other pages, icons.
     // A page registers what its widgets need from it next to its own code: _wCtxMap["type"] = () => ({…}).
     const _wCtxMap = {};
+    _rmRegisterWCtx();   // ROADMAP's entries (its code sits above this declaration)
     // The clean page head (title + one line) every converted page starts with.
     function _wPageHead(title, sub = "") {
       return `<div class="w-page-head"><h1>${escHTML(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
@@ -24188,143 +23982,37 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       return { sflPerDay: 0, note: "unknown effect", breakdown: [] };
     }
 
+    // BUDS: the table is a widget (widgets/buds.mjs over section=buds, with POWER's product picks),
+    // the same as its pinned copies; its type / aura / owned filters are the widget's ⚙ options.
     async function renderBuds(data) {
       const app = document.getElementById("app");
-      const { farm } = data;
-      const capacity = detectFarmCapacity(farm);
-      const savedProducts = getSavedPowerProducts();
-
-      let html = `<div class="header pixel-panel pixel-font">
-        <h1>BUD EXPLORER</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-      </div>`;
-
-
-      html += `<div id="buds-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div></div>`;
-      app.innerHTML = html;
-
-      // Bud valuation — MIGRATED to core/sections/buds.mjs (compute?section=buds).
-      // The server prices all 2621 buds against this farm's capacity; the client keeps
-      // only the display bits (describeBudBoosts icons, breakdown formatting).
-      let budRows = [];
-      try {
-        let payload, lastErr;
-        for (let a = 0; a < 3; a++) {
-          try {
-            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=buds&products=${encodeURIComponent(JSON.stringify(savedProducts))}`);
-            if (!rp.ok) throw new Error(`compute buds ${rp.status}`);
-            payload = await rp.json();
-            break;
-          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
-        }
-        if (!payload) throw lastErr;
-        budRows = ((payload.data || {}).rows || []).map(r => {
-          const bud = { type: r.type, stem: r.stem, aura: r.aura };
-          const breakdownDesc = r.breakdown.map(b => `${catIcon(b.catId, "1em")} ${b.sflPerDay.toFixed(4)}`).join(" · ");
-          return { id: r.id, type: r.type, stem: r.stem, aura: r.aura,
-            boostDescs: describeBudBoosts(bud), breakdownDesc,
-            sflPerDay: r.sflPerDay, sflPerYear: r.sflPerDay * 365, owned: r.owned };
-        });
-      } catch (err) {
-        document.getElementById("buds-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+      const q = { res: "compute", farm: FARM_ID, section: "buds", q: { products: JSON.stringify(getSavedPowerProducts()) } };
+      const head = _wPageHead("🌱 Bud Explorer", `Farm #${escHTML(FARM_ID)} · what every bud would add to this farm, owned first`);
+      const draw = () => {
+        if (getPage() !== "buds") return;
+        const e = __store.peek(q);
+        app.innerHTML = head + (typeof __widgets === "undefined" ? _wMissing("Buds")
+          : __widgets.renderPage("buds-table", { data: { buds: e && e.data }, ctx: _wCtx("buds-table"), fresh: __wFresh(e) }));
+      };
+      window._wRerender = draw;
+      window._wRefresh = () => renderBuds(data);
+      app.innerHTML = head + `<div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div>`;
+      // A page load always recomputes (the prices move); two retries, as the page always did.
+      let e = null;
+      for (let a = 0; a < 3; a++) {
+        e = await __store.get(q, { force: true });
+        if (e.status === "ok") break;
+        if (a < 2) await new Promise((r) => setTimeout(r, 1000 * (a + 1)));
+      }
+      if (getPage() !== "buds") return;
+      if (!e || !e.data) {
+        app.innerHTML = head + `<div class="w-frame pixel-panel"><div class="w-error">Failed to load: ${escHTML((e && e.error) || "compute buds")}</div></div>`;
         return;
       }
-
-      // Sort: owned first, then by SFL/day descending
-      budRows.sort((a, b) => {
-        if (a.owned !== b.owned) return a.owned ? -1 : 1;
-        return b.sflPerDay - a.sflPerDay;
-      });
-
-      const totalOwned = budRows.filter(b => b.owned).length;
-      const withBoost = budRows.filter(b => b.sflPerDay > 0).length;
-
-      let content = `<div class="pixel-font" style="font-size:0.5625rem;color:var(--text-secondary);margin-bottom:12px">
-        <strong>${budRows.length}</strong> buds total ·
-        <strong style="color:var(--green)">${totalOwned} owned</strong> ·
-        ${withBoost} with calculable boost ·
-        Capacity: ${capacity.crops} plots, ${capacity.fruitPatches} fruit, ${capacity.greenhouse || 0} greenhouse, ${capacity.lavaPits || 0} lava pits, ${capacity.oilReserves || 0} oil reserves, ${capacity.trees} trees
-      </div>`;
-
-      // Filters
-      content += `<div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center" class="pixel-font">
-        <label style="font-size:0.5rem;color:var(--text-secondary)">Type:
-          <select id="bud-filter-type" onchange="filterBudTable()" style="font-size:0.5rem;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-dark);padding:2px 4px">
-            <option value="">All</option>
-            ${BUD_TYPE_NAMES.map(t => `<option value="${t}">${t}</option>`).join("")}
-          </select>
-        </label>
-        <label style="font-size:0.5rem;color:var(--text-secondary)">Aura:
-          <select id="bud-filter-aura" onchange="filterBudTable()" style="font-size:0.5rem;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border-dark);padding:2px 4px">
-            <option value="">All</option>
-            ${BUD_AURA_NAMES.map(a => `<option value="${a}">${a}</option>`).join("")}
-          </select>
-        </label>
-        <label style="font-size:0.5rem;color:var(--text-secondary)">
-          <input type="checkbox" id="bud-filter-owned" onchange="filterBudTable()"> Owned only
-        </label>
-      </div>`;
-
-      content += `<div style="overflow-x:auto">
-      <table id="bud-table" style="width:100%;border-collapse:collapse;font-size:0.5rem;color:var(--text-secondary)">
-        <thead>
-          <tr style="background:rgba(92,58,30,0.3);text-align:left;position:sticky;top:0">
-            <th style="padding:4px 6px;border:1px solid var(--border-dark)">ID</th>
-            <th style="padding:4px 6px;border:1px solid var(--border-dark)">Type</th>
-            <th style="padding:4px 6px;border:1px solid var(--border-dark)">Stem</th>
-            <th style="padding:4px 6px;border:1px solid var(--border-dark)">Aura</th>
-            <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:140px">Boosts (after aura)</th>
-            <th style="padding:4px 6px;border:1px solid var(--border-dark);min-width:80px">Breakdown</th>
-            <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/day</th>
-            <th style="padding:4px 6px;border:1px solid var(--border-dark);text-align:right">${sflIcon()}/year</th>
-          </tr>
-        </thead>
-        <tbody>`;
-
-      for (const bud of budRows) {
-        const auraStyle = bud.aura === "Mythical" ? "color:#ff66ff;font-weight:bold" :
-                          bud.aura === "Rare" ? "color:#ff8800;font-weight:bold" :
-                          bud.aura === "Green" ? "color:var(--green)" :
-                          bud.aura === "Basic" ? "color:var(--lily)" : "color:var(--text-dim)";
-        const auraLabel = bud.aura !== "No Aura"
-          ? `${bud.aura} (${((BUD_AURA_MULTIPLIERS[bud.aura] - 1) * 100).toFixed(0)}%)` : "—";
-        const sflColor = bud.sflPerDay > 0 ? "var(--green)" : "var(--text-dim)";
-        const ownedBg = bud.owned ? "background:rgba(34,139,34,0.15);" : "";
-
-        content += `<tr data-type="${escHTML(bud.type)}" data-aura="${escHTML(bud.aura)}" data-owned="${bud.owned ? 1 : 0}" style="border-bottom:1px solid rgba(92,58,30,0.15);${ownedBg}">
-          <td style="padding:3px 6px;border:1px solid var(--border-dark);font-weight:bold">${bud.owned ? "✅ " : ""}${bud.id}</td>
-          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.type)}</td>
-          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${escHTML(bud.stem)}</td>
-          <td style="padding:3px 6px;border:1px solid var(--border-dark);${auraStyle}">${escHTML(auraLabel)}</td>
-          <td style="padding:3px 6px;border:1px solid var(--border-dark)">${bud.boostDescs.join("<br>") || '<em style="color:var(--text-dim)">—</em>'}</td>
-          <td style="padding:3px 6px;border:1px solid var(--border-dark);font-size:0.4375rem">${bud.breakdownDesc || "—"}</td>
-          <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor};font-weight:bold">+${bud.sflPerDay.toFixed(4)}</td>
-          <td style="padding:3px 6px;border:1px solid var(--border-dark);text-align:right;color:${sflColor}">+${bud.sflPerYear.toFixed(2)}</td>
-        </tr>`;
-      }
-
-      content += `</tbody></table></div>`;
-
-      content += `<div class="footer" style="margin-top:16px">
-        <button class="refresh-btn" onclick="refresh()">REFRESH</button>
-        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
-      </div>`;
-
-      document.getElementById("buds-content").innerHTML = content;
+      draw();
     }
-
-    function filterBudTable() {
-      const type = document.getElementById("bud-filter-type")?.value || "";
-      const aura = document.getElementById("bud-filter-aura")?.value || "";
-      const ownedOnly = document.getElementById("bud-filter-owned")?.checked || false;
-      const rows = document.querySelectorAll("#bud-table tbody tr");
-      for (const row of rows) {
-        const show = (!type || row.dataset.type === type)
-          && (!aura || row.dataset.aura === aura)
-          && (!ownedOnly || row.dataset.owned === "1");
-        row.style.display = show ? "" : "none";
-      }
-    }
+    _wCtxMap["buds-table"] = () => ({ describe: describeBudBoosts, catIcon: (c) => catIcon(c, "1em"),
+      budIcon: () => { const n = "Bud Seedling"; return `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.2em;vertical-align:-0.2em;margin-right:3px">`; } });
 
     // ═══════════════════════════════════════
     //  PETS PAGE
@@ -24361,32 +24049,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       "Wolf":    [{res:"Acorn",level:1,energy:100},{res:"Chewed Bone",level:3,energy:200},{res:"Ribbon",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Dewberry",level:25,energy:200}],
       "Bear":    [{res:"Acorn",level:1,energy:100},{res:"Dewberry",level:3,energy:200},{res:"Heart Leaf",level:7,energy:200},{res:"Moonfur",level:12,energy:1000},{res:"Fossil Shell",level:20,energy:300},{res:"Frost Pebble",level:25,energy:200}],
     };
-
-    const NFT_BREED_TYPES = ["Dragon", "Phoenix", "Griffin", "Ram", "Warthog", "Wolf", "Bear"];
-
-    const PET_LEVEL_PERKS = [
-      { level:1,   perk:"Acorn fetch",                    type:"resource",  nftOnly:false, detail:"Acorn (100⚡)" },
-      { level:3,   perk:"Primary resource",               type:"resource",  nftOnly:false, detail:"Category resource (200⚡)" },
-      { level:5,   perk:"+5 fetch energy",                 type:"energy",    nftOnly:false, value:5 },
-      { level:7,   perk:"Secondary resource",              type:"resource",  nftOnly:false, detail:"Category resource (200⚡)" },
-      { level:10,  perk:"Unlock hard request",             type:"request",   nftOnly:false, commonOnly:true, detail:"+300 energy, +300 XP per feed" },
-      { level:12,  perk:"Moonfur fetch",                   type:"resource",  nftOnly:true,  detail:"Moonfur (1000⚡)" },
-      { level:15,  perk:"+10% extra fetch resource",       type:"bonus",     nftOnly:false, value:0.10 },
-      { level:18,  perk:"+1 Acorn",                        type:"acorn",     nftOnly:false },
-      { level:20,  perk:"Fossil Shell fetch",              type:"resource",  nftOnly:false, detail:"Fossil Shell (300⚡)" },
-      { level:25,  perk:"Tertiary resource",               type:"resource",  nftOnly:true,  detail:"Category resource (200⚡)" },
-      { level:27,  perk:"+10% XP per feed",                type:"xp",        nftOnly:false, value:0.10 },
-      { level:30,  perk:"2nd medium request",              type:"request",   nftOnly:true,  detail:"+100 energy, +100 XP per feed" },
-      { level:35,  perk:"+5 fetch energy",                 type:"energy",    nftOnly:false, value:5 },
-      { level:40,  perk:"+15% XP per feed (25% total)",    type:"xp",        nftOnly:true,  value:0.15 },
-      { level:50,  perk:"+5% extra fetch resource (15%)",  type:"bonus",     nftOnly:false, value:0.05 },
-      { level:60,  perk:"+1 guaranteed non-Acorn/Moonfur", type:"guaranteed", nftOnly:true },
-      { level:75,  perk:"+5 fetch energy",                 type:"energy",    nftOnly:false, value:5 },
-      { level:85,  perk:"+25% XP per feed (50% total)",    type:"xp",        nftOnly:true,  value:0.25 },
-      { level:100, perk:"+10% extra fetch resource (25%)", type:"bonus",     nftOnly:false, value:0.10 },
-      { level:150, perk:"+25% extra Moonfur (50% total)",  type:"moonfur",   nftOnly:true,  value:0.25 },
-      { level:200, perk:"2nd hard request",                type:"request",   nftOnly:true,  detail:"+300 energy, +300 XP per feed" },
-    ];
 
     const PET_REQUEST_VALUES = { easy:{xp:20,energy:20}, medium:{xp:100,energy:100}, hard:{xp:300,energy:300} };
 
@@ -24435,491 +24097,42 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     const _petRound2 = (n) => Math.round(n * 100) / 100;
 
 
+    // PETS: four widgets (widgets/pets.mjs over section=pets) — earnings, the NFT collection, the
+    // resource market and the pets one by one — the same as their pinned copies.
     async function renderPets(data) {
       const app = document.getElementById("app");
-      const { farm } = data;
-
-      let html = `<div class="header pixel-panel pixel-font">
-        <h1>PET ADVISOR</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-      </div>`;
-
-
-      html += `<div id="pets-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div></div>`;
-      app.innerHTML = html;
-
-      // Fetch P2P prices
-      // Pet state — MIGRATED to core/sections/pets.mjs (compute?section=pets): boost
-      // detection, pet parsing + per-pet daily calc run server-side; raw p2pPrices come
-      // back for the page's resource tables.
-      let p2pPrices = {}, pets = [], feedMultiplier = 1.0, hasPetBowls = false, hasVictoriasApron = false, fetchBoosts = {};
-      try {
-        let payload, lastErr;
-        for (let a = 0; a < 3; a++) {
-          try {
-            const rp = await fetch(`/api/compute?farm=${FARM_ID}&section=pets`);
-            if (!rp.ok) throw new Error(`compute pets ${rp.status}`);
-            payload = await rp.json();
-            break;
-          } catch (e) { lastErr = e; if (a < 2) await new Promise(r => setTimeout(r, 1000 * (a + 1))); }
-        }
-        if (!payload) throw lastErr;
-        const d = payload.data || {};
-        p2pPrices = d.p2pPrices || {};
-        pets = d.pets || [];
-        feedMultiplier = d.feedMultiplier || 1.0;
-        hasPetBowls = !!d.hasPetBowls;
-        hasVictoriasApron = !!d.hasVictoriasApron;
-        fetchBoosts = d.fetchBoosts || {};
-      } catch (err) {
-        document.getElementById("pets-content").innerHTML = `<div class="error-screen pixel-panel pixel-font"><p>Failed to load: ${escHTML(err.message)}</p></div>`;
+      const q = { res: "compute", farm: FARM_ID, section: "pets" };
+      const head = _wPageHead("🐾 Pet Advisor", `Farm #${escHTML(FARM_ID)} · what your pets fetch, eat and earn`);
+      const draw = () => {
+        if (getPage() !== "pets") return;
+        const e = __store.peek(q);
+        if (typeof __widgets === "undefined") { app.innerHTML = head + _wMissing("Pets"); return; }
+        const d = { pets: e && e.data, farm: data.farm };
+        const w = (t, fresh) => __widgets.renderPage(t, { data: d, ctx: _wCtx(t), fresh });
+        const fresh = __wFresh(e);
+        const none = !(e && e.data && e.data.pets && e.data.pets.length);
+        app.innerHTML = head + w("pets-summary", fresh) + (none ? "" : w("pets-nft-collection", __wFresh(__store.peek({ res: "farm", farm: FARM_ID })))
+          + w("pets-market", fresh) + w("pet-cards", fresh));
+      };
+      window._wRerender = draw;
+      window._wRefresh = () => renderPets(data);
+      app.innerHTML = head + `<div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div>`;
+      let e = null;
+      for (let a = 0; a < 3; a++) {
+        e = await __store.get(q, { force: true });
+        if (e.status === "ok") break;
+        if (a < 2) await new Promise((r) => setTimeout(r, 1000 * (a + 1)));
+      }
+      if (getPage() !== "pets") return;
+      if (!e || !e.data) {
+        app.innerHTML = head + `<div class="w-frame pixel-panel"><div class="w-error">Failed to load: ${escHTML((e && e.error) || "compute pets")}</div></div>`;
         return;
       }
-
-      // Empty state
-      if (pets.length === 0) {
-        document.getElementById("pets-content").innerHTML = `
-          <div class="pixel-panel" style="padding:24px;text-align:center;font-size:0.75rem;color:var(--text-secondary)">
-            No pets found on this farm.<br><br>
-            <a href="https://sfl.world/info/pets" target="_blank" style="color:var(--sunpetal)">Learn about pets &#x2192;</a>
-          </div>`;
-        return;
-      }
-
-      let content = '';
-
-      // Summary bar
-      const totalEnergy = pets.reduce((s, p) => s + p.energy, 0);
-      const nftCount = pets.filter(p => p.isNft).length;
-      const commonCount = pets.filter(p => !p.isNft).length;
-      content += `<div class="summary-bar pixel-panel">
-        <div class="summary-stat">
-          <div class="label pixel-font">TOTAL PETS</div>
-          <div class="value">${pets.length}</div>
-        </div>
-        <div class="summary-stat">
-          <div class="label pixel-font">COMMON</div>
-          <div class="value">${commonCount}</div>
-        </div>
-        <div class="summary-stat">
-          <div class="label pixel-font">NFT</div>
-          <div class="value" style="color:var(--lily)">${nftCount}</div>
-        </div>
-        <div class="summary-stat">
-          <div class="label pixel-font">TOTAL ENERGY</div>
-          <div class="value time">${totalEnergy.toLocaleString()} &#x26A1;</div>
-        </div>
-      </div>`;
-
-      // ── NFT Pets Collection ──
-      const nftPets = farm.pets?.nfts || {}; // raw map still needed here (traits by id); section=pets ships the parsed list
-      const ownedNftBreeds = {};
-      for (const [id, pet] of Object.entries(nftPets)) {
-        const breed = pet.traits?.type || "Unknown";
-        if (NFT_BREED_TYPES.includes(breed)) {
-          const xp = pet.experience || 0;
-          ownedNftBreeds[breed] = { id, level: petLevel(xp), xp, energy: pet.energy || 0 };
-        }
-      }
-      const ownedBreedCount = Object.keys(ownedNftBreeds).length;
-
-      content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
-          <span class="pixel-font" style="font-size:0.6875rem;color:var(--lily);font-weight:bold">NFT PETS COLLECTION</span>
-          <span class="pixel-font" style="font-size:0.625rem;color:var(--text-secondary)">${ownedBreedCount} / ${NFT_BREED_TYPES.length}</span>
-        </div>
-        <div class="nft-breed-grid">`;
-
-      for (const breed of NFT_BREED_TYPES) {
-        const owned = ownedNftBreeds[breed];
-        const cls = owned ? "nft-breed-card owned" : "nft-breed-card missing";
-        const badgeCls = owned ? "nft-breed-badge owned" : "nft-breed-badge missing";
-        const badgeText = owned ? "OWNED" : "MISSING";
-        const fetchData = PET_FETCH_DATA[breed] || [];
-
-        // Find unique Lv25 resource and Moonfur
-        const lv25 = fetchData.find(f => f.level === 25);
-        const moonfur = fetchData.find(f => f.res === "Moonfur");
-
-        // Build resource list showing what this breed can fetch
-        const resLines = fetchData.map(f => {
-          const lock = owned && owned.level >= f.level ? "\u2705" : "\uD83D\uDD12";
-          let cls = "";
-          if (f.level === 25) cls = " unique";
-          else if (f.res === "Moonfur") cls = " moonfur";
-          return `${lock} <span class="${cls}">${escHTML(f.res)}</span> (Lv${f.level}, ${f.energy}\u26A1)`;
-        }).join(" &middot; ");
-
-        content += `<div class="${cls}">
-          <div class="nft-breed-header">
-            <span class="nft-breed-name">${escHTML(breed)}</span>
-            <span class="${badgeCls}">${badgeText}</span>
-          </div>`;
-
-        if (owned) {
-          content += `<div class="nft-breed-stats">
-            <span>Pet #${escHTML(owned.id)}</span>
-            <span>Lv ${owned.level}</span>
-            <span>${owned.energy.toLocaleString()} \u26A1</span>
-          </div>`;
-        } else {
-          content += `<div class="nft-breed-stats"><span style="color:#e55">Not owned \u2014 buy from marketplace</span></div>`;
-        }
-
-        content += `<div class="nft-breed-resources">${resLines}</div>`;
-
-        if (lv25) {
-          const uniqueLabel = owned && owned.level >= 25 ? "\u2705 Unlocked" : `\uD83D\uDD12 Lv25 required`;
-          content += `<div style="font-size:0.5625rem;color:var(--lily)">Unique: <b>${escHTML(lv25.res)}</b> \u2014 ${uniqueLabel}</div>`;
-        }
-
-        content += `</div>`;
-      }
-
-      content += `</div></div>`;
-
-      // Collect all unique fetchable resources with prices
-      const resMap = new Map();
-      for (const entries of Object.values(PET_FETCH_DATA)) {
-        for (const e of entries) {
-          if (!resMap.has(e.res)) {
-            const price = p2pPrices[e.res] || 0;
-            const ratio = price > 0 ? price / e.energy : 0;
-            resMap.set(e.res, { res: e.res, price, energy: e.energy, ratio });
-          }
-        }
-      }
-      const sortedRes = [...resMap.values()].sort((a, b) => b.ratio - a.ratio);
-
-      // Resource market overview
-      content += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px">
-        <div style="font-size:0.6875rem;color:var(--sunpetal);margin-bottom:8px;font-weight:bold" class="pixel-font">RESOURCE MARKET</div>
-        <table class="pet-resource-table">
-          <tr><th>RESOURCE</th><th>${sflIcon("1em")} PRICE</th><th>&#x26A1; COST</th><th>${sflIcon("1em")}/&#x26A1;</th></tr>`;
-      for (const r of sortedRes) {
-        const priceStr = r.price > 0 ? r.price.toFixed(2) : "&#x2014;";
-        const ratioStr = r.ratio > 0 ? r.ratio.toFixed(4) : "&#x2014;";
-        const style = r.ratio > 0 ? "" : ' style="color:var(--text-dim)"';
-        content += `<tr${style}><td>${escHTML(r.res)}</td><td>${priceStr}</td><td>${r.energy}</td><td>${ratioStr}</td></tr>`;
-      }
-      content += `</table></div>`;
-
-      // Per-pet cards
-      let grandTotalSfl = 0;
-      let grandTotalCards = [];
-
-      for (const pet of pets) {
-        const fetchData = PET_FETCH_DATA[pet.petType] || [];
-        const speciesLabel = pet.species ? ` (${escHTML(pet.species)})` : "";
-        const nftBadge = pet.isNft ? ' <span style="color:var(--lily);font-size:0.5625rem;font-weight:normal">NFT</span>' : "";
-
-        content += `<div class="pet-card pixel-panel">
-          <div class="pet-header">
-            <span class="pet-name">${escHTML(pet.name)}${speciesLabel}${nftBadge}</span>
-            <span class="pet-level pixel-font">Lv ${pet.level} &#xB7; ${pet.energy.toLocaleString()} &#x26A1;</span>
-          </div>`;
-
-        if (fetchData.length > 0 && pet.energy > 0) {
-          const unlocked = fetchData.filter(f => pet.level >= f.level);
-          const locked = fetchData.filter(f => pet.level < f.level);
-
-          // Calculate fetch counts, total SFL, and ratio for unlocked
-          const withCalc = unlocked.map(f => {
-            const price = p2pPrices[f.res] || 0;
-            const fetches = Math.floor(pet.energy / f.energy);
-            // Units per fetch as the game pays them (getFetchYield, events/pets/fetchPet.ts:45-100).
-            const perFetch = petFetchYield(f.res, pet.level, pet.isNft, fetchBoosts);
-            const totalSfl = fetches * price * perFetch;
-            const ratio = price > 0 ? price * perFetch / f.energy : 0;
-            return { ...f, price, ratio, fetches, totalSfl };
-          }).sort((a, b) => b.totalSfl - a.totalSfl);
-
-          // Best recommendation
-          const best = withCalc.find(f => f.totalSfl > 0);
-          if (best) {
-            grandTotalSfl += best.totalSfl;
-            grandTotalCards.push({ name: pet.name, res: best.res, fetches: best.fetches, totalSfl: best.totalSfl });
-            content += `<div style="background:rgba(48,209,88,0.12);border:2px solid var(--green);padding:8px 10px;margin-bottom:6px;font-size:0.6875rem;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span style="color:var(--green);font-weight:bold">&#x2192;</span>
-              <span>Fetch <b>${escHTML(best.res)}</b> &#xD7;${best.fetches}</span>
-              <span style="color:var(--green);font-weight:bold">= ${best.totalSfl.toFixed(2)} ${sflIcon("0.85em")}</span>
-              <span style="color:var(--text-dim);font-size:0.5625rem">(${best.energy} &#x26A1; each)</span>
-            </div>`;
-          }
-
-          content += `<div class="pet-section-title pixel-font">ALL FETCHES</div>`;
-
-          for (let i = 0; i < withCalc.length; i++) {
-            const f = withCalc[i];
-            const isBest = i === 0 && f.totalSfl > 0;
-            const cls = isBest ? "pet-fetch-row pet-best" : "pet-fetch-row";
-            const star = isBest ? "&#x2605; " : "";
-            const priceStr = f.price > 0 ? `${f.price.toFixed(2)} ${sflIcon("0.85em")}` : "&#x2014;";
-            const fetchStr = f.fetches > 0 ? `&#xD7;${f.fetches}` : "&#xD7;0";
-            const totalStr = f.totalSfl > 0 ? `<b style="color:var(--green)">${f.totalSfl.toFixed(2)}</b>` : "&#x2014;";
-            content += `<div class="${cls}">
-              <span>${star}${escHTML(f.res)}</span>
-              <span>${priceStr}</span>
-              <span>${f.energy} &#x26A1;</span>
-              <span>${fetchStr}</span>
-              <span>${totalStr}</span>
-            </div>`;
-          }
-
-          for (const f of locked) {
-            content += `<div class="pet-fetch-row pet-locked">
-              <span>&#x1F512; ${escHTML(f.res)}</span>
-              <span>(Lv ${f.level})</span>
-            </div>`;
-          }
-        } else if (fetchData.length > 0 && pet.energy === 0) {
-          content += `<div style="padding:8px;color:var(--text-dim);font-size:0.6875rem">No energy &#x2014; pet needs to recharge</div>`;
-        } else {
-          content += `<div style="padding:8px;color:var(--text-dim);font-size:0.6875rem">Unknown pet type &#x2014; no fetch data available</div>`;
-        }
-
-        // Feeding table — today's requests with what each one costs to cook and what it
-        // pays back, ranked by energy per FLOWER. Rows come from section=pets, which
-        // applies the game's own level filter to requests.food.
-        if (pet.feeding && pet.feeding.length > 0) {
-          content += `<div class="pet-section-title pixel-font">FEEDING</div>`;
-          // Units live in the header so the cells stay bare numbers, and the value column
-          // is scaled against the best row of THIS pet.
-          const bestEff = Math.max(...pet.feeding.map(r => r.energyPerSfl || 0), 0);
-          content += `<table class="pet-feed-table"><thead><tr>
-            <th>FOOD</th><th>ENERGY</th><th>XP</th><th>COST ${sflIcon("0.85em")}</th><th>&#x26A1; PER ${sflIcon("0.85em")}</th>
-          </tr></thead><tbody>`;
-          for (const r of pet.feeding) {
-            const cls = (r.best ? "pet-best" : "") + (r.fed ? " pet-fed" : "");
-            const mark = r.fed ? "✅ " : (r.best ? "★ " : "");
-            const price = r.price != null ? (r.price < 0.01 ? r.price.toFixed(4) : r.price.toFixed(3)) : "&#x2014;";
-            const eff = r.energyPerSfl != null ? Math.round(r.energyPerSfl).toLocaleString() : "&#x2014;";
-            const barPct = bestEff > 0 && r.energyPerSfl ? Math.max(4, Math.round(r.energyPerSfl / bestEff * 100)) : 0;
-            content += `<tr class="${cls}">
-              <td><span class="pet-feed-tier ${r.difficulty}">${r.difficulty.toUpperCase()}</span>${mark}${escHTML(r.food)}</td>
-              <td>${r.energy}</td>
-              <td>${Math.round(r.xp)}</td>
-              <td>${price}</td>
-              <td class="pet-feed-val">${eff}${barPct > 0 ? `<span class="pet-feed-bar" style="width:${barPct}%"></span>` : ""}</td>
-            </tr>`;
-          }
-          content += `</tbody></table>`;
-          const fedCount = pet.feeding.filter(r => r.fed).length;
-          content += `<div class="pet-feed-note">
-            ${fedCount}/${pet.feeding.length} fed today &#xB7; COST = cooking it from ingredients at market price &#xB7;
-            the last column is energy bought per ${sflIcon("0.85em")} &#x2014; higher is better value
-          </div>`;
-        } else if (pet.foods.length > 0) {
-          content += `<div class="pet-section-title pixel-font">FOOD REQUESTS</div>`;
-          content += `<div class="pet-food-list">${pet.foods.map(f => escHTML(f)).join(" &#xB7; ")}</div>`;
-        }
-
-        // ── SFL/DAY + XP + PERKS ──
-        const calc = pet.calc; // precomputed by section=pets
-
-        // Active boosts line
-        {
-          const boosts = [];
-          if (hasVictoriasApron) boosts.push("Victoria's Apron (1.5\u00d7 feeds)");
-          if (hasPetBowls) boosts.push("Pet Bowls (+10 XP/request)");
-          if (boosts.length > 0) {
-            content += `<div class="pet-boosts">\uD83C\uDFAF ${boosts.join(" \u00b7 ")}</div>`;
-          }
-        }
-
-        // SFL/day summary
-        if (calc.dailySfl > 0 && calc.bestRes) {
-          const fetchCount = (calc.dailyEnergy / calc.bestRes.energy).toFixed(1);
-          const extraPct = Math.round(calc.extraChance * 100);
-          content += `<div class="pet-sfl-day">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
-              <span>\u{1F4C8} <b>${calc.dailySfl.toFixed(2)}</b> ${sflIcon("0.85em")}/day</span>
-              <span style="font-size:0.5625rem;color:var(--text-dim)">fetch ${escHTML(calc.bestRes.res)}</span>
-            </div>
-            <div class="pet-sfl-breakdown">
-              ${calc.energyPerFeed}\u26A1/feed \u00d7 ${calc.feedMult} feeds/day = ${Math.round(calc.dailyEnergy)}\u26A1/day
-              \u2192 ${fetchCount} fetches${extraPct > 0 ? ` (+${extraPct}% extra)` : ""}${calc.acornBonus > 0 ? ` + ${calc.acornBonus.toFixed(2)} acorn bonus` : ""}${calc.guaranteedBonus > 0 ? ` + ${calc.guaranteedBonus.toFixed(2)} guaranteed` : ""}
-            </div>
-          </div>`;
-        }
-
-        // XP progress
-        {
-          const currentXp = pet.xp;
-          const currentLevelXp = petCumulativeXp(pet.level);
-          const nextLevelXp = petCumulativeXp(pet.level + 1);
-          const xpInLevel = currentXp - currentLevelXp;
-          const xpNeeded = nextLevelXp - currentLevelXp;
-          const pct = xpNeeded > 0 ? Math.min(100, Math.round(xpInLevel / xpNeeded * 100)) : 100;
-
-          // Find next perk level
-          const nextPerk = PET_LEVEL_PERKS.find(p => p.level > pet.level && (!p.nftOnly || pet.isNft) && (!p.commonOnly || !pet.isNft));
-          let daysToNextPerk = "";
-          if (nextPerk && calc.dailyXp > 0) {
-            const xpToReach = petCumulativeXp(nextPerk.level) - currentXp;
-            if (xpToReach > 0) {
-              const days = Math.ceil(xpToReach / calc.dailyXp);
-              daysToNextPerk = ` \u2192 Lv ${nextPerk.level} (${nextPerk.perk}) in ~${days}d`;
-            }
-          }
-
-          content += `<div class="pet-xp-section">
-            \uD83D\uDCCA Lv ${pet.level} \u2014 ${xpInLevel.toLocaleString()} / ${xpNeeded.toLocaleString()} XP (${pct}%)
-            <span style="font-size:0.5625rem;color:var(--text-dim)">~${Math.round(calc.dailyXp)} XP/day${daysToNextPerk}</span>
-            <div class="pet-xp-bar"><div class="pet-xp-fill" style="width:${pct}%"></div></div>
-          </div>`;
-        }
-
-        // Level perks (collapsed)
-        {
-          const perkId = `perks-${pet.isNft ? 'nft-' + pet.nftId : pet.name}`.replace(/[^a-zA-Z0-9-]/g, '_');
-          content += `<div class="pet-perks-wrap">
-            <div class="pet-section-title pixel-font" style="cursor:pointer" onclick="document.getElementById('${perkId}').style.display=document.getElementById('${perkId}').style.display==='none'?'block':'none'">
-              LEVEL PERKS \u25BC
-            </div>
-            <div id="${perkId}" style="display:none">`;
-
-          const fetchData = PET_FETCH_DATA[pet.petType] || [];
-          for (const perk of PET_LEVEL_PERKS) {
-            // Determine status
-            const isNa = (perk.nftOnly && !pet.isNft) || (perk.commonOnly && pet.isNft);
-            const isUnlocked = pet.level >= perk.level;
-            const isNext = !isNa && !isUnlocked && perk === PET_LEVEL_PERKS.find(p => p.level > pet.level && !((p.nftOnly && !pet.isNft) || (p.commonOnly && pet.isNft)));
-
-            let cls = "pet-perk-row";
-            let icon = "";
-            if (isNa) { cls += " na"; icon = "\u26D4"; }
-            else if (isUnlocked) { cls += " unlocked"; icon = "\u2705"; }
-            else if (isNext) { cls += " next"; icon = "\u{1F538}"; }
-            else { cls += " upcoming"; icon = "\uD83D\uDD12"; }
-
-            // Perk description — use species-specific resource name where applicable
-            let desc = perk.perk;
-            if (perk.type === "resource" && fetchData.length > 0) {
-              const match = fetchData.find(f => f.level === perk.level);
-              if (match) desc = `${match.res} fetch (${match.energy}\u26A1)`;
-            }
-
-            // Delta estimate for upcoming perks
-            let delta = "";
-            if (!isNa && !isUnlocked && calc.bestRes) {
-              const bestPrice = p2pPrices[calc.bestRes.res] || 0;
-              if (perk.type === "energy" && perk.value) {
-                const d = perk.value / calc.bestRes.energy * bestPrice * (1 + calc.extraChance) * feedMultiplier;
-                if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
-              } else if (perk.type === "bonus" && perk.value) {
-                const d = calc.fetchesPerDay * bestPrice * perk.value;
-                if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
-              } else if (perk.type === "acorn") {
-                const d = (p2pPrices["Acorn"] || 0) * feedMultiplier;
-                if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
-              } else if (perk.type === "request") {
-                // New request adds energy
-                const addE = perk.detail?.includes("300") ? 300 : 100;
-                const d = addE * feedMultiplier / calc.bestRes.energy * bestPrice * (1 + calc.extraChance);
-                if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
-              } else if (perk.type === "resource") {
-                const match = fetchData.find(f => f.level === perk.level);
-                if (match) {
-                  const newPrice = p2pPrices[match.res] || 0;
-                  const newRatio = newPrice / match.energy;
-                  if (newRatio > calc.bestSflPerEnergy) {
-                    delta = `<span class="pet-perk-delta" style="color:var(--sunpetal)">better SFL/\u26A1!</span>`;
-                  }
-                }
-              } else if (perk.type === "xp") {
-                delta = `<span class="pet-perk-delta" style="color:var(--lily)">XP boost</span>`;
-              } else if (perk.type === "guaranteed") {
-                // +1 guaranteed non-Acorn/Moonfur resource per fetch
-                const unlockedRes = fetchData.filter(f => pet.level >= f.level);
-                const nonAcornRes = unlockedRes.filter(f => f.res !== "Acorn" && f.res !== "Moonfur");
-                const bestNonAcorn = nonAcornRes.reduce((best, f) => {
-                  const p = p2pPrices[f.res] || 0;
-                  return p > (best?.price || 0) ? { res: f.res, price: p } : best;
-                }, null);
-                if (bestNonAcorn && bestNonAcorn.price > 0) {
-                  const d = bestNonAcorn.price * calc.fetchesPerDay;
-                  if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d</span>`;
-                }
-              } else if (perk.type === "moonfur" && perk.value) {
-                const moonfurPrice = p2pPrices["Moonfur"] || 0;
-                const moonfurData = fetchData.find(f => f.res === "Moonfur");
-                if (moonfurData && moonfurPrice > 0) {
-                  const moonfurFetches = calc.dailyEnergy / moonfurData.energy;
-                  const d = moonfurFetches * moonfurPrice * perk.value;
-                  if (d > 0.001) delta = `<span class="pet-perk-delta" style="color:var(--green)">+${d.toFixed(3)} SFL/d (Moonfur)</span>`;
-                }
-              }
-            }
-
-            // Days to reach (for upcoming perks)
-            let daysStr = "";
-            if (!isNa && !isUnlocked && calc.dailyXp > 0) {
-              const xpToReach = petCumulativeXp(perk.level) - pet.xp;
-              if (xpToReach > 0) {
-                const days = Math.ceil(xpToReach / calc.dailyXp);
-                daysStr = `<span style="font-size:0.5rem;color:var(--text-dim);margin-left:4px">~${days}d</span>`;
-              }
-            }
-
-            const naLabel = isNa ? (perk.nftOnly ? " [NFT only]" : " [Common only]") : "";
-            const nextLabel = isNext ? " \u2190 NEXT" : "";
-
-            content += `<div class="${cls}">
-              <span>${icon} Lv ${perk.level}</span>
-              <span style="flex:1">${desc}${naLabel}${nextLabel}</span>
-              ${daysStr}${delta}
-            </div>`;
-          }
-
-          content += `</div></div>`;
-        }
-
-        content += `</div>`;
-      }
-
-      // Calculate total daily SFL across all pets
-      let totalDailySfl = 0;
-      const dailyCards = [];
-      for (const pet of pets) {
-        const calc = pet.calc; // precomputed by section=pets
-        if (calc.dailySfl > 0) {
-          totalDailySfl += calc.dailySfl;
-          dailyCards.push({ name: pet.name, sfl: calc.dailySfl, res: calc.bestRes?.res || "?" });
-        }
-      }
-
-      // Grand total summary (if any pet has earnings)
-      if (grandTotalSfl > 0) {
-        let totalHtml = `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px;border-color:var(--green)">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-            <span class="pixel-font" style="font-size:0.6875rem;color:var(--green);font-weight:bold">OPTIMAL EARNINGS</span>
-            <span style="font-size:1rem;font-weight:bold;color:var(--green)">${grandTotalSfl.toFixed(2)} ${sflIcon("1em")} per feed</span>
-          </div>`;
-
-        if (totalDailySfl > 0) {
-          totalHtml += `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-            <span class="pixel-font" style="font-size:0.6875rem;color:var(--sunpetal);font-weight:bold">DAILY PET INCOME</span>
-            <span style="font-size:1rem;font-weight:bold;color:var(--sunpetal)">${totalDailySfl.toFixed(2)} ${sflIcon("1em")}/day</span>
-          </div>`;
-        }
-
-        totalHtml += `<div style="font-size:0.6875rem;color:var(--text-secondary);line-height:1.6">`;
-        for (const c of grandTotalCards) {
-          const daily = dailyCards.find(d => d.name === c.name);
-          const dailyStr = daily ? ` (${daily.sfl.toFixed(2)}/day)` : "";
-          totalHtml += `${escHTML(c.name)}: ${escHTML(c.res)} &#xD7;${c.fetches} = ${c.totalSfl.toFixed(2)} ${sflIcon("0.85em")}${dailyStr}<br>`;
-        }
-        totalHtml += `</div></div>`;
-        // Insert between summary bar and resource market
-        const marketAnchor = '<div class="pixel-panel" style="padding:12px 14px;margin-bottom:16px">';
-        const mIdx = content.indexOf(marketAnchor);
-        if (mIdx >= 0) {
-          content = content.substring(0, mIdx) + totalHtml + content.substring(mIdx);
-        }
-      }
-
-      document.getElementById("pets-content").innerHTML = content;
+      draw();
+    }
+    {
+      const petCtx = () => ({ flower: sflIcon("0.85em"), icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.2em;vertical-align:-0.2em;margin-right:3px">` });
+      for (const t of ["pets-summary", "pets-nft-collection", "pets-market", "pet-cards"]) _wCtxMap[t] = petCtx;
     }
 
     function refresh() {

@@ -252,7 +252,7 @@ test("ascension ranks are sequential and their shard price is a labelled derivat
     assert.ok(c.shards > 0, `${c.name}: a rank costs shards`);
     assert.ok(Math.abs(c.floor - (c.skillPoints * sflPerPoint + c.shards * c.shardSfl)) < 1e-9,
       `${c.name}: floor is points + shards`);
-    assert.ok(/odvozen/.test(c.shardNote || ""), `${c.name}: says it is a derivation, not a market price`);
+    assert.ok(/derived, not a market price/.test(c.shardNote || ""), `${c.name}: says it is a derivation, not a market price`);
     assert.ok(c.shardSfl > 0, "and the shard has a price at all");
   }
   // The derivation itself: a Gold Pickaxe's MATERIALS (3 Wood + 3 Gold), not its coins — coins are
