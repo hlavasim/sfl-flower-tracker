@@ -6,13 +6,14 @@
 // changed, calls onChange(frameId) and returns whether it was handled.
 import { renderTable, tableSettingsPanel, optionsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
 import { renderFrame, freshness } from "../ui/frame.mjs";
-import { layout, STYLES, SIZES, variants, dims } from "../ui/glance.mjs";
+import { STYLES, SIZES } from "../ui/glance.mjs";
+import { looksFor, renderLook, templateById } from "../ui/glance-templates.mjs";
 import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
   pageSettings, setPageSettings, pinnedCount, pinTarget, addBoard, removeBoard, setLastBoard, setBoardCols, COLS_DEFAULT } from "./boards.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "summary", "title", "size", "style", "reset"]);
-const SIZE_LABEL = { s: "Small", m: "Wide", t: "Tall", l: "Large", full: "Full table",
+const SIZE_LABEL = { s: "Small", m: "Wide", t: "Tall", l: "Large", full: "Full table", look: "Widget",
   ...Object.fromEntries(SIZES.map((s) => [s, s.replace("x", "×")])) };
 const STYLE_LABEL = { number: "Number", rows: "Rows", compact: "Compact", icons: "Icons", tiles: "Tiles", bars: "Bars", chart: "Chart", hero: "Hero" };
 const ALIAS = { s: "1x1", m: "2x1", t: "1x2", l: "2x2" };
@@ -43,10 +44,10 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   // A widget with a glanceModel (a headline + items) gets every size and style from ui/glance's layout();
   // an older hand-written glance() keeps the sizes it lists.
   const hasModel = (w) => !!w && typeof w.glanceModel === "function";
-  const sizesOf = (type) => { const w = registry[type]; return hasModel(w) ? SIZES : w && typeof w.glance === "function" ? w.sizes || [w.size || "s"] : []; };
+  const sizesOf = (type) => { const w = registry[type]; return hasModel(w) ? ["look"] : w && typeof w.glance === "function" ? w.sizes || [w.size || "s"] : []; };
   // a model widget reads the old S / M / T / L names as their W×H cells
-  const norm = (type, size) => (hasModel(registry[type]) && ALIAS[size] ? ALIAS[size] : size);
-  const stylesOf = (type) => (hasModel(registry[type]) ? STYLES : []);
+  const norm = (type, size) => (hasModel(registry[type]) ? (size === "full" ? "full" : "look") : size);
+  const stylesOf = () => [];   // a model widget picks a whole look (ui/glance-templates), not a style
   const styleOf = (type, settings = {}) => { const w = registry[type]; return STYLES.includes(settings.style) ? settings.style : (w && w.glanceStyle) || "number"; };
   const styleChoices = (type, settings) => stylesOf(type).map((v) => [v, STYLE_LABEL[v], v === styleOf(type, settings)]);
   const naturalSize = (type) => { const w = registry[type], s = sizesOf(type), n = norm(type, w && w.size); return s.includes(n) ? n : s[0] || "full"; };
@@ -59,7 +60,29 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   function modelOf(widget, settings, data, ctx) {
     try { return widget.glanceModel(data || {}, ctx || {}, settings.opts || {}) || {}; } catch (e) { return { error: (e && e.message) || String(e) }; }
   }
-  const lastVariants = new Map();   // board frame → the variants its model offered at the last render
+  // The look a model widget's copy shows (ui/glance-templates): its own choice (settings.look), else an
+  // offered look of the size a v2 copy saved (settings.size), else the widget's natural look, else the
+  // first offered. The board's live column count picks a narrow twin on phones and tablets.
+  const lastLooks = new Map();   // board frame → { offered: [ids], id } at the last render
+  const picking = new Set();     // board frames with the look picker open
+  function lookOf(widget, settings, m, cols) {
+    const offered = looksFor(m, { cols });
+    let id = settings.look && templateById(settings.look) ? settings.look : null;
+    const v2 = ALIAS[settings.size] || settings.size;
+    if (!id && /^[124]x[124]$/.test(v2 || "")) id = offered.find((x) => templateById(x).size === v2) || null;
+    // the natural look counts as offered when the board shows its narrow twin instead
+    const ok = (x) => !!x && (offered.includes(x) || (templateById(x) && offered.includes(templateById(x).narrow)));
+    if (!id) id = ok(widget.look) ? widget.look : offered[0] || "number";
+    return { id, offered };
+  }
+  // every offered look of this model, rendered small to pick from; action = a board copy's picker
+  function pickerHtml(m, offered, current, cols, { action = true } = {}) {
+    const btn = (value, inner, span, label) => `<button type="button" class="w-look${value === current ? " on" : ""}" ${action ? `data-action="look" data-value="${esc(value)}"` : `data-look="${esc(value)}"`} style="${span}">${inner}<span class="w-look-n">${esc(label)}</span></button>`;
+    return `<div class="w-looks">` + offered.map((id) => {
+      const r = renderLook(m, id, { cols }), [w, h] = r.size.split("x").map(Number), t = templateById(r.id);
+      return btn(id, `<div class="gcard">${r.html}</div>`, `grid-column:span ${w};grid-row:span ${h}`, `${t.name} · ${r.size.replace("x", "×")}`);
+    }).join("") + btn("full", `<div class="gcard w-look-table">▦<small>the full table</small></div>`, "grid-column:span 1;grid-row:span 1", "Full table") + `</div>`;
+  }
   const sizeChoices = (type, settings) => {
     const s = sizesOf(type), cur = sizeOf(type, settings);
     return s.length ? [...s, "full"].map((v) => [v, SIZE_LABEL[v], v === cur]) : [];
@@ -78,6 +101,13 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
   }
 
+  // a copy's settings with a look chosen: a template id, or "full" for the table
+  const withLook = (s, look) => {
+    const out = { ...s };
+    delete out.style;
+    if (look === "full") { out.size = "full"; delete out.look; } else { out.look = look; delete out.size; }
+    return out;
+  };
   const colsOf = (boardId) => { const b = doc.boards.find((x) => x.id === boardId); return (b && b.cols) || COLS_DEFAULT; };
 
   function parse(frameId) {
@@ -132,7 +162,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
-  function renderItem(boardId, item, { data, ctx, fresh, pending = false } = {}) {
+  function renderItem(boardId, item, { data, ctx, fresh, pending = false, cols: liveCols = 0 } = {}) {
     const id = `b:${boardId}:${item.i}`;
     const widget = registry[item.type];
     if (!widget) {
@@ -152,19 +182,38 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
     // the glance face; open, the full widget in a sheet over the board (the ⚙ then lives in the sheet)
     const isOpen = expanded.has(id);
-    // a model widget: ◀ n / total ▶ walks the ready-made size × style variants its data can fill
-    let model = null, nav = null;
-    if (hasModel(widget) && !pending) {
-      model = modelOf(widget, settings, data, ctx);
-      const list = model.error || model.empty ? [] : variants(model);
-      lastVariants.set(id, list);
-      const at = list.findIndex((v) => v.size === size && v.style === styleOf(item.type, settings));
-      if (list.length) nav = { n: at + 1, total: list.length };
+    if (hasModel(widget)) {
+      // a model widget: its look; ◀ n / total ▶ walks the offered looks, ▦ opens the picker with all of them
+      const cols = liveCols || colsOf(boardId);
+      let html = loading, lookSize = "1x1", nav = null, m = null, offered = [], current = null;
+      if (!pending) {
+        m = modelOf(widget, settings, data, ctx);
+        if (m.error) html = `<div class="w-error">The widget failed: ${esc(m.error)}</div>`;
+        else if (m.empty) html = `<div class="w-empty-msg">${esc(m.empty)}</div>`;
+        else {
+          const pick = lookOf(widget, settings, m, cols), r = renderLook(m, pick.id, { cols });
+          offered = pick.offered; current = r.id;
+          html = r.html; lookSize = r.size;
+          lastLooks.set(id, { offered, id: r.id });
+          if (offered.length > 1) nav = { n: offered.indexOf(r.id) + 1 || "–", total: offered.length };
+        }
+      }
+      const [gw, gh] = lookSize.split("x").map(Number);
+      const face = renderFrame({ id, title, place: "board", glance: lookSize, body: html, fresh, cog: true, looks: offered.length > 0,
+        settingsHtml: b.settingsHtml, settingsOpen: !isOpen && !picking.has(id) && open.has(id), variant: nav, gw: Math.min(gw, cols), gh });
+      if (picking.has(id) && offered.length) {
+        return face.slice(0, -"</section>".length) + `<div class="w-sheet" data-action="collapse" data-value=""><div class="w-sheet-card w-picker" data-action="noop" data-value="">` +
+          `<div class="w-picker-h"><b>Choose a look</b><span>${esc(title)} · ${offered.length} looks with your data</span><button type="button" class="w-btn" data-action="collapse" data-value="" title="close">✕</button></div>` +
+          pickerHtml(m, offered, current, cols) + `</div></div></section>`;
+      }
+      if (!isOpen) return face;
+      const sheet = renderFrame({ id, title, place: "sheet", body: b.html, fresh, cog: true, settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
+      return face.slice(0, -"</section>".length) +
+        `<div class="w-sheet" data-action="collapse" data-value=""><div class="w-sheet-card" data-action="noop" data-value="">${sheet}</div></div></section>`;
     }
-    const { w, h } = dims(size);   // the old S / M / L names read as 1×1 / 2×1 / 2×2
-    const face = renderFrame({ id, title, place: "board", glance: size, body: pending ? loading : glanceBody(widget, settings, data, ctx, size, model), fresh, cog: true,
-      settingsHtml: b.settingsHtml, settingsOpen: !isOpen && open.has(id), variant: nav,
-      ...(w ? { gw: Math.min(w, colsOf(boardId)), gh: h } : {}) });
+    const { w, h } = { w: { s: 1, m: 2, l: 2 }[size] || 1, h: { s: 1, m: 1, l: 2 }[size] || 1 };   // a hand-written glance: S / M / L
+    const face = renderFrame({ id, title, place: "board", glance: size, body: pending ? loading : glanceBody(widget, settings, data, ctx, size), fresh, cog: true,
+      settingsHtml: b.settingsHtml, settingsOpen: !isOpen && open.has(id), gw: Math.min(w, colsOf(boardId)), gh: h });
     if (!isOpen) return face;
     const sheet = renderFrame({ id, title, place: "sheet", body: b.html, fresh, cog: true, settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
     return face.slice(0, -"</section>".length) +
@@ -180,17 +229,24 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
     if (action === "noop") return true;   // a click inside an open sheet that is not on a control
     if (action === "variant" && f.place === "board") {
-      // ◀ ▶: the previous / next ready-made variant (wrapping), from the list the last render offered
-      const list = lastVariants.get(frameId) || [];
-      if (!list.length) return false;
-      const cur = effective(f.widget, f.item.settings);
-      const at = list.findIndex((v) => v.size === sizeOf(f.type, cur) && v.style === styleOf(f.type, cur));
-      const next = list[(((at < 0 ? 0 : at) + (Number(value) < 0 ? -1 : 1)) % list.length + list.length) % list.length];
-      return save(updateItemSettings(doc, f.boardId, f.item.i, { ...cur, size: next.size, style: next.style }), frameId);
+      // ◀ ▶: the previous / next offered look (wrapping), from the list the last render offered
+      const last = lastLooks.get(frameId);
+      if (!last || !last.offered.length) return false;
+      const list = last.offered, at = Math.max(0, list.indexOf(last.id));
+      const next = list[((at + (Number(value) < 0 ? -1 : 1)) % list.length + list.length) % list.length];
+      return save(updateItemSettings(doc, f.boardId, f.item.i, withLook(effective(f.widget, f.item.settings), next)), frameId);
+    }
+    if (action === "looks" && f.place === "board") { picking.add(frameId); open.delete(frameId); onChange(frameId); return true; }
+    if (action === "look" && f.place === "board") {
+      // a look picked in the picker ("full" = the table)
+      picking.delete(frameId);
+      return save(updateItemSettings(doc, f.boardId, f.item.i, withLook(effective(f.widget, f.item.settings), String(value))), frameId);
     }
     if (action === "expand" || action === "collapse") {
       if (f.place !== "board") return false;
-      if (action === "expand") expanded.add(frameId); else if (!expanded.delete(frameId)) return false;
+      if (action === "expand") expanded.add(frameId);
+      else if (!expanded.delete(frameId) && !picking.delete(frameId)) return false;
+      else picking.delete(frameId);
       onChange(frameId);
       return true;
     }
@@ -230,6 +286,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       if (v.opts && typeof v.opts === "object" && !Array.isArray(v.opts)) settings.opts = { ...(settings.opts || {}), ...v.opts };
       if (["s", "m", "t", "l", "full", ...SIZES].includes(v.size)) settings.size = v.size;   // the size and style picked in the gallery
       if (STYLES.includes(v.style)) settings.style = v.style;
+      if (typeof v.look === "string" && (v.look === "full" || templateById(v.look))) Object.assign(settings, withLook(settings, v.look));
       // the chosen board, else the one visited last, else the first (a synced document may have no "main")
       const board = typeof v.board === "string" && doc.boards.some((b) => b.id === v.board) ? v.board : pinTarget(doc);
       return save(pin(doc, { type: f.type, settings }, board), frameId);
@@ -314,12 +371,21 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
 
   return { doc: () => doc, update, preview, optsFor, pageOpts, itemOpts, sizesOf, sizeOf: (type, settings) => sizeOf(type, settings),
     stylesOf, styleOf: (type, settings) => styleOf(type, settings), colsOf,
-    // the gallery: the ready-made size × style variants a model widget's data can fill ([] for others)
-    variantsOf: (type, { data, ctx, opts = null } = {}) => {
+    // the gallery: a model widget's look (default: its natural one) with what it offers, and the picker
+    lookPreview: (type, { data, ctx, opts = null, look = "", cols = 8 } = {}) => {
       const w = registry[type];
-      if (!hasModel(w)) return [];
+      if (!hasModel(w)) return null;
+      const settings = withForce(effective(w, {}), opts), m = modelOf(w, settings, data, ctx);
+      if (m.error || m.empty) return { id: null, size: "1x1", offered: [], html: `<div class="w-empty-msg">${esc(m.error || m.empty)}</div>` };
+      const pick = lookOf(w, look ? { look } : {}, m, cols), r = renderLook(m, pick.id, { cols });
+      return { id: r.id, size: r.size, offered: pick.offered, html: r.html };
+    },
+    lookPicker: (type, { data, ctx, opts = null, current = "", cols = 8 } = {}) => {
+      const w = registry[type];
+      if (!hasModel(w)) return "";
       const m = modelOf(w, withForce(effective(w, {}), opts), data, ctx);
-      return m.error || m.empty ? [] : variants(m);
+      if (m.error || m.empty) return "";
+      return pickerHtml(m, looksFor(m, { cols }), current, cols, { action: false });
     },
     naturalOf: (type) => ({ size: naturalSize(type), style: styleOf(type, {}) }), setBoardCols: (id, n) => update((d) => setBoardCols(d, id, n)),
     addBoard: (b) => update((d) => addBoard(d, b)), removeBoard: (id) => update((d) => removeBoard(d, id)),

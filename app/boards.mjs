@@ -25,10 +25,11 @@ const ROW_MODES = ["all", "top", "picked"];
 export function cleanSettings(raw) {
   if (!isObj(raw)) return {};
   const s = { ...raw };
-  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters; delete s.opts; delete s.summary; delete s.title; delete s.size; delete s.style;
+  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters; delete s.opts; delete s.summary; delete s.title; delete s.size; delete s.style; delete s.look;
   if (["full", "compact", "off"].includes(raw.summary)) s.summary = raw.summary;
-  if (["s", "m", "t", "l", "full"].includes(raw.size) || /^[124]x[124]$/.test(raw.size)) s.size = raw.size;
-  if (["number", "rows", "compact", "icons", "tiles", "bars", "chart", "hero"].includes(raw.style)) s.style = raw.style;   // how a glance shows its model   // a board copy's size: S / M / L glance, or the full table
+  if (["s", "m", "t", "l", "full", "look"].includes(raw.size) || /^[124]x[124]$/.test(raw.size)) s.size = raw.size;   // a board copy: its glance (a look) or the full table; v2 sizes still read
+  if (["number", "rows", "compact", "icons", "tiles", "bars", "chart", "hero"].includes(raw.style)) s.style = raw.style;   // v2 (read for migration)
+  if (typeof raw.look === "string" && /^[a-z0-9-]{1,40}$/.test(raw.look)) s.look = raw.look;   // a glance template id (ui/glance-templates)
   if (typeof raw.title === "string" && raw.title.trim()) s.title = raw.title.trim().slice(0, 60);
   // a widget's own options: plain values and lists of strings only
   if (isObj(raw.opts)) {

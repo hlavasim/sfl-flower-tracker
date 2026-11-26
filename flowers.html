@@ -3395,6 +3395,29 @@
     .w-sheet-card { width: min(1100px, 100%); }
     .w-sheet .w-frame.pixel-panel { margin: 0; border-radius: 22px; box-shadow: 0 24px 70px rgba(0,0,0,0.5); }
     @keyframes w-sheet-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    /* glance looks (ui/glance-templates.css) on a board and in the gallery: em-sized from the cell */
+    .w-board > .w-glance > .w-body { font-size: var(--fs, 13px); }
+    .w-board > .w-glance > .w-body > .gx { height: 100%; }
+    .w-gal-v .w-gal-face { font-size: 13px; }
+    .w-gal-v .w-gal-face > .gx { height: 100%; }
+    .w-gal-nav .w-gal-all { width: auto; padding: 0 9px; font: 600 11px var(--c-font); }
+    /* the look picker: every look of one widget, true shape, with your data */
+    .w-picker { width: min(1240px, 100%); background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 24px; padding: 18px 20px 26px; cursor: default; }
+    .w-picker-h { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; font-family: var(--c-font); }
+    .w-picker-h b { font-size: 18px; color: var(--c-text); }
+    .w-picker-h span { color: var(--c-muted); font-size: 13px; flex: 1; }
+    .w-looks { display: grid; grid-template-columns: repeat(auto-fill, 150px); grid-auto-rows: 150px; gap: 34px 14px; grid-auto-flow: row dense; justify-content: center; }
+    .w-look { position: relative; display: block; padding: 0; border: none; background: none; cursor: pointer; text-align: left; font: inherit; color: inherit; }
+    .w-look .gcard { --fs: 11.47px; height: 100%; transition: transform 0.12s, border-color 0.12s; }
+    .w-look:hover .gcard { transform: translateY(-2px); border-color: var(--c-accent); }
+    .w-look.on .gcard { border: 2px solid var(--c-accent); }
+    .w-look-n { position: absolute; left: 6px; bottom: -22px; font: 12px var(--c-font); color: var(--c-muted); white-space: nowrap; }
+    .w-look-table { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 34px !important; color: var(--c-muted); }
+    .w-look-table small { font-size: 12px; margin-top: 6px; }
+    .w-gal-pick { z-index: 1000; }
+    @media (max-width: 560px) { .w-looks { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 42vw; } .w-picker { padding: 14px; } }
+    @media (hover: none) { .w-glance .w-tools { opacity: 1 !important; } .w-glance .w-btn { min-width: 36px; min-height: 36px; } }
+
     /* ＋ gallery: a home screen of live previews, each at its own size (S / M / L / Table) */
     .w-gallery { background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
     .w-gal-panel { max-width: 1180px; background: var(--c-bg) !important; border: 1px solid var(--c-line) !important; border-radius: 24px !important; padding: 22px 24px !important; font-family: var(--c-font); }
@@ -3680,6 +3703,7 @@
     .v-bud-basic { color: var(--c-blue); }
 
 </style>
+  <link rel="stylesheet" href="/ui/glance-templates.css">
   <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
   <script type="module">
     // Load the calculation engine (core/*.mjs — the modules the server runs) and hand it to the page.
@@ -16249,12 +16273,13 @@
       const g = document.createElement("div");
       g.id = "w-gallery";
       g.className = "w-gallery";
-      // a model widget: ◀ n / total ▶ through its ready-made variants (size × style) and ▦ for the table
-      const model = items.map((it) => __widgets.stylesOf(it.type).length > 0);
-      const vlist = items.map(() => []), vat = items.map(() => 0), asTable = items.map(() => false);
+      // a model widget (ui/glance-templates): its look, ◀ n / total ▶ through the looks its data offers,
+      // and Looks — every look at once to pick from
+      const model = items.map((it) => __widgets.sizesOf(it.type)[0] === "look");
+      const look = items.map(() => ""), offered = items.map(() => []), asTable = items.map(() => false);
       const chips = (it, k) => {
         if (model[k]) return `<span class="w-gal-nav"><button type="button" data-nav="-1" title="previous look">◀</button><span class="w-gal-n">…</span>` +
-          `<button type="button" data-nav="1" title="next look">▶</button><button type="button" class="w-gal-tbl" data-nav="t" title="the full table">▦</button></span>`;
+          `<button type="button" data-nav="1" title="next look">▶</button><button type="button" class="w-gal-all" data-nav="all" title="see every look and pick one">Looks</button></span>`;
         const sizes = __widgets.sizesOf(it.type);
         return sizes.length ? `<span class="w-gal-sizes">` + [...sizes, "full"].map((sz) =>
           `<button type="button" class="w-gal-size${size[k] === sz ? " on" : ""}" data-size="${sz}" title="${sz === "full" ? "the full table" : "size " + sizeLabel[sz]}">${sizeLabel[sz]}</button>`).join("") + `</span>` : "";
@@ -16289,13 +16314,19 @@
         const el = document.getElementById("w-gal-prev-" + k), it = items[k];
         if (!el || !data.has(k)) return;
         if (model[k]) {
-          const c = el.closest(".w-gal-card"), list = vlist[k], v = list[vat[k]];
-          const full = asTable[k] || !v;
-          c.className = `w-gal-card ${full ? "w-gal-full" : "w-gal-v"}`;
-          if (v && !full) { const [gw, gh] = v.size.split("x").map(Number); c.style.setProperty("--gw", gw); c.style.setProperty("--gh", gh); }
-          c.querySelector(".w-gal-n").textContent = list.length ? `${vat[k] + 1} / ${list.length}` : "—";
-          c.querySelector(".w-gal-tbl").classList.toggle("on", full);
-          el.innerHTML = __widgets.preview(it.type, { data: data.get(k), ctx: _wCtx(it.type), opts: it.opts, ...(full ? { size: "full" } : { size: v.size, style: v.style }) });
+          const c = el.closest(".w-gal-card");
+          if (asTable[k]) {
+            c.className = "w-gal-card w-gal-full";
+            c.querySelector(".w-gal-n").textContent = "table";
+            el.innerHTML = __widgets.preview(it.type, { data: data.get(k), ctx: _wCtx(it.type), opts: it.opts, size: "full" });
+            return;
+          }
+          const r = __widgets.lookPreview(it.type, { data: data.get(k), ctx: _wCtx(it.type), opts: it.opts, look: look[k] });
+          look[k] = r.id || ""; offered[k] = r.offered;
+          const [gw, gh] = r.size.split("x").map(Number);
+          c.className = "w-gal-card w-gal-v"; c.style.setProperty("--gw", gw); c.style.setProperty("--gh", gh);
+          c.querySelector(".w-gal-n").textContent = r.offered.length ? `${r.offered.indexOf(r.id) + 1 || "–"} / ${r.offered.length}` : "—";
+          el.innerHTML = r.html;
           return;
         }
         el.innerHTML = __widgets.preview(it.type, { data: data.get(k), ctx: _wCtx(it.type), opts: it.opts, size: size[k] });
@@ -16307,8 +16338,9 @@
         const k = Number(c.dataset.k), it = items[k];
         const nav = e.target.closest("[data-nav]");
         if (nav) {
-          if (nav.dataset.nav === "t") asTable[k] = !asTable[k];
-          else if (vlist[k].length) { asTable[k] = false; vat[k] = (vat[k] + Number(nav.dataset.nav) + vlist[k].length) % vlist[k].length; }
+          if (nav.dataset.nav === "all") { _wGalleryPicker(k); return; }
+          const list = offered[k];
+          if (list.length) { asTable[k] = false; look[k] = list[((Math.max(0, list.indexOf(look[k])) + Number(nav.dataset.nav)) % list.length + list.length) % list.length]; }
           paint(k);
           return;
         }
@@ -16321,13 +16353,31 @@
           return;
         }
         if (!e.target.closest(".w-gal-add, .w-gal-face")) return;
-        const v = model[k] && !asTable[k] ? vlist[k][vat[k]] : null;
-        const look = model[k] ? (v ? { size: v.size, style: v.style } : { size: "full" }) : sizeOf(it) !== "full" ? { size: size[k] } : {};
-        __widgets.handle("page:" + it.type, "pin", JSON.stringify({ board: boardId, opts: it.opts, ...look }));
+        const pick = model[k] ? { look: asTable[k] ? "full" : look[k] } : sizeOf(it) !== "full" ? { size: size[k] } : {};
+        __widgets.handle("page:" + it.type, "pin", JSON.stringify({ board: boardId, opts: it.opts, ...pick }));
         _wToast(`Added “${_wGalleryTitle(it)}”`);
         c.classList.add("added");
         if (getPage() === "board" && window._wRerender) window._wRerender();
       });
+      // Looks: every look of this widget with your data, at true size; a click picks it for the card
+      const _wGalleryPicker = (k) => {
+        const it = items[k];
+        const p = document.createElement("div");
+        p.className = "w-sheet w-gal-pick";
+        p.innerHTML = `<div class="w-sheet-card w-picker"><div class="w-picker-h"><b>Choose a look</b><span>${escHTML(_wGalleryTitle(it))} · ${offered[k].length} looks with your data</span>` +
+          `<button type="button" class="w-btn" data-close="1" title="close">✕</button></div>` +
+          __widgets.lookPicker(it.type, { data: data.get(k), ctx: _wCtx(it.type), opts: it.opts, current: asTable[k] ? "full" : look[k] }) + `</div>`;
+        p.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const b = e.target.closest && e.target.closest("[data-look]");
+          if (b) {
+            if (b.dataset.look === "full") asTable[k] = true; else { asTable[k] = false; look[k] = b.dataset.look; }
+            paint(k);
+          }
+          if (b || e.target === p || e.target.closest("[data-close]")) p.remove();
+        });
+        g.appendChild(p);
+      };
       document.body.appendChild(g);
       // The previews: a card loads its data only once it scrolls into view, and at most two loads
       // run at a time — 130 widgets at once would fire dozens of heavy compute sections together
@@ -16341,13 +16391,7 @@
           running++;
           __widgets.loadData(it.type, FARM_ID, __store, __widgets.optsFor(it.type, { opts: it.opts || {} })).then((got) => {
             data.set(k, got.data);
-            if (model[k]) {
-              // start at the widget's natural look
-              vlist[k] = __widgets.variantsOf(it.type, { data: got.data, ctx: _wCtx(it.type), opts: it.opts });
-              const nat = __widgets.naturalOf(it.type);
-              vat[k] = Math.max(0, vlist[k].findIndex((v) => v.size === nat.size && v.style === nat.style));
-            }
-            paint(k);
+            paint(k);   // a model widget starts at its natural look
           }).catch((err) => {
             const el = document.getElementById("w-gal-prev-" + k);
             if (el) el.innerHTML = `<div class="w-gal-wait">No preview: ${escHTML((err && err.message) || err)}</div>`;
@@ -16393,6 +16437,16 @@
       _wOpenBoard(__widgets.doc().boards[0].id);
     };
     let _boardSeq = 0;
+    setInterval(() => {
+      let turned = false;
+      for (const el of document.querySelectorAll(".g-at[data-at]")) {
+        const ms = Number(el.dataset.at) - Date.now(), was = el.textContent;
+        const m = Math.ceil(ms / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+        el.textContent = !(ms > 0) ? "Ready" : d >= 1 ? `${d}d ${h % 24}h` : h >= 1 ? `${h}h ${m % 60}m` : `${m}m`;
+        if (el.textContent === "Ready" && was !== "Ready") turned = true;
+      }
+      if (turned && getPage() === "board" && window._wRerender && !document.querySelector("[data-pop], .w-sheet")) window._wRerender();
+    }, 30000);
     // − / ＋ Columns on a board: how many small widgets fit side by side (2-12), kept per board
     window._wSetCols = (d) => {
       const doc = __widgets.doc(), want = new URLSearchParams(window.location.search).get("board") || doc.last;
@@ -16410,11 +16464,20 @@
       const want = "span " + Math.max(1, Math.ceil((el.getBoundingClientRect().height + 16) / 8));
       if (el.style.gridRowEnd !== want) el.style.gridRowEnd = want;
     }
+    // the columns a board really gets: a phone 2, a tablet up to 4, a desktop its setting as far as a
+    // cell stays ≥ 140 px (text ≥ 11 px in the glance looks)
+    function _wLiveCols(app, setting) {
+      const w = (app && app.clientWidth) || window.innerWidth || 1200;
+      if (w < 700) return 2;
+      return Math.max(2, Math.min(setting, w < 1100 ? 4 : 12, Math.floor((w + 16) / 156)));
+    }
     function _wFitBoard(grid, cols) {
       if (!grid || !grid.children) return;
       if (cols) grid.style.setProperty("--cols", cols);
       const n = (getComputedStyle(grid).gridTemplateColumns || "").split(" ").filter(Boolean).length || cols || 6;
-      grid.style.setProperty("--cell", Math.max(60, (grid.getBoundingClientRect().width - (n - 1) * 16) / n) + "px");
+      const cell = Math.max(60, (grid.getBoundingClientRect().width - (n - 1) * 16) / n);
+      grid.style.setProperty("--cell", cell + "px");
+      grid.style.setProperty("--fs", (Math.max(cell, 140) / 170) * 13 + "px");   // the glance looks are designed at a 170 px cell
       for (const el of grid.children) {
         const gw = Number(el.style.getPropertyValue("--gw")) || 0;
         el.style.gridColumn = gw > n ? `span ${n}` : "";
@@ -16454,12 +16517,13 @@
         const focusAt = typeof __wFocusKey === "function" ? __wFocusKey(document.activeElement) : null;
         const board = __widgets.doc().boards.find((b) => b.id === boardId);   // read at paint time
         if (!board) return;
+        const liveCols = _wLiveCols(app, __widgets.colsOf(board.id));
         const frames = board.items.map((it) => {
           const o = __widgets.itemOpts(it);   // this copy's options pick its data (needs(farm, opts))
           const p = __widgets.peekData(it.type, FARM_ID, __store, o);
           // a widget with no needs has no data age to show
           const fresh = __widgets.needsOf(it.type, FARM_ID, o).length ? __widgets.freshOf(p.entries) : null;
-          return { id: `b:${board.id}:${it.i}`, html: __widgets.renderItem(board.id, it, { data: p.data, ctx: _wCtx(it.type), fresh, pending: p.pending }) };
+          return { id: `b:${board.id}:${it.i}`, html: __widgets.renderItem(board.id, it, { data: p.data, ctx: _wCtx(it.type), fresh, pending: p.pending, cols: liveCols }) };
         });
         // Only the frames that changed are replaced: an open settings panel or a typed value survives a
         // neighbour's update.
@@ -16474,7 +16538,7 @@
           if (h) h.outerHTML = head;
         }
         app._wHead = head;
-        _wFitBoard(grid, __widgets.colsOf(board.id));
+        _wFitBoard(grid, liveCols);
         if (focusAt) __wRefocus(app, focusAt);
       };
       paint();

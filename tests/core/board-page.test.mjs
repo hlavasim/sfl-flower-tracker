@@ -181,9 +181,14 @@ test("📌 asks which board (the boards, or a new one); ＋ Add widget shows eve
   // the gallery: categories by page, the target list once per category, previews through the store
   assert.match(SRC, /for \(const cat of \["dolls", "crabs", "flowers", "foods"\]\) out\.push/);
   assert.match(SRC, /el\.innerHTML = __widgets\.preview\(it\.type, \{ data: data\.get\(k\), ctx: _wCtx\(it\.type\), opts: it\.opts, size: size\[k\] \}\);/);
-  assert.match(SRC, /__widgets\.handle\("page:" \+ it\.type, "pin", JSON\.stringify\(\{ board: boardId, opts: it\.opts, \.\.\.look \}\)\);/);
-  // a model widget: ◀ n / total ▶ through its variants, ▦ for the table
-  assert.match(SRC, /vlist\[k\] = __widgets\.variantsOf\(it\.type, \{ data: got\.data, ctx: _wCtx\(it\.type\), opts: it\.opts \}\);/);
+  assert.match(SRC, /__widgets\.handle\("page:" \+ it\.type, "pin", JSON\.stringify\(\{ board: boardId, opts: it\.opts, \.\.\.pick \}\)\);/);
+  // a model widget: its look, ◀ n / total ▶ through the offered looks, Looks = every look at once to pick from
+  assert.match(SRC, /const r = __widgets\.lookPreview\(it\.type, \{ data: data\.get\(k\), ctx: _wCtx\(it\.type\), opts: it\.opts, look: look\[k\] \}\);/);
+  assert.match(SRC, /__widgets\.lookPicker\(it\.type, \{ data: data\.get\(k\), ctx: _wCtx\(it\.type\), opts: it\.opts, current: asTable\[k\] \? "full" : look\[k\] \}\)/);
+  // the board: a phone 2 columns, a tablet up to 4; the looks' font size from the real cell
+  assert.match(SRC, /if \(w < 700\) return 2;/);
+  assert.match(SRC, /grid\.style\.setProperty\("--fs", \(Math\.max\(cell, 140\) \/ 170\) \* 13 \+ "px"\);/);
+  assert.match(SRC, /<link rel="stylesheet" href="\/ui\/glance-templates\.css">/);
   // each card at its own size, S / M / L / Table switchable, a glance widget first in its section
   assert.match(SRC, /const card = \(it, label\) => `<div class="w-gal-card w-gal-\$\{size\[it\.k\]\}"/);
   assert.match(SRC, /data-size="\$\{sz\}"/);

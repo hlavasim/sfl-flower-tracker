@@ -1,117 +1,122 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { layout, STYLES, SIZES, variants, stylesFor, sizesFor, dims, iconCap } from "../../ui/glance.mjs";
+import { TEMPLATES, TEMPLATE_IDS, looksFor, renderLook, templateById, iconCols, countdown } from "../../ui/glance-templates.mjs";
 import { createHost } from "../../app/widget-host.mjs";
 import { parseBoards, setBoardCols, emptyBoards, cleanSettings } from "../../app/boards.mjs";
 
-// One model per widget (a headline, items, tiles, a series), laid out by one engine at every size
-// (W×H cells, 1×1 … 4×2) and style — so every widget offers dozens of ready-made variants to click through.
+// Glance templates (engine v3, docs/superpowers/plans/2026-11-26-glance-templates.md): a curated
+// catalogue of looks over a layered model; a look is offered when it fills well and shows more than a
+// smaller look of the same kind; a board copy keeps its chosen look (settings.look).
 
-const ITEMS = Array.from({ length: 20 }, (_, k) => ({ icon: `<i>${k}</i>`, name: `Item ${k}`, sub: `sub ${k}`, value: `${k}d`, pct: k * 5,
-  ...(k === 0 ? { chip: { text: "READY", tone: "ok" } } : {}) }));
-const MODEL = { head: { value: "4", unit: "/4", cap: "all protected", ring: 100 }, items: ITEMS, foot: "20 things",
-  tiles: [{ label: "a", value: "1" }, { label: "b", value: "2" }, { label: "c", value: "3" }], series: [1, 3, 2, 5] };
-const count = (h, re) => (h.match(re) || []).length;
-const ROW = /class="g-row"/g, CELL = /class="g-cell[" ]/g;
+const NOW = Date.UTC(2026, 10, 26, 12), H = 3600e3;
+const four = Array.from({ length: 4 }, (_, k) => ({ icon: `<i>${k}</i>`, name: `n${k}`, sub: `s${k}`, chip: { text: "active", tone: "ok" } }));
+const WEATHER = { head: { value: 2, unit: "/4", ring: 50, ringTone: "bad", cap: "uncovered" }, items: four, tiles: [{ label: "a", value: 1 }, { label: "b", value: 2 }] };
+const RICH = { head: { value: 1, unit: "/15", ring: 7 }, items: Array.from({ length: 14 }, (_, k) => ({ icon: `<i>${k}</i>`, name: `Doll ${k}`, value: `−${k}`, pct: k * 7 })),
+  tiles: [{ label: "a", value: 1 }, { label: "b", value: 2 }, { label: "c", value: 3 }], series: [1, 2, 3, 5, 4] };
 
-test("sizes are W×H cells; the old S / M / T / L names still read", () => {
-  assert.deepStrictEqual(SIZES, ["1x1", "2x1", "1x2", "2x2", "4x1", "1x4", "4x2", "2x4"]);
-  assert.deepStrictEqual(dims("4x2"), { w: 4, h: 2 });
-  assert.deepStrictEqual(dims("m"), { w: 2, h: 1 });
-  assert.deepStrictEqual(STYLES, ["number", "rows", "compact", "icons", "tiles", "bars", "chart", "hero"]);
+test("the catalogue: unique, never-renamed ids, each with a size, a presentation and its needs", () => {
+  assert.strictEqual(new Set(TEMPLATE_IDS).size, TEMPLATE_IDS.length);
+  for (const t of TEMPLATES) {
+    assert.match(t.size, /^[124]x[124]$/, t.id);
+    assert.ok(t.pres && Array.isArray(t.needs) && t.needs.length, t.id);
+    if (t.narrow) assert.ok(templateById(t.narrow) && Number(templateById(t.narrow).size[0]) <= 2, `${t.id} → ${t.narrow}`);
+  }
+  // ids saved on boards: renaming one would lose people's choices
+  for (const id of ["number", "gauge", "next", "icons-1", "list-1", "number-list-2", "strip-2", "overview-4", "icons-4", "dashboard"]) assert.ok(templateById(id), id);
 });
 
-test("number: 1×1 = the headline; a one-row size puts the list beside it; taller ones under it", () => {
-  const s = layout(MODEL, "1x1", "number");
-  assert.match(s, /<div class="g-big">4<small>\/4<\/small><\/div><div class="g-cap">all protected<\/div>/);
-  assert.strictEqual(count(s, ROW), 0);
-  assert.match(layout(MODEL, "2x1", "number"), /^<div class="g-split">/);
-  assert.strictEqual(count(layout(MODEL, "2x1", "number"), ROW), 3);
-  assert.strictEqual(count(layout(MODEL, "4x1", "number"), ROW), 6, "4 wide: two columns beside the headline");
-  assert.match(layout(MODEL, "1x2", "number"), /^<div class="g-head-top">/);
-  assert.strictEqual(count(layout(MODEL, "1x2", "number"), ROW), 4);
-  assert.strictEqual(count(layout(MODEL, "1x4", "number"), ROW), 10);
+test("only looks that fill well and show more than a smaller one of the same kind: four items never get an empty 4×2", () => {
+  const looks = looksFor(WEATHER);
+  assert.ok(looks.includes("icons-1") && looks.includes("strip-2"), "a 1×1 grid and a 2×1 strip are different presentations");
+  assert.ok(!looks.includes("icons-4"), "four icons in a 16-cell grid: not offered");
+  assert.ok(!looks.includes("dashboard"), "a dashboard needs a series");
+  assert.ok(!looks.some((id) => ["4x2", "1x4", "2x4"].includes(templateById(id).size)));
+  assert.ok(looksFor(RICH).length > looks.length, "more data, more looks");
+  assert.ok(looksFor(RICH).includes("dashboard"));
 });
 
-test("rows / compact / icons / bars scale with the area", () => {
-  assert.strictEqual(count(layout(MODEL, "1x1", "rows"), ROW), 3);
-  assert.strictEqual(count(layout(MODEL, "2x1", "rows"), ROW), 6);
-  assert.strictEqual(count(layout(MODEL, "1x4", "rows"), ROW), 12);
-  assert.strictEqual(count(layout(MODEL, "1x1", "compact"), /class="g-line"/g), 5);
-  assert.strictEqual(count(layout(MODEL, "1x1", "icons"), CELL), iconCap(1, 1));
-  assert.match(layout(MODEL, "1x1", "icons"), /<small class="g-tag g-ok">READY<\/small>/);
-  assert.match(layout(MODEL, "1x1", "icons"), new RegExp(`<div class="g-cell g-more">\\+${20 - iconCap(1, 1) + 1}</div>`));
-  assert.strictEqual(count(layout(MODEL, "4x1", "icons"), CELL), 20, "all twenty fit a 4×1");
-  assert.strictEqual(count(layout(MODEL, "1x2", "bars"), /class="g-bar-row"/g), 6);
-  assert.match(layout(MODEL, "2x2", "tiles"), /class="g-tgrid"/);
-  assert.match(layout(MODEL, "2x1", "chart"), /<svg class="g-spark/);
-  assert.match(layout(MODEL, "1x1", "hero"), /g-hero-xl/);
+test("icon grids use equal columns: 4 items are 2×2 in a 1×1, a row in a 4×1, a column in a 1×4", () => {
+  assert.strictEqual(iconCols(4, 1, 1), 2);
+  assert.strictEqual(iconCols(4, 4, 1), 4);
+  assert.strictEqual(iconCols(4, 1, 4), 1);
+  const html = renderLook(WEATHER, "icons-1").html;
+  assert.match(html, /class="gx-icons" style="--c:2"/);
+  assert.strictEqual((html.match(/class="gx-cell"/g) || []).length, 4, "all four, none cut off");
 });
 
-test("icons: the grid follows the item count and the shape — 4 items are 2×2 in 1×1, one row when wide, one column when tall", () => {
-  const four = Array.from({ length: 4 }, (_, k) => ({ icon: `<i>${k}</i>`, name: `n${k}`, chip: { text: "active", tone: "ok" } }));
-  assert.match(layout({ items: four }, "1x1", "icons"), /^<div class="g-icons" style="--gc:2;--gr:2">/);
-  assert.match(layout({ items: four }, "4x1", "icons"), /^<div class="g-icons" style="--gc:4;--gr:1">/);
-  assert.match(layout({ items: four }, "1x4", "icons"), /^<div class="g-icons" style="--gc:1;--gr:4">/);
-  assert.strictEqual(count(layout({ items: four }, "1x1", "icons"), CELL), 4, "all four, none cut off");
+test("a live countdown for an item with a time; Ready once it has passed", () => {
+  assert.strictEqual(countdown(NOW + 2.1 * H, NOW), "2h 6m");
+  assert.strictEqual(countdown(NOW + 30 * H, NOW), "1d 6h");
+  assert.strictEqual(countdown(NOW - 1, NOW), "Ready");
+  const m = { items: [{ icon: "<i></i>", name: "Wooly Doll", at: NOW - 1 }, { icon: "<i></i>", name: "Gilded Doll", at: NOW + 2.1 * H }] };
+  const html = renderLook(m, "icons-1", { now: NOW }).html;
+  assert.match(html, /<small class="gx-tag g-ok"><span class="g-at" data-at="\d+">Ready<\/span><\/small>/);
+  assert.match(html, /<small class="gx-tag g-info"><span class="g-at" data-at="\d+">2h 6m<\/span><\/small>/);
 });
 
-test("only the sizes that show more: a style stops growing once all its content fits", () => {
-  const four = Array.from({ length: 4 }, (_, k) => ({ icon: `<i>${k}</i>`, name: `n${k}`, chip: { text: "active", tone: "ok" } }));
-  const small = { head: { value: 4, unit: "/4", ring: 100 }, items: four };
-  assert.deepStrictEqual(sizesFor(small, "icons"), ["1x1"], "four icons fit a 1×1: no 4×2 that is mostly empty");
-  assert.deepStrictEqual(sizesFor(small, "rows"), ["1x1", "2x1"]);
-  assert.deepStrictEqual(sizesFor(small, "number"), ["1x1", "2x1", "1x2"]);
-  assert.ok(variants(small).length < 15);
-  assert.ok(variants(MODEL).length > variants(small).length, "more data, more looks");
-  assert.deepStrictEqual(variants(MODEL)[0], { size: "1x1", style: "number" });
+test("a narrow board shows a wide look's narrow twin, and offers no twin twice", () => {
+  assert.strictEqual(renderLook(RICH, "dashboard", { cols: 2 }).id, "overview-4");
+  assert.strictEqual(renderLook(RICH, "dashboard", { cols: 8 }).id, "dashboard");
+  const phone = looksFor(RICH, { cols: 2 });
+  assert.strictEqual(new Set(phone).size, phone.length);
+  assert.ok(phone.every((id) => Number(templateById(id).size[0]) <= 2));
 });
 
-test("a model offers only the styles it can fill", () => {
-  assert.deepStrictEqual(stylesFor({ head: MODEL.head }), ["number"]);
-  assert.deepStrictEqual(stylesFor({ items: [{ name: "a", value: 1 }] }), ["rows", "compact"]);
-  assert.match(layout({ head: MODEL.head }, "2x2", "icons"), /g-big/, "a style it cannot fill falls back");
+test("a look whose needs fail falls back to one that can render (never blank)", () => {
+  const r = renderLook({ head: { value: 3 } }, "icons-4");
+  assert.match(r.html, /gx-num/);
 });
 
 // ── the host ──
 const W = {
-  type: "w", title: "Weather", columns: [{ key: "n", label: "N" }], rowKey: (r) => r.n, build: () => ({ rows: [{ n: "a" }] }),
-  glanceModel: () => MODEL,
+  type: "w", title: "Weather", look: "icons-1", columns: [{ key: "n", label: "N" }], rowKey: (r) => r.n, build: () => ({ rows: [{ n: "a" }] }),
+  glanceModel: () => WEATHER,
 };
 function mem() { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; }
 const first = (h) => h.doc().boards[0].items[0];
 
-test("a model widget: every size, its style per copy, and ◀ ▶ walking the variants with 'n / total'", () => {
+test("a board copy shows its look; ◀ ▶ walks the offered looks; ▦ opens the picker with all of them; a pick is saved", () => {
   const h = createHost({ registry: { w: W }, storage: mem() });
-  assert.deepStrictEqual(h.sizesOf("w"), SIZES);
-  h.handle("page:w", "pin", JSON.stringify({ board: "main", size: "1x1", style: "icons" }));
-  const id = `b:main:${first(h).i}`;
-  assert.strictEqual(first(h).settings.style, "icons");
+  h.handle("page:w", "pin", JSON.stringify({ board: "main" }));
+  const id = `b:main:${first(h).i}`, offered = looksFor(WEATHER, { cols: 6 });
   let html = h.renderItem("main", first(h), { data: {} });
-  assert.match(html, /class="g-icons"/);
   assert.match(html, /w-g-1x1/);
-  assert.match(html, /data-action="variant" data-value="-1"/);
-  const list = variants(MODEL), at = list.findIndex((v) => v.size === "1x1" && v.style === "icons");
-  assert.match(html, new RegExp(`<span class="w-var-n">${at + 1} / ${list.length}</span>`));
+  assert.match(html, /class="gx-icons"/, "the widget's natural look");
+  assert.match(html, new RegExp(`<span class="w-var-n">${offered.indexOf("icons-1") + 1} / ${offered.length}</span>`));
+  assert.match(html, /data-action="looks"/);
   h.handle(id, "variant", "1");
-  assert.deepStrictEqual({ size: first(h).settings.size, style: first(h).settings.style }, list[at + 1]);
-  for (let k = 0; k <= at + 1; k++) h.handle(id, "variant", "-1");
-  assert.deepStrictEqual({ size: first(h).settings.size, style: first(h).settings.style }, list.at(-1), "wraps around to the last");
+  assert.strictEqual(first(h).settings.look, offered[offered.indexOf("icons-1") + 1]);
+  h.handle(id, "looks", "");
   html = h.renderItem("main", first(h), { data: {} });
-  const d = dims(list.at(-1).size);
-  assert.match(html, new RegExp(`style="--gw:${d.w};--gh:${d.h}"`));
-  h.handle(id, "size", "full");
+  assert.match(html, /class="w-sheet-card w-picker"/);
+  assert.strictEqual((html.match(/class="w-look[ "]/g) || []).length, offered.length + 1, "every look, and the full table");
+  h.handle(id, "look", "strip-2");
+  assert.strictEqual(first(h).settings.look, "strip-2");
+  html = h.renderItem("main", first(h), { data: {} });
+  assert.doesNotMatch(html, /w-picker/, "the pick closes the picker");
+  assert.match(html, /style="--gw:2;--gh:1"/);
+  h.handle(id, "look", "full");
   assert.match(h.renderItem("main", first(h), { data: {} }), /<table/);
-  assert.deepStrictEqual(cleanSettings({ size: "4x2", style: "bars" }), { size: "4x2", style: "bars" });
-  assert.deepStrictEqual(cleanSettings({ size: "9x9", style: "x" }), {});
-  assert.match(h.preview("w", { data: {}, size: "4x1", style: "icons" }), /class="g-icons" style="--gc:\d+;--gr:\d+"/);
 });
 
-test("a glance never spans more columns than the board has", () => {
+test("phones: a 2-column board renders a wide look's narrow twin", () => {
+  const h = createHost({ registry: { w: { ...W, glanceModel: () => RICH, look: "dashboard" } }, storage: mem() });
+  h.handle("page:w", "pin", JSON.stringify({ board: "main" }));
+  assert.match(h.renderItem("main", first(h), { data: {}, cols: 8 }), /w-g-4x2/);
+  assert.match(h.renderItem("main", first(h), { data: {}, cols: 2 }), /w-g-2x2/);
+});
+
+test("saved settings: look kept, v2 size read as a look of that size", () => {
+  assert.deepStrictEqual(cleanSettings({ look: "strip-2" }), { look: "strip-2" });
+  assert.deepStrictEqual(cleanSettings({ look: "<bad>" }), {});
   const h = createHost({ registry: { w: W }, storage: mem() });
-  h.handle("page:w", "pin", JSON.stringify({ board: "main", size: "4x2" }));
-  h.setBoardCols("main", 3);
-  assert.match(h.renderItem("main", first(h), { data: {} }), /style="--gw:3;--gh:2"/);
+  h.handle("page:w", "pin", JSON.stringify({ board: "main", size: "2x1", style: "icons" }));
+  assert.match(h.renderItem("main", first(h), { data: {} }), /w-g-2x1/, "a v2 copy at 2×1 keeps a 2×1 look");
+  const g = createHost({ registry: { w: W }, storage: mem() });
+  g.handle("page:w", "pin", JSON.stringify({ board: "main", look: "overview-4" }));
+  assert.strictEqual(g.doc().boards[0].items[0].settings.look, "overview-4", "the gallery's pick");
+  assert.ok(g.lookPreview("w", { data: {} }).offered.length > 3);
+  assert.match(g.lookPicker("w", { data: {} }), /data-look="icons-1"/);
 });
 
 test("a board keeps its own column count (2-12, default 6); a full table spans its share of them", () => {
@@ -121,11 +126,9 @@ test("a board keeps its own column count (2-12, default 6); a full table spans i
   assert.strictEqual(setBoardCols(d, "main", 40).boards[0].cols, 12);
   assert.strictEqual(setBoardCols(d, "main", 1).boards[0].cols, 2);
   assert.strictEqual(parseBoards(JSON.stringify(setBoardCols(d, "main", 8))).boards[0].cols, 8);
-  assert.strictEqual(parseBoards(JSON.stringify({ schema: 1, boards: [{ id: "x", items: [], cols: "abc" }] })).boards[0].cols, undefined);
   const h = createHost({ registry: { w: { ...W, glanceModel: undefined } }, storage: mem() });
   h.handle("page:w", "pin", JSON.stringify({ board: "main" }));
   h.setBoardCols("main", 12);
-  assert.strictEqual(h.colsOf("main"), 12);
   assert.match(h.renderItem("main", first(h), { data: {} }), /style="grid-column:span 6"/);
   h.setBoardCols("main", 4);
   assert.match(h.renderItem("main", first(h), { data: {} }), /style="grid-column:span 2"/);

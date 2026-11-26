@@ -33,14 +33,15 @@ export function freshness(entry, now = Date.now()) {
 // place "page": cog + pin (pinned = how many copies are on boards). place "board": a drag handle
 // (⠿, drop onto another widget to move), cog, remove and a resize corner; w (1-12) becomes the
 // grid span, h (rows of ROW_PX, 0 = auto) the height. The settings open as a popover.
-export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false, cog = true, glance = "", variant = null, gw = 0, gh = 0 }) {
+export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false, cog = true, glance = "", variant = null, gw = 0, gh = 0, looks = false }) {
   const badge = fresh ? `<span class="w-fresh w-fresh-${fresh.level}" title="${esc(fresh.title || fresh.text)}">${esc(fresh.text)}</span>` : "";
   const btn = (action, label, title, value = "", cls = "") =>
     `<button type="button" class="w-btn${cls}" data-action="${action}" data-value="${esc(value)}" title="${esc(title)}" aria-label="${esc(title)}">${label}</button>`;
   // place "sheet": the full widget opened from a glance, over the board (✕ closes it)
   const board = place === "board", sheet = place === "sheet";
   // a glance's ◀ n / total ▶: the ready-made variants of its size × style
-  const nav = variant ? btn("variant", "◀", "previous look", "-1") + `<span class="w-var-n">${variant.n} / ${variant.total}</span>` + btn("variant", "▶", "next look", "1") : "";
+  const nav = (variant ? btn("variant", "◀", "previous look", "-1") + `<span class="w-var-n">${variant.n} / ${variant.total}</span>` + btn("variant", "▶", "next look", "1") : "") +
+    (looks ? btn("looks", "▦", "choose a look — see them all") : "");
   const tools = nav + btn("refresh", "↻", "reload") + (cog ? btn("cog", "⚙", "settings", "", settingsOpen ? " on" : "") : "") + (sheet
     ? btn("collapse", "✕", "close")
     : board ? btn("remove", "✕", "remove from the board")

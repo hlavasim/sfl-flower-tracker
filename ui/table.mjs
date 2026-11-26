@@ -158,6 +158,7 @@ export function applyTableAction(columns, settings = {}, action, value) {
     case "size":
       // a board copy's size: S / M / L (its glance face) or the full table
       if (["s", "m", "t", "l", "full"].includes(value) || /^[124]x[124]$/.test(value)) s.size = value;
+      else if (value === "look") delete s.size;   // back to the chosen look (a model widget)
       return s;
     case "style":
       // how a glance shows its model: the number, a list of rows, or a grid of icons

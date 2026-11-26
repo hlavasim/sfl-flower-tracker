@@ -6,7 +6,7 @@ import { weatherProtection } from "../../widgets/weather-protection.mjs";
 import { beehives } from "../../widgets/beehives.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { createHost } from "../../app/widget-host.mjs";
-import { layout, variants } from "../../ui/glance.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { getTotalBumpkinLevel, _ascBaseline, _ascBandXp, BUMPKIN_XP_TABLE } from "../../core/engine/power-helpers.mjs";
 
@@ -135,11 +135,11 @@ test("📱 glance model, weather: the count protecting now (ring) and every item
   assert.deepStrictEqual(m.items[2].chip, { text: "partly used", tone: "warn" });
   // laid out by the engine: 1×1 icons shows all four with their state under each
   const mi = weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, iconHtml: `<i>${r.name}</i>` })) });
-  const icons = layout(mi, "1x1", "icons");
-  assert.strictEqual((icons.match(/class="g-cell"/g) || []).length, 4);
-  assert.match(icons, /<small class="g-tag g-bad">used up<\/small>/);
-  assert.match(layout(m, "1x1", "number"), /<div class="g-big g-bad">2<small>\/4<\/small><\/div><div class="g-cap">uncovered: tsunami, insect plague<\/div>/);
-  assert.ok(variants(mi).length >= 6, "a handful of looks that each show something different");
+  const icons = renderLook(mi, "icons-1").html;
+  assert.strictEqual((icons.match(/class="gx-cell"/g) || []).length, 4, "all four items");
+  assert.match(icons, /<small class="gx-tag g-bad">used up<\/small>/);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-bad">2<small>\/4<\/small><\/div><div class="gx-cap">uncovered: tsunami, insect plague<\/div>/);
+  assert.ok(looksFor(mi).length >= 6, "a handful of looks that each show something different");
   const all = weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, state: "ok" })) });
   assert.strictEqual(all.head.cap, "all protected");
   assert.match(weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => [] }).empty, /No weather items/);
