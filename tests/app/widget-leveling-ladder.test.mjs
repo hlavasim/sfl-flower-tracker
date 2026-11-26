@@ -71,7 +71,8 @@ test("no farm / no leveling inputs: an explanation, not a throw", () => {
 });
 
 test("📱 glance model: total days to the target ascension; every ascension counting down to its end, the target marked", () => {
-  const ctx = { savedLeveling: { target: { ascension: 5, level: 50 } } };
+  // one pinned clock: build and the glance each read the time, and a slow run moved it between them
+  const ctx = { savedLeveling: { target: { ascension: 5, level: 50 } }, now: Date.UTC(2026, 10, 27, 12) };
   const rows = W.build({ farm, leveling, book: null }, ctx).rows;
   const t = rows.find((r) => r.target);
   const m = W.glanceModel({ farm, leveling, book: null }, ctx);
@@ -81,7 +82,8 @@ test("📱 glance model: total days to the target ascension; every ascension cou
   assert.strictEqual(m.items.length, rows.length);
   const it5 = m.items.find((i) => i.name === "A5 · target");
   assert.match(it5.sub, /^[\d.]+[kM]? FLOWER$/);
-  assert.ok(Math.abs(it5.at - (t.now + t.cumDays * 86400000)) < 1, "a live countdown to the day A5 is done");
+  assert.strictEqual(t.now, ctx.now, "the table runs on the pinned clock");
+  assert.strictEqual(it5.at, Math.round(ctx.now + t.cumDays * 86400000), "a live countdown to the day A5 is done");
   assert.deepStrictEqual(m.tiles.slice(0, 3).map((x) => x.label), ["days", "FLOWER", "target"]);
   assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row[" ]/g) || []).length, Math.min(8, rows.length));
   assert.match(renderLook(m, "list-4").html, /<span class="g-at" data-at="\d+">\d+d \d+h<\/span>/);

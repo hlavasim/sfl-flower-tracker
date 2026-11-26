@@ -54,7 +54,7 @@ export const levelingLadderWidget = {
       if (!leveling || !leveling.inputs) return { rows: [], footer: "", empty: "The LEVELING plan did not load." };
       ({ plan, cfg, free } = planFor(farm, leveling, book || null, ctx.savedLeveling));
     }
-    const now = Date.now();
+    const now = ctx.now || Date.now();   // one clock for the table and its glance (ctx.now pins it)
     const target = cfg && cfg.target ? cfg.target.ascension : null;
     const rows = levelingLadder(farm, plan, 10, free || 0).map((r) => ({ ...r, target: r.ascension === target, clickable: !!ctx.rowClick && r.ascension !== target, now }));
     return { rows, footer: "", empty: "All ascensions up to A10 are behind you." };
