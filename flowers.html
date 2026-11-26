@@ -2923,8 +2923,9 @@
     .v-mkt-s1 { background: var(--c-yellow); } .v-mkt-s2 { background: rgba(224,179,74,0.35); } .v-mkt-s3 { background: rgba(106,167,224,0.55); }
     .v-mkt-key { display: inline-block; width: 12px; height: 8px; border-radius: 2px; vertical-align: middle; }
     .w-frame .flip-good { color: var(--c-green); } .w-frame .flip-bad { color: var(--c-red); }
-    .v-treasury-top { display: grid; grid-template-columns: minmax(260px, 1fr) 2fr; gap: 0 16px; }
-    @media (max-width: 800px) { .v-treasury-top { grid-template-columns: 1fr; } }
+    /* minmax(0, …): a bare 1fr's floor is its content's min width, which pushed the frames past a phone screen */
+    .v-treasury-top { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: 0 16px; }
+    @media (max-width: 800px) { .v-treasury-top { grid-template-columns: minmax(0, 1fr); } }
     .v-treasury-total { font-family: var(--c-font); font-size: 28px; font-weight: 700; color: var(--c-text); }
     .v-treasury-total img, .v-treasury-rates img { height: 0.9em; vertical-align: -0.1em; }
     .v-treasury-rates { font-size: 12px; }
@@ -3052,6 +3053,7 @@
     .w-frame .gift-dd-pts { color: var(--c-accent); font-size: 11.5px; }
     .w-frame .gift-dd-time, .w-frame .gift-dd-meta, .w-frame .gift-dropdown-item .gift-dd-have { font-size: 11.5px; background: none; }
     .v-lvl-row { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: center; }
+    .v-lvl-row > label, .v-lvl-row select { min-width: 0; max-width: 100%; }   /* a long worm-mix option fits a phone */
     .v-lvl-kitchens { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 4px 14px; margin-top: 8px; }
     .v-lvl-set label { cursor: pointer; }
     .v-lvl-set img, .v-mini img, .v-note img { height: 1.2em; vertical-align: -0.25em; margin-right: 3px; }
