@@ -78,6 +78,19 @@ export const RESOURCES = {
       return { value: d.value || null, coinMode: d.coinMode, pricesOk: body.pricesOk !== false };
     },
   },
+  // Any compute section (POWER, ROADMAP, BUMPKIN…): { farm, section, q?: {extra query params} }.
+  // The answer's data, with the answer's pricesOk carried along (false = market prices failed).
+  compute: {
+    persist: true,
+    ttl: 5 * 60_000,
+    load: async ({ farm, section, q = {} }, { json }) => {
+      if (!section) throw new Error("compute: no section");
+      const extra = Object.keys(q).sort().map((k) => `&${enc(k)}=${enc(q[k])}`).join("");
+      const body = await json(`/api/compute?farm=${enc(farm)}&section=${enc(section)}${extra}`);
+      const d = body.data;
+      return d && typeof d === "object" && !Array.isArray(d) ? { ...d, pricesOk: body.pricesOk !== false } : d;
+    },
+  },
   // The LEVELING plan inputs; POSTs the recorded weeks when there are any, as the pages always did.
   leveling: {
     persist: true,

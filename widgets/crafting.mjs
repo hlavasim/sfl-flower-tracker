@@ -1,5 +1,6 @@
 // What is on the way right now: 🦀 the crab traps (CRABS page) and 🪆 the crafting box (DOLLS page).
 import { toMs } from "../core/engine/power-costs.mjs";
+import { craftingJobs } from "../core/engine/crafting-box.mjs";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
 const when = (r) => (r.ready ? `<span class="v-pill v-ok">READY</span>`
@@ -47,22 +48,25 @@ export const craftingBox = {
   page: "dolls",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
   defaults: {},
-  rowKey: (r) => r.name,
+  rowKey: (r) => `${r.k}|${r.name}`,
   rowLabel: (r) => r.name,
   rowClass: (r) => (r.ready ? "w-st-ready" : ""),
   columns: [
-    { key: "name", label: "crafting", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml}${esc(v)}</span>` },
+    { key: "name", label: "crafting", fmt: (v, r) => `<div class="v-name">${r.iconHtml}<div><b>${esc(v)}</b></div></div>` },
     { key: "when", label: "when", get: (r) => r.readyAt, fmt: (v, r) => when(r) },
   ],
 
   build({ farm } = {}, ctx = {}) {
     if (!farm) return { rows: [], footer: "", empty: "No farm data." };
     const now = ctx.now || Date.now();
-    const cb = farm.craftingBox;
-    const name = cb && cb.status === "crafting" && cb.item ? cb.item.collectible || cb.item.wearable : null;
-    if (!name) return { rows: [], footer: "", empty: "The crafting box is idle right now." };
-    const readyAt = toMs(cb.readyAt || 0), ready = !!readyAt && readyAt <= now;
-    return { rows: [{ name, readyAt, ready, iconHtml: icon(ctx, name),
-      countdown: !ready && readyAt && typeof ctx.countdown === "function" ? ctx.countdown(readyAt - now) : "" }], footer: "", empty: "" };
+    // the game's queue (or an older farm's single item), soonest first
+    const rows = craftingJobs(farm.craftingBox).map((j, k) => {
+      const ready = !!j.readyAt && j.readyAt <= now;
+      return { k, name: j.name, readyAt: j.readyAt, ready, iconHtml: icon(ctx, j.name),
+        countdown: !ready && j.readyAt && typeof ctx.countdown === "function" ? ctx.countdown(j.readyAt - now) : "" };
+    });
+    if (!rows.length) return { rows: [], footer: "", empty: "The crafting box is idle right now." };
+    const ready = rows.filter((r) => r.ready).length;
+    return { rows, footer: `<div class="v-dim">${ready} ready · ${rows.length - ready} crafting</div>`, empty: "" };
   },
 };

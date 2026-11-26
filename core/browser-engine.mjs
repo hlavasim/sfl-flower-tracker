@@ -33,3 +33,4 @@ export { levelingPlan, defaultLevelingConfig, itemImpacts, budTypeFloors, budTyp
 export { agingNow, baitCommonIngredient } from "./engine/aging-now.mjs";
 // One crustacean price (pot + chum, trap time) for LEVELING and FISHING.
 export { crustaceanCost, waterTraps } from "./engine/crustaceans.mjs";
+export { craftingJobs } from "./engine/crafting-box.mjs";

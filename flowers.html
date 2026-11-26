@@ -7693,11 +7693,8 @@
         }
       }
 
-      // Dolls: craftingBox
-      const cb = farm.craftingBox;
-      if (cb && cb.status === "crafting" && cb.item?.collectible) {
-        add(cb.item.collectible, 1);
-      }
+      // Dolls: every job in the crafting box (the game keeps a queue now)
+      for (const j of craftingJobs(farm.craftingBox)) add(j.name, 1);
 
       // Crustaceans: crabTraps (only count if trap is ready)
       const traps = farm.crabTraps?.trapSpots || {};
@@ -8781,17 +8778,17 @@
       const now = Date.now();
       const cb = farm.craftingBox;
       if (!cb) return actions;
-      if (cb.status === "crafting" && cb.readyAt) {
-        const readyAt = toMs(cb.readyAt);
-        const itemName = cb.item?.collectible || "Item";
-        if (readyAt <= now) {
-          actions.push({ category:"Crafting Box", icon:"🔨", label:itemName + " ready!", detail:dashAgoText(now - readyAt), status:"ready", readyAt, priority:5 });
+      // every job in the queue (the game keeps one now; older farms one item)
+      const jobs = craftingJobs(cb);
+      for (const j of jobs) {
+        if (j.readyAt <= now) {
+          actions.push({ category:"Crafting Box", icon:"🔨", label:j.name + " ready!", detail:dashAgoText(now - j.readyAt), status:"ready", readyAt:j.readyAt, priority:5 });
         } else {
-          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting: " + itemName, detail:"", status:"upcoming", readyAt, priority:50 });
+          actions.push({ category:"Crafting Box", icon:"🔨", label:"Crafting: " + j.name, detail:"", status:"upcoming", readyAt:j.readyAt, priority:50 });
         }
       }
-      // Show missing dolls when idle OR just finished (player needs to pick next)
-      const isIdle = !cb.status || cb.status !== "crafting" || (cb.readyAt && toMs(cb.readyAt) <= now);
+      // Show missing dolls when nothing is still crafting (idle, or all finished: the player picks next)
+      const isIdle = !jobs.some((j) => j.readyAt > now);
       if (isIdle) {
         const tracked = getTrackedDolls();
         for (const [name, on] of Object.entries(tracked)) {
@@ -18628,7 +18625,14 @@
     //  MŮJ DASHBOARD (?page=board) — the pinned widgets (app/widget-host.mjs), each with its own settings
     // ═══════════════════════════════════════
     // What a widget needs from the page beyond its data: saved settings of other pages, icons.
+    // A page registers what its widgets need from it next to its own code: _wCtxMap["type"] = () => ({…}).
+    const _wCtxMap = {};
+    // The clean page head (title + one line) every converted page starts with.
+    function _wPageHead(title, sub = "") {
+      return `<div class="w-page-head"><h1>${escHTML(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`;
+    }
     function _wCtx(type) {
+      if (_wCtxMap[type]) return _wCtxMap[type]();
       if (type === "fishing-age-now") {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
@@ -18731,9 +18735,13 @@
 
     // ＋ Add widget: every widget, by the page it comes from, previewed on your own data; a click adds
     // a new copy (with its own settings) to the board. The target list is offered once per category.
+    // Gallery sections, by the page a widget comes from (widget.page); empty ones are skipped.
     const _wGalleryCats = [["chores", "CHORES"], ["flowers", "FLOWERS"], ["dolls", "DOLLS"], ["crustaceans", "CRABS"], ["board", "TARGETS"],
-      ["bumpkin", "BUMPKIN"], ["fishing", "FISHING"], ["leveling", "LEVELING"], ["treasury", "TREASURY"], ["tickets", "TICKETS"],
-      ["flips", "FLIPS"], ["world", "WORLD"]];
+      ["bumpkin", "BUMPKIN"], ["ascension", "ASCENSION"], ["leveling", "LEVELING"], ["fishing", "FISHING"], ["power", "POWER"],
+      ["roadmap", "ROADMAP"], ["nodes", "NODES"], ["roi", "ROI"], ["shrines", "SHRINES"], ["buds", "BUDS"], ["pets", "PETS"],
+      ["treasury", "TREASURY"], ["sales", "SALES"], ["flips", "FLIPS"], ["mytrades", "MY TRADES"], ["marks", "MARKS"],
+      ["tickets", "TICKETS"], ["speculation", "SPECULATION"], ["world", "WORLD"], ["decorations", "DECORATIONS"],
+      ["yakkamon", "YAKKAMON"], ["diff", "DIFF"], ["json", "JSON"], ["constants", "CONSTANTS"]];
     function _wGalleryItems() {
       const out = [];
       for (const [type, w] of Object.entries(__widgets.registry)) {
@@ -25051,7 +25059,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
           startPBTimer();
           startGrowingTimers();
         }
-        if (page === "dolls" && data.craftingBox?.readyAt) {
+        if (page === "dolls" && craftingJobs(data.craftingBox).length) {
           startGrowingTimers();
         }
 

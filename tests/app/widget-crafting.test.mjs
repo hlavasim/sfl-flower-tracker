@@ -36,10 +36,24 @@ test("traps: each catch with its quantity, ready ones first, empty traps counted
 test("crafting box: what is being made and when; idle says so", () => {
   const busy = craftingBox.build({ farm: { craftingBox: { status: "crafting", readyAt: NOW + 120_000, item: { collectible: "Doll" } } } }, CTX);
   const html = renderTable(craftingBox.columns, busy.rows, craftingBox.defaults, { rowKey: craftingBox.rowKey });
-  assert.match(html, /<i>Doll<\/i>Doll/);
+  assert.match(html, /<i>Doll<\/i><div><b>Doll<\/b>/);
   assert.match(html, />2m</);
   const idle = craftingBox.build({ farm: { craftingBox: { status: "idle" } } }, CTX);
   assert.strictEqual(idle.rows.length, 0);
   assert.match(idle.empty, /is idle/);
   assert.match(crabTraps.build({}, CTX).empty, /No farm data/);
+});
+
+test("crafting box: the game's queue — every job, ready ones first, with how many are queued", () => {
+  const farm = { craftingBox: { status: "crafting", queue: [
+    { name: "Wooly Doll", readyAt: NOW + 3_600_000, startedAt: NOW - 3_600_000 },
+    { name: "Wooly Doll", readyAt: NOW + 7_200_000, startedAt: NOW + 3_600_000 },
+    { name: "Doll", readyAt: NOW - 1, startedAt: NOW - 100_000 },
+  ] } };
+  const out = craftingBox.build({ farm }, CTX);
+  assert.strictEqual(out.rows.length, 3);
+  const html = renderTable(craftingBox.columns, out.rows, craftingBox.defaults, { rowKey: craftingBox.rowKey });
+  assert.match(html, /<span class="v-pill v-ok">READY<\/span>/);
+  assert.match(html, />60m</);
+  assert.match(out.footer, /1 ready · 2 crafting/);
 });

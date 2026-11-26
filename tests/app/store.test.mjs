@@ -187,3 +187,15 @@ test("persist: entries older than 12 h are removed when the store starts (other 
   createStore({ fetch: fakeFetch({}), persist: storage, now: () => now });
   assert.deepStrictEqual([...m.keys()].sort(), ["sfl_other", "sfl_wcache:b"]);
 });
+
+test("compute: any /api/compute section with its extra query params; the answer's data (pricesOk kept)", async () => {
+  const f = fakeFetch({ "/api/compute": (url) => ({ data: { url }, pricesOk: true }) });
+  const s = createStore({ fetch: f });
+  const r = await s.get({ res: "compute", farm: "7", section: "power", q: { product: "Iron", n: 2 } });
+  assert.strictEqual(r.status, "ok");
+  assert.match(r.data.url, /\/api\/compute\?farm=7&section=power&n=2&product=Iron$/);
+  assert.strictEqual(r.data.pricesOk, true);
+  // no section → an error, never a fetch of the whole compute
+  const bad = await s.get({ res: "compute", farm: "7" });
+  assert.strictEqual(bad.status, "error");
+});
