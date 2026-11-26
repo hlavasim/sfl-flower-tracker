@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
-import { levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix, levelingState, frontierSvg, lvFmt, lvK } from "../../widgets/leveling.mjs";
+import { levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix, levelingState, frontierSvg, lvFmt, lvK, LV_BOTTLENECK } from "../../widgets/leveling.mjs";
 import * as LV from "../../core/sections/leveling.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
@@ -100,7 +100,10 @@ test("📱 glance model, plan: days to the target and its FLOWER; the XP split w
   assert.deepStrictEqual(m.items.map((i) => i.name), ["Kitchens", "Aging", "Raw fish"]);
   assert.ok(m.items.every((i) => i.pct >= 0 && i.pct <= 100));
   assert.deepStrictEqual(m.tiles.map((t) => t.label), ["XP / day", "cost/1M", "cost/day", "held by"]);
-  assert.match(m.tiles[3].value, /^(salt|slots|fish|—)$/);
+  // the same words as the view ("slots (restarts)", not the raw key)
+  assert.strictEqual(m.tiles[3].value, plan.bottleneck ? LV_BOTTLENECK[plan.bottleneck] : "—");
+  const slotBound = levelingSummary.glanceModel({ farm, leveling }, { ...ctx, savedLeveling: { ...cfg, restarts: 0, fish: { ...cfg.fish, buySalt: true, reels: 200 } } });
+  assert.strictEqual(slotBound.tiles[3].value, "slots (restarts)");
   assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num(?: gx-num-long)?">${lvFmt(plan.days)}<small> days</small></div>`));
   assert.ok(looksFor(m).length >= 3);
   // the actual pace: a ring against the plan and a closing line

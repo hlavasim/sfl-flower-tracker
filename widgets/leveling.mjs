@@ -242,7 +242,7 @@ levelingSummary.glanceModel = (data = {}, ctx = {}) => {
       { name: "Aging", sub: "XP a day", value: compact(x.aging), pct: share(x.aging) },
       { name: "Raw fish", sub: "XP a day", value: compact(x.raw), pct: share(x.raw) }],
     tiles: [{ label: "XP / day", value: compact(x.total) }, { label: "cost/1M", value: perM(plan.costPerDay, x.total) },
-      { label: "cost/day", value: compact(plan.costPerDay) }, { label: "held by", value: plan.bottleneck ? plan.bottleneck : "—" },
+      { label: "cost/day", value: compact(plan.costPerDay) }, { label: "held by", value: plan.bottleneck ? LV_BOTTLENECK[plan.bottleneck] || plan.bottleneck : "—" },
       ...(actual ? [{ label: "actual/day", value: compact(actual) }] : [])],
     ...(actual && x.total > 0 ? { foot: `actually ${compact(actual)} XP a day${actual >= x.total ? " · on plan" : ` · ${Math.round((actual / x.total) * 100)} % of the plan`}` } : {}),
   };
