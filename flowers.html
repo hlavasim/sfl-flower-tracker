@@ -2600,8 +2600,8 @@
       margin: 12px 0; font-family: var(--c-font); font-size: 13px; line-height: 1.45; color: var(--c-text); image-rendering: auto; }
     .w-board { gap: 16px; }
     .w-board > .w-frame.pixel-panel { margin: 0; }
-    .w-head { gap: 10px; margin-bottom: 10px; }
-    .w-title { font-family: var(--c-font); font-size: 15px; font-weight: 600; color: var(--c-text); }
+    .w-head { gap: 10px; margin-bottom: 10px; flex-wrap: wrap; row-gap: 4px; }   /* not enough room: the tools take their own row, the title keeps its */
+    .w-title { font-family: var(--c-font); font-size: 15px; font-weight: 600; color: var(--c-text); flex: 1 1 11em; min-width: 0; }
     .w-btn { border: none; background: transparent; color: var(--c-dim); font-size: 14px; padding: 2px 6px; border-radius: 6px; }
     .w-btn:hover, .w-btn.on { color: var(--c-text); background: var(--c-card2); border: none; }
     .w-fresh { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(95,179,107,0.12); color: var(--c-green); }
@@ -3280,7 +3280,7 @@
       background: linear-gradient(160deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), var(--c-card); box-shadow: 0 10px 28px rgba(0,0,0,0.28);
       transition: box-shadow 0.15s, border-color 0.15s; }
     .w-glance.pixel-panel:hover { border-color: rgba(255,255,255,0.16); box-shadow: 0 14px 34px rgba(0,0,0,0.36); }
-    .w-glance > .w-head { margin-bottom: 6px; gap: 6px; min-height: 22px; }
+    .w-glance > .w-head { margin-bottom: 6px; gap: 6px; min-height: 22px; flex-wrap: nowrap; }
     .w-glance > .w-head .w-title { font-size: 12.5px; font-weight: 600; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .w-glance > .w-head .w-fresh-ok, .w-glance > .w-head .w-fresh-loading { display: none; }
     /* the tools float over the corner (shown on hover), so the title keeps the whole width */
