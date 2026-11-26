@@ -11,6 +11,8 @@ import { bumpkinLevel } from "./bumpkin-level.mjs";
 import { weatherProtection } from "./weather-protection.mjs";
 import { beehives } from "./beehives.mjs";
 import { treasuryValue } from "./treasury-value.mjs";
+import { ticketChecklist } from "./ticket-checklist.mjs";
+import { flipTable } from "./flip-table.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -20,4 +22,6 @@ export const WIDGETS = {
   [weatherProtection.type]: weatherProtection,
   [beehives.type]: beehives,
   [treasuryValue.type]: treasuryValue,
+  [ticketChecklist.type]: ticketChecklist,
+  [flipTable.type]: flipTable,
 };

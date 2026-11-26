@@ -31,6 +31,23 @@ export const RESOURCES = {
     ttl: 5 * 60_000,
     load: (_, { json }) => json("/api/marketplace-orderbook?book=1"),
   },
+  // TICKETY: section=tickets, with the recorded weeks POSTed like the page does.
+  tickets: {
+    ttl: 5 * 60_000,
+    load: async ({ farm }, { json, get }) => {
+      const weeks = (await get({ res: "ticketWeeks", farm })).data;
+      const url = `/api/compute?farm=${enc(farm)}&section=tickets`;
+      const body = weeks && weeks.length
+        ? await json(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ weeks }) })
+        : await json(url);
+      return body.data || null;
+    },
+  },
+  // Boosted-NFT flips from the stored orderbook (farm-independent).
+  flips: {
+    ttl: 10 * 60_000,
+    load: (_, { json }) => json("/api/marketplace-orderbook?flips=1&sort=score"),
+  },
   // The farm valuation (TREASURY): section=treasury with the page's coin mode and pet prices, read
   // from the page's own keys at load time (a change shows after the TTL or a ↻).
   treasury: {

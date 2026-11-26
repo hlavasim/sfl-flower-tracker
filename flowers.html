@@ -2692,6 +2692,8 @@
     .w-table tr.w-row-click { cursor: pointer; }
     .w-table tr.w-st-ready { background: rgba(80,200,120,0.07); }
     .w-table tr.w-st-miss { background: rgba(255,90,90,0.08); }
+    .w-table tr.w-st-done { opacity: 0.45; }
+    .w-table .flip-good { color: #7fe0a0; } .w-table .flip-bad { color: #ff8888; }
     .w-tile { text-align: center; padding: 6px 0; }
     .w-tile-big { font-family: 'Press Start 2P', monospace; font-size: 1.1rem; color: var(--sunpetal); }
     .w-tile-sub { color: var(--text-secondary); margin: 4px 0; }
@@ -19256,6 +19258,7 @@
       if (type === "weather-protection") return { weatherRows: (farm) => DASH_WEATHER_ITEMS.map((n) =>
         ({ name: n, state: dashWeatherState(farm, n), prevents: DASH_WEATHER_PREVENTS[n], iconHtml: _dashIcon(n) })) };
       if (type === "treasury-value") return { catColors: TREASURY_CAT_COLORS };
+      if (type === "flip-table") return { icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "beehives") return { hives: (farm) => (farm.beehives ? extractBeehiveDetails(farm.beehives) : []), countdown: dashFormatCountdown };
       return {};
     }
@@ -26091,7 +26094,8 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       if (goalDrives) limit = goal.ticketValue;
 
       let h = `<div class="header pixel-panel pixel-font"><h1>🎟️ TICKETY</h1>
-        <div class="farm-id">${escHTML(c.name)} · ${icon} ${tk} · týden ${tl.week}${tl.weeks ? ` z ${tl.weeks}` : ""}</div></div>`;
+        <div class="farm-id">${escHTML(c.name)} · ${icon} ${tk} · týden ${tl.week}${tl.weeks ? ` z ${tl.weeks}` : ""}</div>
+        <div style="margin-top:6px">${_wPinBtn("ticket-checklist", "Tickety tento týden")}</div></div>`;
 
       // 1. Four numbers.
       const tile = (label, value, sub, color) => `<div class="pixel-panel" style="padding:10px 12px;text-align:center;min-width:0">
@@ -26744,7 +26748,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       h += `<div class="flip-ctrl">`;
       h += `<input type="text" placeholder="🔎 search NFT" value="${escHTML(q)}" oninput="_flipSearch(this.value)" style="background:#1c160f;border:1px solid var(--border-brown);color:var(--text-primary);border-radius:5px;padding:4px 8px;font-size:0.6rem;font-family:'Courier New',monospace;min-width:140px">`;
       for (const [k, lbl] of _flipSorts) h += `<button class="roi-pill${sort === k ? " active" : ""}" onclick="_flipSetSort('${k}')">${lbl}</button>`;
-      h += `</div>`;
+      h += _wPinBtn("flip-table", "Flipy NFT") + `</div>`;
       h += _mktPausedNotice(d.items[0]?.updatedAt, 3);
       h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">${d.count} boostovaných NFT s bid i ask · <span class="flip-good">zelená</span> marže ≥15 % (zdravý flip) · <span class="flip-bad">červená</span> net ≤0 (spread nepokryje poplatek)</div>`;
       h += `<div style="overflow-x:auto"><table class="flip-t"><thead><tr>
