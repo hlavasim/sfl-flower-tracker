@@ -3197,6 +3197,48 @@
       border: 1px solid var(--c-line); color: var(--c-muted); box-shadow: none; }
     .v-rm-tabbtns .dash-toggle-btn.on { background: var(--c-text); color: var(--c-bg); border-color: var(--c-text); font-weight: 600; }
     .v-rm-warn { margin: 8px 0; padding: 8px 12px; border-radius: 10px; background: rgba(224,179,74,0.12); color: var(--c-yellow); font-size: 13px; }
+    /* the buy path's ⭐ Skills view: summary tiles + the skill ladder (roadmapSkillsViewHtml / roadmapAllUpgradesHtml) */
+    .v-sk-sum { padding: 12px 14px; margin-bottom: 14px; }
+    .v-sk-sum .v-kpis { margin-bottom: 6px; }
+    .v-sk-sum .v-kpi input { width: 52px; font: inherit; font-size: 12px; padding: 1px 4px; background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 6px; }
+    .v-sk-sub { margin: 12px 0 6px; font-size: 11px; color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .v-sk-sub small { text-transform: none; letter-spacing: 0; font-size: 12px; }
+    .v-sk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .v-sk-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px 3px 6px; border-radius: 999px; background: var(--c-card2); font-size: 12.5px; color: var(--c-text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .v-sk-chip small { color: var(--c-dim); font-size: 11px; }
+    .v-sk-chip .inline-icon, .v-sk-ladder .inline-icon { width: 18px; height: 18px; margin: 0; flex: none; }
+    .v-sk-pos { color: var(--c-green); }
+    .v-sk-intro { font-size: 13px; color: var(--c-muted); line-height: 1.55; margin: 0 0 10px; }
+    .v-sk-intro b { color: var(--c-text); }
+    .v-sk-intro .v-sk-pos { color: var(--c-green); } .v-sk-intro .v-rm-neg { color: var(--c-red); }
+    .v-sk-ctl { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin: 0 0 10px; }
+    .v-sk-ctl > span { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .v-sk-ctl > span > .v-dim { font-size: 12px; margin-right: 2px; }
+    .v-sk-ladder { border: 1px solid var(--c-line); border-radius: 12px; background: var(--c-card); overflow-x: auto; }
+    .v-sk-ladder > div { min-width: 600px; }
+    .v-sk-row { display: flex; gap: 10px; align-items: center; padding: 7px 12px; border-top: 1px solid var(--c-row); font-size: 13px; color: var(--c-text); }
+    .v-sk-row.v-sk-head { border-top: none; padding-top: 8px; padding-bottom: 6px; font-size: 11px; color: var(--c-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .v-sk-row.v-sk-click { cursor: pointer; }
+    .v-sk-row.v-sk-click:hover { background: rgba(255,255,255,0.03); }
+    .v-sk-row.v-sk-off { opacity: 0.5; }
+    .v-sk-n { min-width: 22px; color: var(--c-dim); font-variant-numeric: tabular-nums; }
+    .v-sk-name { flex: 1 0 160px; min-width: 0; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .v-sk-name > b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+    .v-sk-num { min-width: 64px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .v-sk-head .v-sk-sort { color: var(--c-text); }
+    .v-sk-tree { min-width: 120px; white-space: nowrap; color: var(--c-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .v-sk-roi { min-width: 44px; text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .v-sk-cum { min-width: 76px; text-align: right; white-space: nowrap; color: var(--c-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .v-sk-lock { color: var(--c-yellow); font-size: 11px; font-weight: 400; }
+    .v-sk-cut { display: flex; align-items: center; gap: 10px; padding: 10px 12px 4px; font-size: 11.5px; color: var(--c-dim); border-top: 1px solid var(--c-row); }
+    .v-sk-cut::before, .v-sk-cut::after { content: ""; flex: 1; height: 1px; background: var(--c-line); }
+    .v-sk-detail { padding: 8px 12px 10px 44px; border-top: 1px solid var(--c-row); background: var(--c-card2); font-size: 12.5px; color: var(--c-muted); line-height: 1.7; }
+    .v-sk-detail b { color: var(--c-text); font-weight: 600; }
+    .v-sk-detail .v-sk-pos { color: var(--c-green); }
+    .v-sk-detail .v-rm-neg { color: var(--c-red); }
+    .v-sk-detail .v-sk-lock { font-size: inherit; }
+    .v-sk-foot { margin-top: 10px; font-size: 12px; color: var(--c-dim); line-height: 1.6; }
+    .v-sk-foot b { color: var(--c-muted); }
     .v-pet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
     .v-pet-card { background: var(--c-card2); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
     .v-pet-missing { opacity: 0.7; }
@@ -14017,7 +14059,7 @@
       for (const b of items) { const st = stepFor(b); if (!st) { if (at[b.name] === 0 && l1Value(b.name) != null) skip.noValue++; } }
 
       const TC = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
-      if (!order.length) return `<div style="font-size:0.5rem;color:var(--text-dim)">Nothing pays back right now.</div>`;
+      if (!order.length) return `<div class="v-sk-intro">Nothing pays back right now.</div>`;
 
       // Two toggles drive this table. The ascension MILESTONE projects the budget forward
       // (each ascension = +50 points and +3×(1+min(a+2,12)) shards); the MODE switches between
@@ -14036,30 +14078,32 @@
       // Where the money runs out at the projected budget — whichever currency binds first.
       const affordable = shown.filter(o => o._cP <= _projPt && (_l1 || o._cS <= _projSh)).length;
 
-      let h = `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px;line-height:1.6">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${shown.length} step${shown.length === 1 ? "" : "s"}${_l1 ? " (L1 only)" : ""} · ${_cp} skill point${_cp === 1 ? "" : "s"}${_l1 ? "" : ` · ${_cs} Ascension Shard${_cs === 1 ? "" : "s"}`} · +${roadmapFmtFlower(_shownGain)}/day</b> if you took the lot. ${_msN > 0 ? `By <b>${_msName(_msN)}</b> you will have` : "You have"} <b style="color:var(--green)">${_projPt} point${_projPt === 1 ? "" : "s"}</b>${_l1 ? " (L1 only — no shards)" : ` and <b style="color:${_projSh ? "var(--green)" : "var(--red)"}">${_projSh} shard${_projSh === 1 ? "" : "s"}</b>`}. ROI prices points only — shards are not tradable, so they have no price. ${ps.valueBasis === "measured"
+      let h = `<div class="v-sk-intro">Every upgrade you can still take — buying a skill (L1) and each rank above it — best payback first, walked as a ladder so nothing sits above what it needs. <b>${shown.length} step${shown.length === 1 ? "" : "s"}${_l1 ? " (L1 only)" : ""} · ${_cp} skill point${_cp === 1 ? "" : "s"}${_l1 ? "" : ` · ${_cs} Ascension Shard${_cs === 1 ? "" : "s"}`} · +${roadmapFmtFlower(_shownGain)}/day</b> if you took the lot. ${_msN > 0 ? `By <b>${_msName(_msN)}</b> you will have` : "You have"} <b class="v-sk-pos">${_projPt} point${_projPt === 1 ? "" : "s"}</b>${_l1 ? " (L1 only — no shards)" : ` and <b class="${_projSh ? "v-sk-pos" : "v-rm-neg"}">${_projSh} shard${_projSh === 1 ? "" : "s"}</b>`}. ROI prices points only — shards are not tradable, so they have no price. ${ps.valueBasis === "measured"
         ? `Values are priced at your <b>measured</b> throughput${ps.effMeta && ps.effMeta.days > 1 ? ` (${ps.effMeta.snaps} snapshots over ${ps.effMeta.days.toFixed(1)} days)` : ""}, not the theoretical ceiling.`
         : `Values are at <b>theoretical</b> throughput — no farm history reached the server, so measured could not be computed.`}</div>`;
-      h += `<div style="display:flex;gap:14px;align-items:center;margin:0 0 8px;flex-wrap:wrap">
-        <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><span style="font-size:0.46rem;color:var(--text-dim)">budget at:</span>${[0, 1, 2, 3, 4].map(n => { const on = n === _msN; return `<button onclick="_roadmapSetSkillMilestone(${n})" title="${n === 0 ? "what you have now" : "what you will have saved by ascension " + _msName(n) + ": +" + (50 * n) + " pt and the bands' shards"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${_msName(n)}</button>`; }).join("")}</div>
-        <div style="display:flex;gap:4px;align-items:center"><span style="font-size:0.46rem;color:var(--text-dim)">show:</span>${[["all", "All"], ["l1", "L1 only"]].map(([m, lbl]) => { const on = (_skillLadderMode || "all") === m; return `<button onclick="_roadmapSetSkillLadderMode('${m}')" title="${m === "l1" ? "base skills only (L1) — they cost points only, the line follows the free points" : "every upgrade (L1 and rank-ups) — the line follows points and shards"}" style="font-size:0.48rem;padding:2px 8px;border:1px solid var(--border-brown);border-radius:4px;cursor:pointer;background:${on ? "var(--sunpetal)" : "#241a10"};color:${on ? "#1a120a" : "var(--text-secondary)"};font-weight:${on ? "bold" : "normal"}">${lbl}</button>`; }).join("")}</div>
+      h += `<div class="v-sk-ctl">
+        <span><span class="v-dim">budget at</span>${[0, 1, 2, 3, 4].map(n => { const on = n === _msN; return `<button class="dash-toggle-btn${on ? " on" : ""}" onclick="_roadmapSetSkillMilestone(${n})" title="${n === 0 ? "what you have now" : "what you will have saved by ascension " + _msName(n) + ": +" + (50 * n) + " pt and the bands' shards"}">${_msName(n)}</button>`; }).join("")}</span>
+        <span><span class="v-dim">show</span>${[["all", "All"], ["l1", "L1 only"]].map(([m, lbl]) => { const on = (_skillLadderMode || "all") === m; return `<button class="dash-toggle-btn${on ? " on" : ""}" onclick="_roadmapSetSkillLadderMode('${m}')" title="${m === "l1" ? "base skills only (L1) — they cost points only, the line follows the free points" : "every upgrade (L1 and rank-ups) — the line follows points and shards"}">${lbl}</button>`; }).join("")}</span>
       </div>`;
       // Column order is mobile-first: number, name, then the two figures you actually decide
       // on (FLOWER/d and per point) so they fit inside a ~390px screen without scrolling.
       // tree·cost / ROI / cumulative sit to their right, reachable by horizontal scroll.
-      h += `<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;overflow-x:auto"><div style="min-width:566px">`;
-      h += `<div style="display:flex;gap:6px;padding:3px 8px;border-bottom:1px solid #20190f;font-size:0.44rem;color:var(--text-dim)"><span style="min-width:20px"></span><span style="flex:1 0 148px">skill</span><span style="min-width:52px;text-align:right;white-space:nowrap">FLOWER/d</span><span style="min-width:60px;text-align:right;white-space:nowrap;color:var(--sunpetal);font-weight:bold" title="The list is sorted by this column, best first. FLOWER/day ÷ every point the item costs you (unlocking its tier included).">▼ per point</span><span style="min-width:108px;white-space:nowrap">tree · cost</span><span style="min-width:40px;text-align:right" title="Payback in days, the tier-unlock points included. It is just the inverse of the column beside it — a point costs the same on every row, so sorting by ROI and by FLOWER/d per point gives the SAME order.">ROI</span><span style="min-width:72px;text-align:right;white-space:nowrap">cumulative</span></div>`;
+      h += `<div class="v-sk-ladder"><div>`;
+      h += `<div class="v-sk-row v-sk-head"><span class="v-sk-n"></span><span class="v-sk-name">skill</span><span class="v-sk-num">FLOWER/d</span><span class="v-sk-num v-sk-sort" title="The list is sorted by this column, best first. FLOWER/day ÷ every point the item costs you (unlocking its tier included).">▼ per point</span><span class="v-sk-tree">tree · cost</span><span class="v-sk-roi" title="Payback in days, the tier-unlock points included. It is just the inverse of the column beside it — a point costs the same on every row, so sorting by ROI and by FLOWER/d per point gives the SAME order.">ROI</span><span class="v-sk-cum">cumulative</span></div>`;
       shown.forEach((r, i) => {
         if (i === affordable) {
           const why = (!_l1 && shown[i]._cS > _projSh && shown[i]._cP <= _projPt)
             ? `out of Ascension Shards (${_projSh}${_msN > 0 ? " by " + _msName(_msN) : " banked"})`
             : `out of skill points (${_projPt}${_msN > 0 ? " by " + _msName(_msN) : " free"})`;
-          h += `<div style="padding:4px 8px;background:#2a1410;border-top:2px solid var(--red);border-bottom:1px solid #20190f;font-size:0.47rem;color:var(--red)">— from here on you cannot pay yet: ${why} —</div>`;
+          h += `<div class="v-sk-cut">from here on you cannot pay yet: ${why}</div>`;
         }
         const col = TC[r.tree] || "#8a7a5a";
         const roiD = r.roiAll != null ? r.roiAll : r.roi;   // unlock-aware
         const roiTxt = roiD < 400 ? Math.round(roiD) + "d" : (roiD / 365).toFixed(1) + "r";
-        const dim = i >= affordable ? "opacity:0.55;" : "";
-        const gate = r.gap > 0 ? ` <span style="color:#e8a060;font-size:0.42rem" title="The tier opens only once the ${escHTML(r.tree)} tree has ${r.gap} more points (tier 3 points don’t count). The cost and ROI include them: ${r.points} + ${r.gap} = ${r.ptsAll} points.">🔒+${r.gap}pt</span>` : "";
+        // roiColorFor's thresholds (green fades to white by 730 d, red from 1460 d) as calm classes.
+        const roiCls = !(roiD > 0) ? "" : roiD <= 365 ? "v-sk-pos" : roiD >= 1460 ? "v-rm-neg" : "";
+        const dim = i >= affordable ? " v-sk-off" : "";
+        const gate = r.gap > 0 ? ` <span class="v-sk-lock" title="The tier opens only once the ${escHTML(r.tree)} tree has ${r.gap} more points (tier 3 points don’t count). The cost and ROI include them: ${r.points} + ${r.gap} = ${r.ptsAll} points.">🔒+${r.gap}pt</span>` : "";
         /*
          * Click a row to see what the skill actually does. The toggle walks to the next
          * sibling instead of taking the skill name as an argument — several skill names carry
@@ -14068,23 +14112,23 @@
          * the wishlist's ✕ silently dead. No name, no escaping problem.
          */
         const TOGGLE = "var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'block':'none';";
-        h += `<div onclick="${TOGGLE}" title="click for the detail" style="display:flex;gap:6px;align-items:baseline;padding:4px 8px;border-bottom:1px solid #20190f;font-size:0.55rem;cursor:pointer;${dim}"><span style="color:var(--text-dim);min-width:20px">${i + 1}.</span><b style="flex:1 0 148px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHTML(r.name)} <span style="color:var(--text-dim);font-weight:normal">L${r.lvl}</span>${gate}</b><span style="color:var(--green);font-weight:bold;min-width:52px;text-align:right;white-space:nowrap">+${roadmapFmtFlower(r.delta)}/d</span><span style="color:var(--sunpetal);font-weight:bold;font-size:0.5rem;min-width:60px;text-align:right;white-space:nowrap" title="${roadmapFmtFlower(r.delta)}/d ÷ ${r.ptsAll} points — the list is sorted by this">+${roadmapFmtFlower(r.perPt)}/pt</span><span style="color:${col};font-size:0.45rem;min-width:108px;white-space:nowrap">${escHTML(r.tree || "")} · ${r.gap > 0 ? `<b style="color:#e8a060">${r.ptsAll}</b>` : r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span style="color:${roiColorFor(roiD)};font-size:0.45rem;min-width:40px;text-align:right">${roiTxt}</span><span style="color:var(--text-dim);font-size:0.45rem;min-width:72px;text-align:right;white-space:nowrap">${r._cP}pt${r._cS ? " · " + r._cS + "◆" : ""}</span></div>`;
+        h += `<div class="v-sk-row v-sk-click${dim}" onclick="${TOGGLE}" title="click for the detail"><span class="v-sk-n">${i + 1}.</span><span class="v-sk-name">${_dashIcon(String(r.name).replace(/\s*→\s*Level\s*\d+$/, ""))}<b>${escHTML(r.name)}</b> <span class="v-dim">L${r.lvl}</span>${gate}</span><span class="v-sk-num v-sk-pos">+${roadmapFmtFlower(r.delta)}/d</span><span class="v-sk-num" title="${roadmapFmtFlower(r.delta)}/d ÷ ${r.ptsAll} points — the list is sorted by this">+${roadmapFmtFlower(r.perPt)}/pt</span><span class="v-sk-tree"><span class="v-dot" style="background:${col}"></span>${escHTML(r.tree || "")} · ${r.gap > 0 ? `<b class="v-sk-lock">${r.ptsAll}</b>` : r.points}pt${r.shards ? " + " + r.shards + "◆" : ""}</span><span class="v-sk-roi ${roiCls}">${roiTxt}</span><span class="v-sk-cum">${r._cP}pt${r._cS ? " · " + r._cS + "◆" : ""}</span></div>`;
 
         const catRows = Object.entries(r.byCat || {}).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
         const sd = SKILL_TREE_DATA[r.name] || {};
-        h += `<div style="display:none;padding:6px 10px 8px 30px;border-bottom:1px solid #20190f;background:#120d07;font-size:0.47rem;color:var(--text-secondary);line-height:1.8">
-          <div><span style="color:var(--text-dim)">what it does:</span> <b>${escHTML(r.text || sd.buff || "—")}</b></div>
-          ${r.lvl === 1 && sd.debuff ? `<div><span style="color:var(--text-dim)">drawback:</span> <span style="color:var(--red)">${escHTML(sd.debuff)}</span></div>` : ""}
-          ${r.lvl > 1 ? `<div style="color:var(--text-dim)">rank ${r.lvl} of ${(sr[r.name] || {}).maxLevel || "?"} · ${r.points} points + ${r.shards} shard${r.shards === 1 ? "" : "s"}</div>`
-                      : `<div style="color:var(--text-dim)">skill purchase · tier ${r.tier || 1} · ${r.points} point${r.points === 1 ? "" : "s"}</div>`}
-          ${catRows.length ? `<div><span style="color:var(--text-dim)">rozpad:</span> ${catRows.map(([c, v]) => `${escHTML((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c)} <b style="color:${v >= 0 ? "var(--green)" : "var(--red)"}">${v >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(v))}/d</b>`).join(" · ")}</div>` : ""}
-          <div><span style="color:var(--text-dim)">per point:</span> <b style="color:var(--sunpetal)">+${roadmapFmtFlower(r.perPt)}/d per skill point</b> <span style="color:var(--text-dim)">(${roadmapFmtFlower(r.delta)} ÷ ${r.ptsAll} points)</span></div>
-          <div style="color:var(--text-dim)">the points cost ≈ ${roadmapFmtFlower(sflPerPt * r.ptsAll)} ${sflIcon()} · pays back in ${roiTxt}</div>
-          ${r.gap > 0 ? `<div style="color:#e8a060">🔒 the tier isn’t open yet — ${r.gap} point${r.gap === 1 ? "" : "s"} missing in the ${escHTML(r.tree)} tree (tier 3 points don’t count). The cost and ROI above include them: ${r.points} own + ${r.gap} to unlock = <b>${r.ptsAll}</b>. The unlocking points earn something themselves, which isn’t counted here — so this is rather pessimistic.</div>` : ""}
+        h += `<div class="v-sk-detail" style="display:none">
+          <div><span class="v-dim">what it does:</span> <b>${escHTML(r.text || sd.buff || "—")}</b></div>
+          ${r.lvl === 1 && sd.debuff ? `<div><span class="v-dim">drawback:</span> <span class="v-rm-neg">${escHTML(sd.debuff)}</span></div>` : ""}
+          ${r.lvl > 1 ? `<div class="v-dim">rank ${r.lvl} of ${(sr[r.name] || {}).maxLevel || "?"} · ${r.points} points + ${r.shards} shard${r.shards === 1 ? "" : "s"}</div>`
+                      : `<div class="v-dim">skill purchase · tier ${r.tier || 1} · ${r.points} point${r.points === 1 ? "" : "s"}</div>`}
+          ${catRows.length ? `<div><span class="v-dim">breakdown:</span> ${catRows.map(([c, v]) => `${escHTML((POWER_CATEGORIES[c] && POWER_CATEGORIES[c].label) || c)} <b class="${v >= 0 ? "v-sk-pos" : "v-rm-neg"}">${v >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(v))}/d</b>`).join(" · ")}</div>` : ""}
+          <div><span class="v-dim">per point:</span> <b>+${roadmapFmtFlower(r.perPt)}/d per skill point</b> <span class="v-dim">(${roadmapFmtFlower(r.delta)} ÷ ${r.ptsAll} points)</span></div>
+          <div class="v-dim">the points cost ≈ ${roadmapFmtFlower(sflPerPt * r.ptsAll)} ${sflIcon()} · pays back in ${roiTxt}</div>
+          ${r.gap > 0 ? `<div class="v-sk-lock">🔒 the tier isn’t open yet — ${r.gap} point${r.gap === 1 ? "" : "s"} missing in the ${escHTML(r.tree)} tree (tier 3 points don’t count). The cost and ROI above include them: ${r.points} own + ${r.gap} to unlock = <b>${r.ptsAll}</b>. The unlocking points earn something themselves, which isn’t counted here — so this is rather pessimistic.</div>` : ""}
         </div>`;
       });
       h += `</div></div>`;
-      h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:6px;line-height:1.7;border-top:1px solid #20190f;padding-top:6px">Sorted by <b style="color:var(--sunpetal)">▼ per point</b>, best first — subject to one constraint: a rank can never appear above the rank it needs, so where a Level 2 buys less per point than its Level 3 it still comes first, because you cannot skip it. Sorting by ROI would give the SAME order and is not a separate ranking: a point costs the same everywhere, so ROI is just this column inverted. <b>per point</b> is the honest comparison between a cheap skill and an expensive one: FLOWER/day divided by every point the pick costs you. 🔒+Npt means the tier is still shut — the game wants N more points in that tree first (tier-3 points never count), and both the cost and the ROI already include them, which is why a locked pick ranks lower than its sticker price suggests. Click any row for what it does. <b>${87} of the game's 153 skills have no Level 2/3 at all</b> — Acre Farm and Hectare Farm among them — so those appear once, as L1, and never again. Not listed: upgrades worth 0 FLOWER/day here (XP, daily-limit and cooking-speed kinds carry no production value; nor does a boost this farm already makes redundant — Acre Farm is one, its debuff cancels its buff on your crop mix).</div>`;
+      h += `<div class="v-sk-foot">Sorted by <b>▼ per point</b>, best first — subject to one constraint: a rank can never appear above the rank it needs, so where a Level 2 buys less per point than its Level 3 it still comes first, because you cannot skip it. Sorting by ROI would give the SAME order and is not a separate ranking: a point costs the same everywhere, so ROI is just this column inverted. <b>per point</b> is the honest comparison between a cheap skill and an expensive one: FLOWER/day divided by every point the pick costs you. 🔒+Npt means the tier is still shut — the game wants N more points in that tree first (tier-3 points never count), and both the cost and the ROI already include them, which is why a locked pick ranks lower than its sticker price suggests. Click any row for what it does. <b>${87} of the game's 153 skills have no Level 2/3 at all</b> — Acre Farm and Hectare Farm among them — so those appear once, as L1, and never again. Not listed: upgrades worth 0 FLOWER/day here (XP, daily-limit and cooking-speed kinds carry no production value; nor does a boost this farm already makes redundant — Acre Farm is one, its debuff cancels its buff on your crop mix).</div>`;
       return h;
     }
 
@@ -14388,17 +14432,19 @@
         </div>`;
       };
       let h = "";
-      h += `<div class="pixel-panel" style="padding:11px;margin-bottom:14px">`;
-      h += `<div style="font-size:0.6rem;color:var(--sunpetal);display:flex;gap:8px;align-items:center;flex-wrap:wrap">Level ${level} · <b style="color:var(--green)">≈${freePts} free skill point${freePts === 1 ? "" : "s"}</b>${sflPerPt > 0 ? ` · 1 point ≈ ${roadmapFmtFlower(sflPerPt)} SFL of XP` : ""}<label style="font-size:0.48rem;color:var(--text-dim)">set: <input type="number" min="0" placeholder="auto" value="${settings.skillPts != null ? settings.skillPts : ''}" style="width:42px;font-size:0.55rem" onchange="_roadmapSetSkillPts(this.value)" title="Override the free-points estimate (it can read high if you own Salt / Fish-Smoking skills this tool doesn't track)."></label></div>`;
+      // One chip per skill in the TOP TO TAKE / CONSIDER RESETTING lists: icon, name, FLOWER/day, points · tree.
+      const sumChip = (r, cls, val) => `<span class="v-sk-chip" title="${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")}">${_dashIcon(String(r.c.name).replace(/\s*→\s*Level\s*\d+$/, ""))}${escHTML(r.c.name)} <b class="${cls}">${val}</b> <small>${r.c.skillPoints || 1}pt · ${escHTML(r.c.skillTree || "")}</small></span>`;
+      h += `<div class="pixel-panel v-sk-sum">`;
+      h += `<div class="v-kpis"><div class="v-kpi"><b>${level}</b><span>level</span></div><div class="v-kpi"><b class="v-sk-pos">≈${freePts}</b><span>free skill point${freePts === 1 ? "" : "s"} · set: <input type="number" min="0" placeholder="auto" value="${settings.skillPts != null ? settings.skillPts : ''}" onchange="_roadmapSetSkillPts(this.value)" title="Override the free-points estimate (it can read high if you own Salt / Fish-Smoking skills this tool doesn't track)."></span></div>${sflPerPt > 0 ? `<div class="v-kpi"><b>${roadmapFmtFlower(sflPerPt)}</b><span>SFL of XP per point</span></div>` : ""}</div>`;
       if (resetList.length) {
         const loss = resetList.reduce((s, r) => s - r.net, 0), freed = resetList.reduce((s, r) => s + (r.c.skillPoints || 1), 0);
-        h += `<div style="margin-top:9px;font-size:0.52rem;color:var(--red)"><b>◆ CONSIDER RESETTING (${resetList.length})</b> — owned skills hurting your FLOWER/day:</div>`;
-        h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${resetList.map(r => `${escHTML(r.c.name)} <span style="color:var(--red)">${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
-        h += `<div style="font-size:0.47rem;color:var(--text-dim);margin-top:2px">Removing all of them stops a <b style="color:var(--green)">${roadmapFmtFlower(loss)}/d</b> loss and frees ${freed} points. (In-game resets cost SFL &amp; have a cooldown.)</div>`;
+        h += `<div class="v-sk-sub">◆ Consider resetting (${resetList.length}) <small class="v-dim">— owned skills hurting your FLOWER/day</small></div>`;
+        h += `<div class="v-sk-chips">${resetList.map(r => sumChip(r, "v-rm-neg", `${roadmapFmtFlower(r.net)}/d`)).join("")}</div>`;
+        h += `<div class="v-rm-note v-dim">Removing all of them stops a <b class="v-sk-pos">${roadmapFmtFlower(loss)}/d</b> loss and frees ${freed} points. (In-game resets cost SFL &amp; have a cooldown.)</div>`;
       }
       if (picks.length) {
-        h += `<div style="margin-top:9px;font-size:0.52rem;color:var(--lily)"><b>⭐ TOP TO TAKE</b> — best FLOWER/day you don't own:</div>`;
-        h += `<div style="font-size:0.52rem;color:var(--text-dim);line-height:1.7">${picks.map(r => `${escHTML(r.c.name)} <span style="color:var(--green)">+${roadmapFmtFlower(r.net)}/d</span> <span style="font-size:0.45rem">(${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")})</span>`).join(" · ")}</div>`;
+        h += `<div class="v-sk-sub">⭐ Top to take <small class="v-dim">— best FLOWER/day you don't own</small></div>`;
+        h += `<div class="v-sk-chips">${picks.map(r => sumChip(r, "v-sk-pos", `+${roadmapFmtFlower(r.net)}/d`)).join("")}</div>`;
       }
       h += `</div>`;
       h += `<div id="skill-all-upgrades" style="margin-bottom:10px">${roadmapAllUpgradesHtml(settings)}</div>`;
