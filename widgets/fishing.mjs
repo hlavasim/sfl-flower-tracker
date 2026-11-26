@@ -339,7 +339,8 @@ fishingToday.glanceModel = model((m, ctx) => {
     head: { value: compact(val(t.bestW)), unit: " XP/🌸", cap: `cast ${t.bestW.worm} · ${m.season}`, hero: ic(ctx, t.bestW.worm) },
     items: t.wsNow.map((s) => ({ icon: ic(ctx, s.worm), name: s.worm, sub: `${s.cast.toFixed(3)}${FL} a cast`, value: compact(val(s)),
       tone: s === t.bestW ? "ok" : "", pct: share(val(s), top) })),
-    tiles: [{ label: "cast", value: t.bestW.worm }, { label: "XP/🌸", value: compact(val(t.bestW)) },
+    // a tile holds one short word: "Red Wiggler" → "Wiggler"
+    tiles: [{ label: "cast", value: t.bestW.worm.split(" ").pop() }, { label: "XP/🌸", value: compact(val(t.bestW)) },
       { label: "season", value: m.season }, { label: "fish/cast", value: t.fpc.toFixed(2) }],
     foot: fm ? `Fish Market: ${fm.bait} → ${fm.fish} ~${(fm.perDay * 4).toFixed(1)}/day` : "",
   };

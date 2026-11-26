@@ -25,3 +25,11 @@ for (const [type, w] of Object.entries(WIDGETS)) {
     assert.doesNotMatch(open, /The widget failed/);
   });
 }
+
+test("glance looks: no widget keeps a hand-written glance face, and every natural look is in the catalogue", async () => {
+  const { templateById } = await import("../../ui/glance-templates.mjs");
+  for (const [type, w] of Object.entries(WIDGETS)) {
+    assert.strictEqual(w.glance, undefined, `${type} still has a glance()`);
+    if (typeof w.glanceModel === "function" && w.look) assert.ok(templateById(w.look), `${type}: look "${w.look}" is not a template`);
+  }
+});

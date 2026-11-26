@@ -3,16 +3,15 @@ import assert from "node:assert";
 import { createHost } from "../../app/widget-host.mjs";
 import { cleanSettings } from "../../app/boards.mjs";
 
-// iPhone-style widgets: on a board, a widget with a glance face shows it at the copy's size (S / M /
-// L), Full = the table; a tap opens the full widget in a sheet; the gallery previews the glance.
+// A model widget on a board shows its glance look (ui/glance-templates); ⚙ Look switches between the
+// widget and the full table; a tap opens the full widget in a sheet; the gallery previews the look.
 
 const G = {
-  type: "g", title: "🍳 Glance", page: "bumpkin",
-  sizes: ["s", "m"], size: "s",
+  type: "g", title: "🍳 Glance", page: "bumpkin", look: "number",
   columns: [{ key: "n", label: "N" }],
   rowKey: (r) => r.n,
   build: ({ list }) => ({ rows: list || [], footer: "" }),
-  glance: ({ list }, ctx, opts, size) => ({ html: `<b class="face">${size}:${(list || []).length}</b>` }),
+  glanceModel: ({ list }) => (list && list.length ? { head: { value: list.length, cap: "things" }, items: list.map((r) => ({ name: r.n, value: 1 })) } : { empty: "nothing yet" }),
 };
 const PLAIN = { type: "p", title: "Plain", columns: [{ key: "n", label: "N" }], rowKey: (r) => r.n, build: ({ list }) => ({ rows: list || [] }) };
 const DATA = { list: [{ n: "a" }, { n: "b" }] };
@@ -24,56 +23,44 @@ function mem() {
 function hostWith(types = ["g"]) {
   const h = createHost({ registry: { g: G, p: PLAIN }, storage: mem() });
   for (const t of types) h.handle("page:" + t, "pin", JSON.stringify({ board: "main" }));
-  const items = h.doc().boards[0].items;
-  return { h, items, id: (k = 0) => `b:main:${items[k].i}` };
+  return { h, id: (k = 0) => `b:main:${h.doc().boards[0].items[k].i}` };
 }
 const item = (h, k = 0) => h.doc().boards[0].items[k];
 
-test("a board copy of a widget with a glance shows the glance at its natural size; the table stays off", () => {
+test("a board copy of a model widget shows its look; the table stays off", () => {
   const { h } = hostWith();
   const html = h.renderItem("main", item(h), { data: DATA });
-  assert.match(html, /class="w-frame pixel-panel w-on-board w-glance w-g-s"/);
-  assert.match(html, /<b class="face">s:2<\/b>/);
+  assert.match(html, /class="w-frame pixel-panel w-on-board w-glance w-g-1x1"/);
+  assert.match(html, /<div class="gx-num">2<\/div><div class="gx-cap">things<\/div>/);
   assert.doesNotMatch(html, /<table/);
   assert.match(html, /<div class="w-body" data-action="expand" data-value="">/, "a tap opens the full widget");
-  assert.doesNotMatch(html, /data-resize/, "a glance is sized by S / M / L, not dragged");
+  assert.doesNotMatch(html, /data-resize/, "a look is chosen, not dragged");
+  assert.match(h.renderItem("main", item(h), { data: {} }), /<div class="w-empty-msg">nothing yet<\/div>/);
 });
 
-test("the size is the copy's own setting: S / M / L it offers, Full = the table; anything else is ignored", () => {
-  const { h, id } = hostWith();
-  assert.ok(h.handle(id(), "size", "m"));
-  assert.strictEqual(item(h).settings.size, "m");
-  assert.match(h.renderItem("main", item(h), { data: DATA }), /w-g-m[\s\S]*<b class="face">m:2<\/b>/);
-  h.handle(id(), "size", "full");
-  const full = h.renderItem("main", item(h), { data: DATA });
-  assert.doesNotMatch(full, /w-glance/);
-  assert.match(full, /<table/);
-  h.handle(id(), "size", "l");   // not offered by this widget → its natural size
-  assert.match(h.renderItem("main", item(h), { data: DATA }), /w-g-s/);
-  assert.deepStrictEqual(cleanSettings({ size: "xl" }), {});
-  assert.deepStrictEqual(cleanSettings({ size: "m" }), { size: "m" });
-});
-
-test("⚙ Look offers the sizes on a board copy, not on the widget's page", () => {
+test("⚙ Look switches a board copy between the widget and the full table; the widget's page has no such choice", () => {
   const { h, id } = hostWith();
   h.handle(id(), "cog", "");
   h.handle(id(), "settings-tab", "look");
   const html = h.renderItem("main", item(h), { data: DATA });
-  for (const [v, t] of [["s", "Small"], ["m", "Wide"], ["full", "Full table"]]) {
-    assert.match(html, new RegExp(`data-action="size" data-value="${v}">${t}<`));
-  }
-  assert.doesNotMatch(html, /data-value="l">Large</, "only the sizes the widget offers");
+  assert.match(html, /data-action="size" data-value="look">Widget</);
+  assert.match(html, /data-action="size" data-value="full">Full table</);
+  h.handle(id(), "size", "full");
+  assert.match(h.renderItem("main", item(h), { data: DATA }), /<table/);
+  h.handle(id(), "size", "look");
+  assert.doesNotMatch(h.renderItem("main", item(h), { data: DATA }), /<table/);
   h.handle("page:g", "cog", "");
   h.handle("page:g", "settings-tab", "look");
   assert.doesNotMatch(h.renderPage("g", { data: DATA }), /data-action="size"/);
+  assert.deepStrictEqual(cleanSettings({ size: "full" }), { size: "full" });
 });
 
-test("a widget without a glance is always the full table, with no size choice", () => {
-  const { h, id } = hostWith(["p"]);
-  h.handle(id(), "size", "s");
+test("a widget without a model is always the full table", () => {
+  const { h } = hostWith(["p"]);
   const html = h.renderItem("main", item(h), { data: DATA });
   assert.doesNotMatch(html, /w-glance/);
   assert.match(html, /<table/);
+  assert.deepStrictEqual(h.sizesOf("p"), []);
 });
 
 test("expand opens the full widget in a sheet over the board; collapse (or the ✕) closes it", () => {
@@ -88,26 +75,27 @@ test("expand opens the full widget in a sheet over the board; collapse (or the �
   assert.doesNotMatch(h.renderItem("main", item(h), { data: DATA }), /w-sheet/);
 });
 
-test("a glance that throws shows the error, not a broken board", () => {
-  const bad = { ...G, glance: () => { throw new Error("boom"); } };
+test("a model that throws shows the error, not a broken board", () => {
+  const bad = { ...G, glanceModel: () => { throw new Error("boom"); } };
   const h = createHost({ registry: { g: bad }, storage: mem() });
   h.handle("page:g", "pin", "");
   assert.match(h.renderItem("main", item(h), { data: DATA }), /The widget failed: boom/);
 });
 
-test("gallery preview: the glance at the asked size (natural by default), the table for Full or no glance", () => {
+test("gallery: a model widget's look preview, the table for Full, none for a widget without a model", () => {
   const h = createHost({ registry: { g: G, p: PLAIN }, storage: mem() });
-  assert.strictEqual(h.preview("g", { data: DATA }), '<b class="face">s:2</b>');
-  assert.strictEqual(h.preview("g", { data: DATA, size: "m" }), '<b class="face">m:2</b>');
+  const p = h.lookPreview("g", { data: DATA });
+  assert.strictEqual(p.id, "number");
+  assert.match(p.html, /class="gx-num">2</);
+  assert.ok(p.offered.includes("number"));
   assert.match(h.preview("g", { data: DATA, size: "full" }), /<table/);
-  assert.match(h.preview("p", { data: DATA }), /<table/);
-  assert.deepStrictEqual(h.sizesOf("g"), ["s", "m"]);
-  assert.deepStrictEqual(h.sizesOf("p"), []);
-  assert.strictEqual(h.sizeOf("g"), "s");
+  assert.strictEqual(h.lookPreview("p", { data: DATA }), null);
 });
 
-test("pinning from the gallery can preset the size", () => {
+test("pinning from the gallery can preset the look or the table", () => {
   const h = createHost({ registry: { g: G }, storage: mem() });
-  h.handle("page:g", "pin", JSON.stringify({ board: "main", size: "m" }));
-  assert.strictEqual(item(h).settings.size, "m");
+  h.handle("page:g", "pin", JSON.stringify({ board: "main", look: "list-1" }));
+  assert.strictEqual(item(h).settings.look, "list-1");
+  h.handle("page:g", "pin", JSON.stringify({ board: "main", look: "full" }));
+  assert.strictEqual(item(h, 1).settings.size, "full");
 });

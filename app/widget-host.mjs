@@ -6,17 +6,15 @@
 // changed, calls onChange(frameId) and returns whether it was handled.
 import { renderTable, tableSettingsPanel, optionsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
 import { renderFrame, freshness } from "../ui/frame.mjs";
-import { STYLES, SIZES } from "../ui/glance.mjs";
+import { SIZES } from "../ui/glance.mjs";
 import { looksFor, renderLook, templateById } from "../ui/glance-templates.mjs";
 import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
   pageSettings, setPageSettings, pinnedCount, pinTarget, addBoard, removeBoard, setLastBoard, setBoardCols, COLS_DEFAULT } from "./boards.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "summary", "title", "size", "style", "reset"]);
-const SIZE_LABEL = { s: "Small", m: "Wide", t: "Tall", l: "Large", full: "Full table", look: "Widget",
-  ...Object.fromEntries(SIZES.map((s) => [s, s.replace("x", "×")])) };
-const STYLE_LABEL = { number: "Number", rows: "Rows", compact: "Compact", icons: "Icons", tiles: "Tiles", bars: "Bars", chart: "Chart", hero: "Hero" };
-const ALIAS = { s: "1x1", m: "2x1", t: "1x2", l: "2x2" };
+const SIZE_LABEL = { full: "Full table", look: "Widget" };
+const ALIAS = { s: "1x1", m: "2x1", t: "1x2", l: "2x2" };   // the S / M / T / L a v1 copy may have saved
 
 export function createHost({ registry, storage, onChange = () => {}, onRefresh = () => {} }) {
   let doc = loadBoards(storage);
@@ -39,23 +37,11 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   // the copy's own name (Look → Title) wins over the widget's title
   const titleOf = (widget, settings) => settings.title || ownTitle(widget, settings);
 
-  // iPhone-style sizes: a widget with a glance face offers widget.sizes (S / M / L) and starts at
-  // widget.size; a copy's settings.size picks one, "full" = the table. No glance = always the table.
-  // A widget with a glanceModel (a headline + items) gets every size and style from ui/glance's layout();
-  // an older hand-written glance() keeps the sizes it lists.
+  // A model widget (widget.glanceModel, ui/glance-templates) shows a look on a board ("look") or the full
+  // table (settings.size "full"); any other widget is always the table.
   const hasModel = (w) => !!w && typeof w.glanceModel === "function";
-  const sizesOf = (type) => { const w = registry[type]; return hasModel(w) ? ["look"] : w && typeof w.glance === "function" ? w.sizes || [w.size || "s"] : []; };
-  // a model widget reads the old S / M / T / L names as their W×H cells
-  const norm = (type, size) => (hasModel(registry[type]) ? (size === "full" ? "full" : "look") : size);
-  const stylesOf = () => [];   // a model widget picks a whole look (ui/glance-templates), not a style
-  const styleOf = (type, settings = {}) => { const w = registry[type]; return STYLES.includes(settings.style) ? settings.style : (w && w.glanceStyle) || "number"; };
-  const styleChoices = (type, settings) => stylesOf(type).map((v) => [v, STYLE_LABEL[v], v === styleOf(type, settings)]);
-  const naturalSize = (type) => { const w = registry[type], s = sizesOf(type), n = norm(type, w && w.size); return s.includes(n) ? n : s[0] || "full"; };
-  const sizeOf = (type, settings = {}) => {
-    const s = sizesOf(type), want = norm(type, settings.size);
-    if (!s.length || want === "full") return "full";
-    return s.includes(want) ? want : naturalSize(type);
-  };
+  const sizesOf = (type) => (hasModel(registry[type]) ? ["look"] : []);
+  const sizeOf = (type, settings = {}) => (hasModel(registry[type]) && settings.size !== "full" ? "look" : "full");
   // the model a model widget's glance is laid out from ({ error } when it threw)
   function modelOf(widget, settings, data, ctx) {
     try { return widget.glanceModel(data || {}, ctx || {}, settings.opts || {}) || {}; } catch (e) { return { error: (e && e.message) || String(e) }; }
@@ -87,20 +73,6 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     const s = sizesOf(type), cur = sizeOf(type, settings);
     return s.length ? [...s, "full"].map((v) => [v, SIZE_LABEL[v], v === cur]) : [];
   };
-  function glanceBody(widget, settings, data, ctx, size, model = null) {
-    try {
-      if (hasModel(widget)) {
-        const m = model || modelOf(widget, settings, data, ctx);
-        if (m.error) return `<div class="w-error">The widget failed: ${esc(m.error)}</div>`;
-        return m.empty ? `<div class="w-empty-msg">${esc(m.empty)}</div>` : layout(m, size, styleOf(widget.type, settings));
-      }
-      const out = widget.glance(data || {}, ctx || {}, settings.opts || {}, size) || {};
-      return out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`;
-    } catch (e) {
-      return `<div class="w-error">The widget failed: ${esc((e && e.message) || e)}</div>`;
-    }
-  }
-
   // a copy's settings with a look chosen: a template id, or "full" for the table
   const withLook = (s, look) => {
     const out = { ...s };
@@ -125,14 +97,14 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   }
 
   const summaryHtml = (html, mode) => (!html || mode === "off" ? "" : mode === "compact" ? `<div class="w-sum-compact">${html}</div>` : html);
-  function body(widget, settings, data, ctx, tab, force = null, sizes = [], styles = []) {
+  function body(widget, settings, data, ctx, tab, force = null, sizes = []) {
     try {
       if (widget.view) {
         // a tile or a chart: its own HTML, no table settings; its own options (if any) are the panel
         const out = widget.view(data || {}, ctx || {}, settings.opts || {}) || {};
         return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`,
           settingsHtml: tableSettingsPanel([], settings, { tab, view: true, options: (widget.options || []).filter((o) => !force || !(o.key in force)),
-            optionsLabel: widget.optionsLabel, defaultTitle: ownTitle(widget, settings), sizes, styles }) };
+            optionsLabel: widget.optionsLabel, defaultTitle: ownTitle(widget, settings), sizes }) };
       }
       const out = widget.build(data || {}, ctx || {}, settings.opts || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
@@ -142,7 +114,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
           : `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`),
         settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab,
           options: (widget.options || []).filter((o) => !force || !(o.key in force)), optionsLabel: widget.optionsLabel,
-          summary: !!out.summary, defaultTitle: ownTitle(widget, settings), sizes, styles }),
+          summary: !!out.summary, defaultTitle: ownTitle(widget, settings), sizes }),
       };
     } catch (e) {
       // The cog still offers a reset, so a bad saved setting is never a dead end.
@@ -169,9 +141,9 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       return renderFrame({ id, title: item.type, place: "board", w: item.w, h: item.h, body: `<div class="w-error">This widget no longer exists — remove it.</div>` });
     }
     const settings = effective(widget, item.settings);
-    const size = sizeOf(item.type, settings), sizes = sizeChoices(item.type, settings), styles = size === "full" ? [] : styleChoices(item.type, settings);
+    const size = sizeOf(item.type, settings), sizes = sizeChoices(item.type, settings);
     const loading = `<div class="w-fresh">Loading…</div>`;
-    const b = pending ? { html: loading, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id), null, sizes, styles);
+    const b = pending ? { html: loading, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id), null, sizes);
     const title = titleOf(widget, settings);
     if (size === "full") {
       expanded.delete(id);
@@ -211,13 +183,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       return face.slice(0, -"</section>".length) +
         `<div class="w-sheet" data-action="collapse" data-value=""><div class="w-sheet-card" data-action="noop" data-value="">${sheet}</div></div></section>`;
     }
-    const { w, h } = { w: { s: 1, m: 2, l: 2 }[size] || 1, h: { s: 1, m: 1, l: 2 }[size] || 1 };   // a hand-written glance: S / M / L
-    const face = renderFrame({ id, title, place: "board", glance: size, body: pending ? loading : glanceBody(widget, settings, data, ctx, size), fresh, cog: true,
-      settingsHtml: b.settingsHtml, settingsOpen: !isOpen && open.has(id), gw: Math.min(w, colsOf(boardId)), gh: h });
-    if (!isOpen) return face;
-    const sheet = renderFrame({ id, title, place: "sheet", body: b.html, fresh, cog: true, settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
-    return face.slice(0, -"</section>".length) +
-      `<div class="w-sheet" data-action="collapse" data-value=""><div class="w-sheet-card" data-action="noop" data-value="">${sheet}</div></div></section>`;
+    return "";   // not reached: a widget without a model is always the table
   }
 
   function handle(frameId, action, value) {
@@ -285,7 +251,6 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       if (!v || typeof v !== "object" || Array.isArray(v)) v = {};
       if (v.opts && typeof v.opts === "object" && !Array.isArray(v.opts)) settings.opts = { ...(settings.opts || {}), ...v.opts };
       if (["s", "m", "t", "l", "full", ...SIZES].includes(v.size)) settings.size = v.size;   // the size and style picked in the gallery
-      if (STYLES.includes(v.style)) settings.style = v.style;
       if (typeof v.look === "string" && (v.look === "full" || templateById(v.look))) Object.assign(settings, withLook(settings, v.look));
       // the chosen board, else the one visited last, else the first (a synced document may have no "main")
       const board = typeof v.board === "string" && doc.boards.some((b) => b.id === v.board) ? v.board : pinTarget(doc);
@@ -358,19 +323,16 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   // A page-level document change (add/remove a board, remember the visited one); saved, no re-render.
   const update = (fn) => { const next = fn(doc); if (next !== doc) { doc = next; saveBoards(storage, doc); } return doc; };
 
-  // The gallery's preview: the widget's body with its defaults (plus opts), no frame or controls.
-  // size: S / M / L shows the glance face (default: the widget's natural size), "full" the table.
-  function preview(type, { data, ctx, opts = null, size = "", style = "" } = {}) {
+  // The gallery's table preview: the widget's body with its defaults (plus opts), no frame or controls.
+  // (A model widget's look preview is lookPreview.)
+  function preview(type, { data, ctx, opts = null } = {}) {
     const widget = registry[type];
     if (!widget) return "";
-    const settings = { ...withForce(effective(widget, {}), opts), ...(style ? { style } : {}) };
-    const sz = size ? sizeOf(type, { size }) : naturalSize(type);
-    if (hasModel(widget) && style) settings.style = style;
-    return sz === "full" ? body(widget, settings, data, ctx, null).html : glanceBody(widget, settings, data, ctx, sz);
+    return body(widget, withForce(effective(widget, {}), opts), data, ctx, null).html;
   }
 
   return { doc: () => doc, update, preview, optsFor, pageOpts, itemOpts, sizesOf, sizeOf: (type, settings) => sizeOf(type, settings),
-    stylesOf, styleOf: (type, settings) => styleOf(type, settings), colsOf,
+    colsOf,
     // the gallery: a model widget's look (default: its natural one) with what it offers, and the picker
     lookPreview: (type, { data, ctx, opts = null, look = "", cols = 8 } = {}) => {
       const w = registry[type];
@@ -387,7 +349,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       if (m.error || m.empty) return "";
       return pickerHtml(m, looksFor(m, { cols }), current, cols, { action: false });
     },
-    naturalOf: (type) => ({ size: naturalSize(type), style: styleOf(type, {}) }), setBoardCols: (id, n) => update((d) => setBoardCols(d, id, n)),
+    setBoardCols: (id, n) => update((d) => setBoardCols(d, id, n)),
     addBoard: (b) => update((d) => addBoard(d, b)), removeBoard: (id) => update((d) => removeBoard(d, id)),
     visit: (id) => update((d) => setLastBoard(d, id)), reload: () => { doc = loadBoards(storage); }, registry, renderPage, renderItem, handle,
     needsOf, loadData, peekData, freshOf };
