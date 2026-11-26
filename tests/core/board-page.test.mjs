@@ -180,8 +180,12 @@ test("📌 asks which board (the boards, or a new one); ＋ Add widget shows eve
   assert.match(SRC, /__widgets\.handle\(frameId, "pin", JSON\.stringify\(\{ board, opts \}\)\);/);
   // the gallery: categories by page, the target list once per category, previews through the store
   assert.match(SRC, /for \(const cat of \["dolls", "crabs", "flowers", "foods"\]\) out\.push/);
-  assert.match(SRC, /el\.innerHTML = __widgets\.preview\(it\.type, \{ data, ctx: _wCtx\(it\.type\), opts: it\.opts \}\);/);
-  assert.match(SRC, /__widgets\.handle\("page:" \+ it\.type, "pin", JSON\.stringify\(\{ board: boardId, opts: it\.opts \}\)\);/);
+  assert.match(SRC, /el\.innerHTML = __widgets\.preview\(it\.type, \{ data: data\.get\(k\), ctx: _wCtx\(it\.type\), opts: it\.opts, size: size\[k\] \}\);/);
+  assert.match(SRC, /__widgets\.handle\("page:" \+ it\.type, "pin", JSON\.stringify\(\{ board: boardId, opts: it\.opts, \.\.\.\(sizeOf\(it\) !== "full" \? \{ size: size\[k\] \} : \{\}\) \}\)\);/);
+  // each card at its own size, S / M / L / Table switchable, a glance widget first in its section
+  assert.match(SRC, /const card = \(it, label\) => `<div class="w-gal-card w-gal-\$\{size\[it\.k\]\}"/);
+  assert.match(SRC, /data-size="\$\{sz\}"/);
+  assert.match(SRC, /here\.sort\(\(a, b\) => \(size\[a\.k\] === "full"\) - \(size\[b\.k\] === "full"\)\);/);
 });
 
 test("the gallery loads a preview only when its card scrolls into view, two at a time", () => {

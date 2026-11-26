@@ -3266,7 +3266,117 @@
     .w-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; touch-action: none;
       background: linear-gradient(135deg, transparent 50%, var(--border-brown) 50%, var(--border-brown) 60%, transparent 60%, transparent 75%, var(--border-brown) 75%); }
     .w-resize:hover { background: linear-gradient(135deg, transparent 50%, var(--sunpetal) 50%, var(--sunpetal) 60%, transparent 60%, transparent 75%, var(--sunpetal) 75%); }
-    @media (max-width: 700px) { .w-board > .w-frame { grid-column: span 12 !important; } .w-resize { display: none; } }
+    @media (max-width: 700px) { .w-board > .w-frame:not(.w-glance) { grid-column: span 12 !important; } .w-resize { display: none; } }
+    /* ── iPhone-style widgets: a board copy at S / M / L (its glance face, ui/glance.mjs) ──
+       The board is a 12-column grid of 8 px rows; every item's row span is fitted to its height
+       (_wFitBoard), so small widgets pack beside large ones the way an iPhone home screen does. */
+    .w-board { grid-auto-rows: 8px; row-gap: 0; column-gap: 16px; grid-auto-flow: row dense; align-items: start; }
+    .w-board > .w-frame { align-self: start; }
+    .w-board > .w-glance { grid-column: span 3; aspect-ratio: 1 / 1; }
+    .w-board > .w-g-m { grid-column: span 6; aspect-ratio: 2.06 / 1; }
+    .w-board > .w-g-l { grid-column: span 6; aspect-ratio: 1.03 / 1; }
+    @media (max-width: 700px) { .w-board > .w-glance { grid-column: span 6 !important; } .w-board > .w-g-m, .w-board > .w-g-l { grid-column: span 12 !important; } }
+    .w-glance.pixel-panel { border-radius: 22px; padding: 13px 15px 15px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07);
+      background: linear-gradient(160deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), var(--c-card); box-shadow: 0 10px 28px rgba(0,0,0,0.28);
+      transition: box-shadow 0.15s, border-color 0.15s; }
+    .w-glance.pixel-panel:hover { border-color: rgba(255,255,255,0.16); box-shadow: 0 14px 34px rgba(0,0,0,0.36); }
+    .w-glance .w-head { margin-bottom: 6px; gap: 6px; min-height: 22px; }
+    .w-glance .w-title { font-size: 12.5px; font-weight: 600; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .w-glance .w-fresh-ok, .w-glance .w-fresh-loading { display: none; }
+    /* the tools float over the corner (shown on hover), so the title keeps the whole width */
+    .w-glance .w-tools { position: absolute; top: 9px; right: 9px; z-index: 2; background: var(--c-card2); border-radius: 999px; padding: 1px 2px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+    .w-glance .w-grip { position: absolute; top: 12px; left: 4px; z-index: 2; }
+    .w-glance .w-tools, .w-glance .w-grip { opacity: 0; transition: opacity 0.15s; }
+    .w-glance:hover .w-tools, .w-glance:hover .w-grip, .w-glance:focus-within .w-tools { opacity: 1; }
+    @media (hover: none) { .w-glance .w-tools { opacity: 0.55; } }
+    .w-board > .w-glance > .w-body, .w-glance > .w-body { display: flex; flex-direction: column; position: relative; overflow: hidden; cursor: pointer; min-height: 0;
+      container-type: inline-size; }
+    .w-glance .w-empty-msg { margin: auto 0; color: var(--c-dim); font-size: 12.5px; }
+    .g-ok { color: #30d158; } .g-warn { color: #ff9f0a; } .g-bad { color: #ff453a; } .g-info { color: #0a84ff; } .g-accent { color: #bf5af2; }
+    .g-big { font-size: clamp(22px, 26cqw, 40px); font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; margin-top: auto; color: var(--c-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .g-big.g-ok { color: #30d158; }
+    .g-split .g-big { font-size: clamp(22px, 13cqw, 40px); }
+    .g-big small { font-size: 0.42em; font-weight: 600; color: var(--c-muted); letter-spacing: 0; margin-left: 2px; }
+    .g-cap { font-size: 12.5px; color: var(--c-muted); margin-top: 3px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+    .g-foot { margin-top: auto; padding-top: 6px; }
+    .g-corner { position: absolute; top: 0; right: 0; width: clamp(34px, 30cqw, 54px); }
+    .g-corner .g-ring { width: 100%; height: auto; }
+    .g-hero img { width: clamp(28px, 26cqw, 48px) !important; height: clamp(28px, 26cqw, 48px) !important; object-fit: contain; image-rendering: pixelated; margin: 0 !important; }
+    .g-ring { display: block; }
+    .g-ring-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 7; }
+    .g-ring-fg { fill: none; stroke: currentColor; stroke-width: 7; stroke-linecap: round; }
+    .g-meter { height: 6px; border-radius: 3px; background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 8px; flex: none; }
+    .g-meter i { display: block; height: 100%; border-radius: 3px; background: currentColor; }
+    .g-meter i.g-accent { background: linear-gradient(90deg, #bf5af2, #0a84ff); }
+    .g-spark { display: block; width: 100%; height: 46px; margin-top: auto; color: #30d158; flex: none; }
+    .g-spark-fill { fill: currentColor; opacity: 0.16; }
+    .g-spark-line { fill: none; stroke: currentColor; stroke-width: 2.5; vector-effect: non-scaling-stroke; }
+    .g-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; min-height: 0; }
+    .g-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; min-width: 0; }
+    .g-ic { flex: none; width: 30px; height: 30px; border-radius: 9px; background: rgba(255,255,255,0.06); display: flex; align-items: center; justify-content: center; font-size: 16px; overflow: hidden; }
+    .g-ic img { width: 22px !important; height: 22px !important; object-fit: contain; image-rendering: pixelated; margin: 0 !important; vertical-align: 0 !important; }
+    .g-n { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; color: var(--c-text); }
+    .g-n div { font-size: 11.5px; color: var(--c-dim); font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+    .g-v { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .g-chip { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; background: rgba(255,255,255,0.08); color: var(--c-muted); }
+    .g-chip.g-ok { background: rgba(48,209,88,0.18); color: #30d158; }
+    .g-chip.g-info { background: rgba(10,132,255,0.2); color: #64b5ff; }
+    .g-tiles { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; margin-top: auto; }
+    .g-tiles > div { background: rgba(255,255,255,0.05); border-radius: 14px; padding: 8px 10px; min-width: 0; }
+    .g-tiles span, .g-tiles small { display: block; font-size: 11px; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .g-tiles small { color: var(--c-dim); }
+    .g-tiles b { display: block; font-size: 18px; font-weight: 700; white-space: nowrap; color: var(--c-text); }
+    .g-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; flex: 1; min-height: 0; align-items: end; }
+    .g-split > div:first-child { display: flex; flex-direction: column; height: 100%; }
+    .g-stack { display: flex; gap: 2px; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 10px; flex: none; }
+    .g-stack i { display: block; height: 100%; }
+    .g-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--c-muted); margin-top: 6px; }
+    .g-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+    /* the full widget, opened from a glance, over the board */
+    .w-sheet { position: fixed; inset: 0; z-index: 950; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+      display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px 24px; overflow: auto; cursor: default; animation: w-sheet-in 0.18s ease-out; }
+    .w-sheet-card { width: min(1100px, 100%); }
+    .w-sheet .w-frame.pixel-panel { margin: 0; border-radius: 22px; box-shadow: 0 24px 70px rgba(0,0,0,0.5); }
+    @keyframes w-sheet-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+    /* ＋ gallery: a home screen of live previews, each at its own size (S / M / L / Table) */
+    .w-gallery { background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+    .w-gal-panel { max-width: 1180px; background: var(--c-bg) !important; border: 1px solid var(--c-line) !important; border-radius: 24px !important; padding: 22px 24px !important; font-family: var(--c-font); }
+    .w-gal-head { font-size: 20px !important; font-weight: 700; letter-spacing: -0.01em; color: var(--c-text) !important; font-family: var(--c-font) !important; margin-bottom: 10px !important; }
+    .w-gal-search { background: var(--c-card) !important; border: 1px solid var(--c-line) !important; border-radius: 12px !important; color: var(--c-text) !important;
+      font: 14px var(--c-font) !important; padding: 9px 14px !important; }
+    .w-gal-search:focus { border-color: var(--c-accent) !important; outline: none; }
+    .w-gal-hint { color: var(--c-muted); font-size: 12.5px; margin: 0 0 6px; }
+    .w-gal-cat { font: 700 13px var(--c-font) !important; letter-spacing: 0.4px !important; margin: 22px 0 10px !important; color: var(--c-muted) !important; }
+    .w-gal-grid { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)) !important; gap: 18px !important; grid-auto-flow: row dense; align-items: start; }
+    .w-gal-card { display: flex; flex-direction: column; gap: 8px; background: none !important; border: none !important; padding: 0 !important; min-width: 0; }
+    .w-gal-card.w-gal-m, .w-gal-card.w-gal-l, .w-gal-card.w-gal-full { grid-column: span 2; }
+    .w-gal-face { position: relative; display: flex; flex-direction: column; overflow: hidden; cursor: pointer; border-radius: 22px; padding: 14px 15px 15px;
+      border: 1px solid rgba(255,255,255,0.07); background: linear-gradient(160deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), var(--c-card);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.3); font-family: var(--c-font); font-size: 13px; color: var(--c-text); transition: border-color 0.15s, transform 0.15s; }
+    .w-gal-card:hover .w-gal-face { border-color: var(--c-accent); }
+    .w-gal-s .w-gal-face { aspect-ratio: 1 / 1; }
+    .w-gal-m .w-gal-face { aspect-ratio: 2.06 / 1; }
+    .w-gal-l .w-gal-face { aspect-ratio: 1.03 / 1; }
+    /* a table preview: its natural height up to a cap, fading out */
+    .w-gal-full .w-gal-face { max-height: 300px; font-size: 12px;
+      -webkit-mask-image: linear-gradient(#000 78%, transparent); mask-image: linear-gradient(#000 78%, transparent); }
+    .w-gal-full .w-gal-face .w-table { font-size: 12px; }
+    .w-gal-wait { margin: auto; color: var(--c-dim); font-size: 12px; }
+    .w-gal-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; padding: 0 4px; }
+    .w-gal-foot .w-gal-title { flex-basis: 100%; }
+    .w-gal-foot .w-gal-add { margin-left: auto; }
+    .w-gal-title { flex: 1; min-width: 0; font-size: 13px !important; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-text); }
+    .w-gal-sizes { display: inline-flex; background: var(--c-card2); border-radius: 999px; padding: 2px; flex: none; }
+    .w-gal-size { border: none; background: none; color: var(--c-muted); font: 600 11px var(--c-font); padding: 3px 8px; border-radius: 999px; cursor: pointer; }
+    .w-gal-size.on { background: var(--c-text); color: var(--c-bg); }
+    .w-gal-add { flex: none; width: 28px; height: 28px; border-radius: 50%; border: none; background: var(--c-accent); color: #fff; font-size: 17px; line-height: 1; cursor: pointer; }
+    .w-gal-card.added .w-gal-add { background: #30d158; }
+    .w-gal-card.added .w-gal-add::after { content: ""; }
+    @media (max-width: 560px) { .w-gal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+
+    @media (prefers-reduced-motion: reduce) { .w-sheet { animation: none; } }
+
 
     /* ROADMAP / BUDS / PETS widgets (widgets/roadmap.mjs, buds.mjs, pets.mjs) */
     .v-item { white-space: nowrap; }
@@ -16071,22 +16181,34 @@
       const board = __widgets.doc().boards.find((b) => b.id === boardId);
       if (!board) return;
       const items = _wGalleryItems();
+      // each card starts at the widget's natural size; S / M / L switch it (Full = the table)
+      const sizeOf = (it) => (__widgets.sizesOf(it.type).length ? __widgets.sizeOf(it.type, {}) : "full");
+      const size = items.map(sizeOf);
+      const sizeLabel = { s: "S", m: "M", l: "L", full: "Table" };
       const g = document.createElement("div");
       g.id = "w-gallery";
       g.className = "w-gallery";
-      let html = `<div class="w-gal-panel"><div class="w-gal-head"><span>＋ Add a widget to “${escHTML(board.name)}”</span>` +
+      const chips = (it, k) => {
+        const sizes = __widgets.sizesOf(it.type);
+        return sizes.length ? `<span class="w-gal-sizes">` + [...sizes, "full"].map((sz) =>
+          `<button type="button" class="w-gal-size${size[k] === sz ? " on" : ""}" data-size="${sz}" title="${sz === "full" ? "the full table" : "size " + sizeLabel[sz]}">${sizeLabel[sz]}</button>`).join("") + `</span>` : "";
+      };
+      const card = (it, label) => `<div class="w-gal-card w-gal-${size[it.k]}" data-k="${it.k}" data-search="${escHTML((_wGalleryTitle(it) + " " + label + " " + it.type).toLowerCase())}">` +
+        `<div class="w-gal-face" id="w-gal-prev-${it.k}"><div class="w-gal-wait">Loading…</div></div>` +
+        `<div class="w-gal-foot"><span class="w-gal-title">${escHTML(_wGalleryTitle(it))}</span>${chips(it, it.k)}` +
+        `<button type="button" class="w-gal-add" title="add to the board">＋</button></div></div>`;
+      let html = `<div class="w-gal-panel"><div class="w-gal-head"><span>Add a widget to “${escHTML(board.name)}”</span>` +
         `<button type="button" class="w-btn" onclick="_wGalleryClose()" title="close">✕</button></div>` +
-        `<input type="search" class="w-gal-search" placeholder="Search widgets — name or page…" autofocus>` +
-        `<div class="w-dim" style="margin-bottom:8px">Previews use your farm. Add the same widget as often as you like — each copy keeps its own ⚙ settings.</div>`;
+        `<input type="search" class="w-gal-search" placeholder="Search widgets" autofocus>` +
+        `<div class="w-gal-hint">Live previews of your farm. Pick a size, then ＋. Add the same widget as often as you like — each copy keeps its own ⚙.</div>`;
       // every page that has widgets gets a section; one this list does not know yet goes under OTHER
       const known = new Set(_wGalleryCats.map(([p]) => p));
       for (const [page, label] of [..._wGalleryCats, ["", "OTHER"]]) {
         const here = items.map((it, k) => ({ ...it, k })).filter((it) => (page ? it.page === page : !known.has(it.page)));
         if (!here.length) continue;
-        html += `<section class="w-gal-sec"><div class="w-gal-cat">${escHTML(label)}</div><div class="w-gal-grid">` + here.map((it) =>
-          `<button type="button" class="w-gal-card" data-k="${it.k}" data-search="${escHTML((_wGalleryTitle(it) + " " + label + " " + it.type).toLowerCase())}">` +
-          `<div class="w-gal-title">${escHTML(_wGalleryTitle(it))}</div>` +
-          `<div class="w-gal-prev" id="w-gal-prev-${it.k}">Loading…</div><div class="w-gal-add">＋ Add</div></button>`).join("") + `</div></section>`;
+        // the widgets with a glance face first: they make the section look like a home screen
+        here.sort((a, b) => (size[a.k] === "full") - (size[b.k] === "full"));
+        html += `<section class="w-gal-sec"><div class="w-gal-cat">${escHTML(label)}</div><div class="w-gal-grid">` + here.map((it) => card(it, label)).join("") + `</div></section>`;
       }
       g.innerHTML = html + "</div>";
       // search: hide the cards that do not match and the sections left empty
@@ -16096,14 +16218,29 @@
         g.querySelectorAll(".w-gal-card").forEach((c) => { c.hidden = !!q && !c.dataset.search.includes(q); });
         g.querySelectorAll(".w-gal-sec").forEach((sec) => { sec.hidden = !sec.querySelector(".w-gal-card:not([hidden])"); });
       });
+      const data = new Map();   // card → its loaded data, so a size switch repaints without fetching
+      const paint = (k) => {
+        const el = document.getElementById("w-gal-prev-" + k), it = items[k];
+        if (!el || !data.has(k)) return;
+        el.innerHTML = __widgets.preview(it.type, { data: data.get(k), ctx: _wCtx(it.type), opts: it.opts, size: size[k] });
+      };
       g.addEventListener("click", (e) => {
         if (e.target === g) { window._wGalleryClose(); return; }
-        const card = e.target.closest && e.target.closest(".w-gal-card");
-        if (!card) return;
-        const it = items[Number(card.dataset.k)];
-        __widgets.handle("page:" + it.type, "pin", JSON.stringify({ board: boardId, opts: it.opts }));
+        const c = e.target.closest && e.target.closest(".w-gal-card");
+        if (!c) return;
+        const k = Number(c.dataset.k), it = items[k];
+        const sz = e.target.closest(".w-gal-size");
+        if (sz) {
+          size[k] = sz.dataset.size;
+          c.className = `w-gal-card w-gal-${size[k]}`;
+          c.querySelectorAll(".w-gal-size").forEach((b) => b.classList.toggle("on", b === sz));
+          paint(k);
+          return;
+        }
+        if (!e.target.closest(".w-gal-add, .w-gal-face")) return;
+        __widgets.handle("page:" + it.type, "pin", JSON.stringify({ board: boardId, opts: it.opts, ...(sizeOf(it) !== "full" ? { size: size[k] } : {}) }));
         _wToast(`Added “${_wGalleryTitle(it)}”`);
-        card.classList.add("added");
+        c.classList.add("added");
         if (getPage() === "board" && window._wRerender) window._wRerender();
       });
       document.body.appendChild(g);
@@ -16117,12 +16254,12 @@
         while (running < 2 && queue.length) {
           const k = queue.shift(), it = items[k];
           running++;
-          __widgets.loadData(it.type, FARM_ID, __store, __widgets.optsFor(it.type, { opts: it.opts || {} })).then(({ data }) => {
-            const el = document.getElementById("w-gal-prev-" + k);
-            if (el) el.innerHTML = __widgets.preview(it.type, { data, ctx: _wCtx(it.type), opts: it.opts });
+          __widgets.loadData(it.type, FARM_ID, __store, __widgets.optsFor(it.type, { opts: it.opts || {} })).then((got) => {
+            data.set(k, got.data);
+            paint(k);
           }).catch((err) => {
             const el = document.getElementById("w-gal-prev-" + k);
-            if (el) el.textContent = "No preview: " + ((err && err.message) || err);
+            if (el) el.innerHTML = `<div class="w-gal-wait">No preview: ${escHTML((err && err.message) || err)}</div>`;
           }).finally(() => { running--; pump(); });
         }
       };
@@ -16165,6 +16302,23 @@
       _wOpenBoard(__widgets.doc().boards[0].id);
     };
     let _boardSeq = 0;
+    /*
+     * The board's rows are 8 px: each item spans as many as its height needs (plus the 16 px gap), so
+     * a column of small widgets packs beside a large one. A glance's height comes from its width
+     * (aspect-ratio), a full table's from its content; a ResizeObserver refits when either changes.
+     */
+    const _wFitRO = typeof ResizeObserver !== "undefined" ? new ResizeObserver((list) => { for (const e of list) _wFitOne(e.target); }) : null;
+    function _wFitOne(el) {
+      const want = "span " + Math.max(1, Math.ceil((el.getBoundingClientRect().height + 16) / 8));
+      if (el.style.gridRowEnd !== want) el.style.gridRowEnd = want;
+    }
+    function _wFitBoard(grid) {
+      if (!grid || !grid.children) return;
+      for (const el of grid.children) {
+        _wFitOne(el);
+        if (_wFitRO && !el._wFit) { el._wFit = true; _wFitRO.observe(el); }
+      }
+    }
     // The ?board= one, else the board visited last, else the first.
     async function renderBoard() {
       const app = document.getElementById("app");
@@ -16215,6 +16369,7 @@
           if (h) h.outerHTML = head;
         }
         app._wHead = head;
+        _wFitBoard(grid);
         if (focusAt) __wRefocus(app, focusAt);
       };
       paint();
