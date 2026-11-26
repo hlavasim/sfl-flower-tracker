@@ -15,6 +15,9 @@ const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "r
 export function createHost({ registry, storage, onChange = () => {}, onRefresh = () => {} }) {
   let doc = loadBoards(storage);
   const open = new Map();   // frame id → the popover's active tab
+  // A page variant ("page:<type>@<variant>", e.g. the DOLLS page's 🎯 Do limitu): options the page
+  // fixes (force), kept so a pinned copy starts from them. Its settings live under "<type>@<variant>".
+  const forced = new Map();   // frame id → forced opts
 
   const save = (next, frameId) => { doc = next; saveBoards(storage, doc); onChange(frameId); return true; };
   // A widget's own options merge key by key, so an option added later still gets its default.
@@ -24,13 +27,14 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     if (d.opts || s.opts) out.opts = { ...(d.opts || {}), ...(s.opts || {}) };
     return out;
   };
+  const withForce = (settings, force) => (force ? { ...settings, opts: { ...(settings.opts || {}), ...force } } : settings);
   const titleOf = (widget, settings) => (typeof widget.titleFor === "function" ? widget.titleFor(settings.opts || {}) : widget.title);
 
   function parse(frameId) {
     const s = String(frameId);
     if (s.startsWith("page:")) {
-      const type = s.slice(5);
-      return registry[type] ? { place: "page", type, widget: registry[type] } : null;
+      const key = s.slice(5), type = key.split("@")[0];
+      return registry[type] ? { place: "page", type, key, widget: registry[type], force: forced.get(s) || null } : null;
     }
     const m = s.match(/^b:([^:]+):(.+)$/);
     if (!m) return null;
@@ -40,7 +44,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     return { place: "board", boardId: m[1], item, type: item.type, widget: registry[item.type] || null };
   }
 
-  function body(widget, settings, data, ctx, tab) {
+  function body(widget, settings, data, ctx, tab, force = null) {
     try {
       if (widget.view) {
         // a tile or a chart: its own HTML, no table settings
@@ -53,7 +57,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
         html: out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
           : `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`,
         settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab,
-          options: widget.options || [], optionsLabel: widget.optionsLabel }),
+          options: (widget.options || []).filter((o) => !force || !(o.key in force)), optionsLabel: widget.optionsLabel }),
       };
     } catch (e) {
       // The cog still offers a reset, so a bad saved setting is never a dead end.
@@ -62,11 +66,13 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
   }
 
-  function renderPage(type, { data, ctx, fresh } = {}) {
+  function renderPage(type, { data, ctx, fresh, variant = "", force = null } = {}) {
     const widget = registry[type];
-    const id = `page:${type}`;
-    const settings = effective(widget, pageSettings(doc, type));
-    const b = body(widget, settings, data, ctx, open.get(id));
+    const key = variant ? `${type}@${variant}` : type;
+    const id = `page:${key}`;
+    if (force) forced.set(id, force); else forced.delete(id);
+    const settings = withForce(effective(widget, pageSettings(doc, key)), force);
+    const b = body(widget, settings, data, ctx, open.get(id), force);
     return renderFrame({ id, title: titleOf(widget, settings), place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type), cog: !widget.view,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
@@ -103,18 +109,18 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       return true;
     }
     if (TABLE_ACTIONS.has(action)) {
-      const current = effective(f.widget, f.place === "page" ? pageSettings(doc, f.type) : f.item.settings);
+      const current = effective(f.widget, f.place === "page" ? pageSettings(doc, f.key) : f.item.settings);
       const next = applyTableAction(f.widget.columns, current, action, value);
-      return save(f.place === "page" ? setPageSettings(doc, f.type, next) : updateItemSettings(doc, f.boardId, f.item.i, next), frameId);
+      return save(f.place === "page" ? setPageSettings(doc, f.key, next) : updateItemSettings(doc, f.boardId, f.item.i, next), frameId);
     }
     if (String(action).startsWith("opt:")) {
-      const current = effective(f.widget, f.place === "page" ? pageSettings(doc, f.type) : f.item.settings);
+      const current = effective(f.widget, f.place === "page" ? pageSettings(doc, f.key) : f.item.settings);
       const next = applyOption(f.widget.options || [], current, String(action).slice(4), value);
       if (next === current) return true;
-      return save(f.place === "page" ? setPageSettings(doc, f.type, next) : updateItemSettings(doc, f.boardId, f.item.i, next), frameId);
+      return save(f.place === "page" ? setPageSettings(doc, f.key, next) : updateItemSettings(doc, f.boardId, f.item.i, next), frameId);
     }
     if (f.place === "page" && action === "pin") {
-      const settings = effective(f.widget, pageSettings(doc, f.type));
+      const settings = withForce(effective(f.widget, pageSettings(doc, f.key)), f.force);
       // value: optional JSON of options to preset on the pinned copy (📌 "Panenky do limitu" → {cat: "dolls"})
       let preset = null;
       try { preset = value ? JSON.parse(value) : null; } catch { preset = null; }

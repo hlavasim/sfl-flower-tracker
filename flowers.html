@@ -10470,33 +10470,15 @@
     // ═══════════════════════════════════════
 
     function renderDolls(data) {
-      const { inventory, inProgress, craftingBox } = data;
+      const { inventory, inProgress } = data;
       lastInventory = inventory;
       lastInProgress = inProgress;
       const app = document.getElementById("app");
 
       const trackedDolls = getTrackedDolls();
-      const dollList = [];
-      let totalComplete = 0, totalAll = 0, grandRemaining = 0;
-
-      for (const [name, tracked] of Object.entries(trackedDolls)) {
-        if (!tracked) continue;
-        totalAll++;
-        const have = getCount(inventory, name);
-        const pend = inProgress[name] || 0;
-        const remaining = Math.max(0, LIMIT - have - pend);
-        const isComplete = remaining === 0;
-        if (isComplete) totalComplete++;
-        grandRemaining += remaining;
-        dollList.push({ name, have, pend, remaining, isComplete, ingredients: DOLL_RECIPES[name] || [], needed: LIMIT });
-      }
-
-      const pctComplete = totalAll > 0 ? Math.round((totalComplete / totalAll) * 100) : 0;
-
       let html = `<div class="header pixel-panel pixel-font">
         <h1>DOLL TRACKER</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>
-        <div>${_wPinBtn("target-list", "Panenky do limitu", { cat: "dolls" })}</div>
       </div>`;
 
       // Tracked dolls toggle
@@ -10515,75 +10497,16 @@
         </div>
       </div>`;
 
-      html += `<div class="summary-bar pixel-panel pixel-font">
-        <div class="summary-stat"><div class="label">COMPLETE</div><div class="value complete">${totalComplete} / ${totalAll}</div></div>
-        <div class="summary-stat"><div class="label">REMAINING</div><div class="value pending">${grandRemaining} crafts</div></div>
-      </div>`;
-
-      html += `<div class="progress-overview pixel-panel">
-        <div class="progress-label pixel-font"><span>Progress</span><span>${pctComplete}%</span></div>
-        <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${pctComplete}%"></div></div>
-      </div>`;
-
-      // Currently Crafting
-      if (craftingBox && craftingBox.status === "crafting" && craftingBox.item?.collectible) {
-        const readyAttr = craftingBox.readyAt ? ` data-ready="${craftingBox.readyAt}"` : "";
-        html += `<div class="growing-section pixel-panel pixel-font">
-          <div class="growing-title">CURRENTLY CRAFTING</div>
-          <div class="growing-grid">
-            <div class="growing-bed">
-              <div style="font-size: 1.5rem;flex-shrink:0">🪆</div>
-              <div class="growing-bed-info">
-                <div class="growing-bed-name">${escHTML(craftingBox.item.collectible)}</div>
-                <div class="growing-bed-detail">Crafting Box</div>
-              </div>
-              <div class="growing-bed-time growing"${readyAttr}>Crafting...</div>
-            </div>
-          </div>
-        </div>`;
+      // The crafting box and the list are widgets (widgets/crafting.mjs, widgets/target-list.mjs): this
+      // page's copy of 🎯 Do limitu has the category and the page's LIMIT fixed.
+      window._wRerender = () => { if (getPage() === "dolls" && cachedFarmData) renderDolls(cachedFarmData); };
+      window._wRefresh = refresh;
+      const _wFresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
+      if (typeof __widgets === "undefined") html += _wMissing("Panenky");
+      else {
+        html += __widgets.renderPage("crafting-box", { data: { farm: data.farm }, ctx: _wCtx("crafting-box"), fresh: _wFresh });
+        html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "dolls", force: { cat: "dolls", limit: LIMIT } });
       }
-
-      // Doll list
-      const sorted = dollList.sort((a, b) => {
-        if (a.isComplete !== b.isComplete) return a.isComplete ? 1 : -1;
-        return b.remaining - a.remaining;
-      });
-
-      html += `<div class="flower-grid" style="border:3px solid var(--border-dark)">`;
-      for (const d of sorted) {
-        const pct = d.needed > 0 ? Math.min(100, Math.round(((d.have + d.pend) / d.needed) * 100)) : 100;
-
-        let ingredientHTML = "";
-        if (d.ingredients.length === 0) {
-          ingredientHTML = `<span style="color:var(--text-dim)">Recipe unknown</span>`;
-        } else {
-          ingredientHTML = d.ingredients.map(ing => {
-            const have = getCount(inventory, ing.item);
-            const ok = have >= ing.qty;
-            return `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}"><img class="inline-icon" src="${getItemIcon(ing.item)}" onerror="this.style.display='none'" alt="">${escHTML(ing.item)} x${ing.qty}</span>`;
-          }).join(", ");
-        }
-
-        html += `<div class="flower-row ${d.isComplete ? 'complete' : ''}" data-doll="${escHTML(d.name)}" onclick="toggleDollChain(this)">
-          <div class="flower-img-wrap"><img class="flower-img" src="${getItemIcon(d.name)}" onerror="this.style.display='none'" alt=""></div>
-          <div class="flower-info">
-            <div class="flower-name">${escHTML(d.name)}</div>
-            <div class="flower-chain">${ingredientHTML}</div>
-          </div>
-          <div class="flower-progress">
-            <div class="flower-bar-outer"><div class="flower-bar-fill ${barClass(pct)}" style="width:${pct}%"></div></div>
-            <div class="flower-count">
-              <span class="have">${d.have}${d.pend > 0 ? `<span class="pending">+${d.pend}</span>` : ""} / ${d.needed}</span>
-            </div>
-          </div>
-          <div class="flower-time">
-            ${d.isComplete
-              ? `<div class="done pixel-font">DONE</div>`
-              : `<div class="remaining-count pixel-font">-${d.remaining}</div>`}
-          </div>
-        </div>`;
-      }
-      html += `</div>`;
 
       html += `<div class="footer">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
@@ -10605,160 +10528,19 @@
 
       TRAP_COUNT = Math.max(1, Object.keys(trapSpots).length);
 
-      let totalComplete = 0, totalAll = 0, grandRemaining = 0;
-      const crustData = {};
-
-      for (const [name, recipe] of Object.entries(CRUSTACEAN_RECIPES)) {
-        totalAll++;
-        const have = getCount(inventory, name);
-        const pend = inProgress[name] || 0;
-        const remaining = Math.max(0, LIMIT - have - pend);
-        const isComplete = remaining === 0;
-        if (isComplete) totalComplete++;
-        grandRemaining += remaining;
-        crustData[name] = { name, have, pend, remaining, isComplete, ...recipe, needed: LIMIT };
-      }
-
-      const pctComplete = totalAll > 0 ? Math.round((totalComplete / totalAll) * 100) : 0;
-
       let html = `<div class="header pixel-panel pixel-font">
         <h1>CRUSTACEAN TRACKER</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)} | Target: ${LIMIT} of each</div>
-        <div>${_wPinBtn("target-list", "Korýši do limitu", { cat: "crabs" })}</div>
       </div>`;
 
-      html += `<div class="summary-bar pixel-panel pixel-font">
-        <div class="summary-stat"><div class="label">COMPLETE</div><div class="value complete">${totalComplete} / ${totalAll}</div></div>
-        <div class="summary-stat"><div class="label">REMAINING</div><div class="value pending">${grandRemaining} traps</div></div>
-        <div class="summary-stat"><div class="label">TRAPS</div><div class="value" style="color:var(--sunpetal)">${TRAP_COUNT}</div></div>
-      </div>`;
-
-      html += `<div class="progress-overview pixel-panel">
-        <div class="progress-label pixel-font"><span>Progress</span><span>${pctComplete}%</span></div>
-        <div class="progress-bar-outer"><div class="progress-bar-fill green" style="width:${pctComplete}%"></div></div>
-      </div>`;
-
-      // Currently Trapping — show ready + in-progress
-      const readyItems = [];
-      const trappingItems = [];
-      const nowMs = Date.now();
-      for (const [id, spot] of Object.entries(trapSpots)) {
-        const wt = spot.waterTrap;
-        if (!wt) continue;
-        const readyAt = toMs(wt.readyAt || 0);
-        const caught = wt.caught || {};
-        const names = Object.entries(caught);
-        if (names.length === 0) continue;
-        if (readyAt <= nowMs) {
-          for (const [name, qty] of names) readyItems.push({ id, name, qty });
-        } else {
-          for (const [name, qty] of names) trappingItems.push({ id, name, qty, readyAt });
-        }
-      }
-
-      if (trappingItems.length > 0) {
-        html += `<div class="growing-section pixel-panel pixel-font">
-          <div class="growing-title">TRAPPING</div>
-          <div class="growing-grid">`;
-        for (const c of trappingItems) {
-          const diff = c.readyAt - nowMs;
-          const timeStr = diff > 3600000 ? `${(diff / 3600000).toFixed(1)}h` : `${Math.ceil(diff / 60000)}m`;
-          html += `<div class="growing-bed">
-            <img class="growing-bed-img" src="${getItemIcon(c.name)}" onerror="this.style.display='none'" alt="">
-            <div class="growing-bed-info">
-              <div class="growing-bed-name">${escHTML(c.name)}</div>
-              <div class="growing-bed-detail">x${c.qty}</div>
-            </div>
-            <div class="growing-bed-time growing" data-ready="${c.readyAt}">${timeStr}</div>
-          </div>`;
-        }
-        html += `</div></div>`;
-      }
-
-      if (readyItems.length > 0) {
-        html += `<div class="growing-section pixel-panel pixel-font">
-          <div class="growing-title">READY TO COLLECT</div>
-          <div class="growing-grid">`;
-        for (const c of readyItems) {
-          html += `<div class="growing-bed">
-            <img class="growing-bed-img" src="${getItemIcon(c.name)}" onerror="this.style.display='none'" alt="">
-            <div class="growing-bed-info">
-              <div class="growing-bed-name">${escHTML(c.name)}</div>
-              <div class="growing-bed-detail">x${c.qty}</div>
-            </div>
-            <div class="growing-bed-time ready">Collect!</div>
-          </div>`;
-        }
-        html += `</div></div>`;
-      }
-
-      // Pot sections
-      const potGroups = {
-        "Crab Pot": { label: "CRAB POT", time: "4h", emoji: "🦀", items: [] },
-        "Mariner Pot": { label: "MARINER POT", time: "8h", emoji: "🐟", items: [] },
-      };
-
-      for (const [name, d] of Object.entries(crustData)) {
-        potGroups[d.pot].items.push(d);
-      }
-
-      for (const [potType, group] of Object.entries(potGroups)) {
-        const sorted = [...group.items].sort((a, b) => {
-          if (a.isComplete !== b.isComplete) return a.isComplete ? 1 : -1;
-          return b.remaining - a.remaining;
-        });
-
-        const complete = sorted.filter(d => d.isComplete).length;
-
-        html += `<div class="seed-section">
-          <div class="seed-header pixel-font">
-            <div style="font-size: 1.375rem">${group.emoji}</div>
-            <h2 style="color:var(--blue)">${group.label}</h2>
-            <div class="seed-meta">
-              <span>${group.time} / trap</span>
-              <span>${complete}/${sorted.length} done</span>
-            </div>
-          </div>
-          <div class="flower-grid">`;
-
-        for (const d of sorted) {
-          const pct = d.needed > 0 ? Math.min(100, Math.round(((d.have + d.pend) / d.needed) * 100)) : 100;
-
-          let chumHTML = "";
-          if (d.chum) {
-            const chumHave = getCount(inventory, d.chum);
-            const ok = chumHave >= d.qty;
-            chumHTML = `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}"><img class="inline-icon" src="${getItemIcon(d.chum)}" onerror="this.style.display='none'" alt="">${escHTML(d.chum)} x${d.qty}</span>`;
-            if (d.alt) {
-              const altMatch = d.alt.match(/^(.+?)\s*x(\d+)$/);
-              const altIcon = altMatch ? `<img class="inline-icon" src="${getItemIcon(altMatch[1])}" onerror="this.style.display='none'" alt="">` : "";
-              chumHTML += ` <span style="color:var(--text-dim);font-size: 0.625rem">alt: ${altIcon}${escHTML(d.alt)}</span>`;
-            }
-          } else {
-            chumHTML = `<span style="color:var(--text-dim)">No chum needed</span>`;
-          }
-
-          html += `<div class="flower-row ${d.isComplete ? 'complete' : ''}" data-crust="${escHTML(d.name)}" onclick="toggleCrustChain(this)">
-            <div class="flower-img-wrap"><img class="flower-img" src="${getItemIcon(d.name)}" onerror="this.style.display='none'" alt=""></div>
-            <div class="flower-info">
-              <div class="flower-name">${escHTML(d.name)}</div>
-              <div class="flower-chain">${chumHTML}</div>
-            </div>
-            <div class="flower-progress">
-              <div class="flower-bar-outer"><div class="flower-bar-fill ${barClass(pct)}" style="width:${pct}%"></div></div>
-              <div class="flower-count">
-                <span class="have">${d.have}${d.pend > 0 ? `<span class="pending">+${d.pend}</span>` : ""} / ${d.needed}</span>
-              </div>
-            </div>
-            <div class="flower-time">
-              ${d.isComplete
-                ? `<div class="done pixel-font">DONE</div>`
-                : `<div class="remaining-count pixel-font">-${d.remaining}</div>`}
-            </div>
-          </div>`;
-        }
-
-        html += `</div></div>`;
+      // The traps and the list are widgets (widgets/crafting.mjs, widgets/target-list.mjs).
+      window._wRerender = () => { if (getPage() === "crustaceans" && cachedFarmData) renderCrustaceans(cachedFarmData); };
+      window._wRefresh = refresh;
+      const _wFresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
+      if (typeof __widgets === "undefined") html += _wMissing("Korýši");
+      else {
+        html += __widgets.renderPage("crab-traps", { data: { farm: data.farm }, ctx: _wCtx("crab-traps"), fresh: _wFresh });
+        html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "crabs", force: { cat: "crabs", limit: LIMIT } });
       }
 
       html += `<div class="footer">
@@ -18970,9 +18752,10 @@
       if (type === "dash-actions") return { dashActions: parseDashboardActions, countdown: dashFormatCountdown };
       if (type === "flowers-needs") return { pageFlowers: () => ({ mode: getFlowerMode(), n: getFlowerN(), giftPlan: getGiftPlan() }),
         hours: formatHours, icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
+      if (type === "crab-traps" || type === "crafting-box") return { countdown: dashFormatCountdown, icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "flower-beds") return { countdown: dashFormatCountdown,
         icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
-      if (type === "target-list") return { inProgress: extractInProgress,
+      if (type === "target-list") return { inProgress: extractInProgress, tracked: getTrackedDolls(),
         icon: (n) => `<img src="${getItemIcon(n)}" onerror="this.style.display='none'" alt="" style="height:1.3em;vertical-align:-0.25em;margin-right:3px">` };
       if (type === "weather-protection") return { weatherRows: (farm) => DASH_WEATHER_ITEMS.map((n) =>
         ({ name: n, state: dashWeatherState(farm, n), prevents: DASH_WEATHER_PREVENTS[n], iconHtml: _dashIcon(n) })) };

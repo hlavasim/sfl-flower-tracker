@@ -87,3 +87,9 @@ test("title names the category and the limit; table: most missing first, icon fr
 test("no farm: a clear empty message", () => {
   assert.match(W.build({}, {}, opts({})).empty, /Chybí data farmy/);
 });
+
+test("dolls: the page's tracked dolls (ctx.tracked) narrow the list", () => {
+  const ctx = { tracked: { Doll: true, "Angler Doll": false } };
+  const rows = W.build({ farm: { inventory: {} } }, ctx, opts({ cat: "dolls", limit: 2, hideDone: false })).rows;
+  assert.deepStrictEqual(rows.map((r) => r.name), ["Doll"]);
+});

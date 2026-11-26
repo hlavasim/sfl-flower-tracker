@@ -227,3 +227,24 @@ test("board operations for the page: add (once), visit = the pin target, remove"
   h.removeBoard("dash");
   assert.deepStrictEqual(h.doc().boards.map((b) => b.id), ["main"]);
 });
+
+test("a page variant: its own frame and settings, forced options hidden from the cog and carried into a pinned copy", () => {
+  const O = { ...T, options: [{ key: "cat", label: "Kategorie", kind: "select", choices: [["a", "A"], ["b", "B"]] },
+    { key: "top", label: "Top", kind: "number", min: 1, max: 9 }], defaults: { opts: { cat: "a" } },
+    build: (d, ctx, opts) => ({ rows: [{ n: String(opts.cat) }], footer: "", empty: "" }) };
+  const storage = mem();
+  const h = createHost({ registry: { t: O }, storage });
+  let html = h.renderPage("t", { data: {}, ctx: {}, variant: "b", force: { cat: "b" } });
+  assert.match(html, /data-frame="page:t@b"/);
+  assert.deepStrictEqual(rowsIn(html), ["b"]);
+  h.handle("page:t@b", "cog", "");
+  html = h.renderPage("t", { data: {}, ctx: {}, variant: "b", force: { cat: "b" } });
+  assert.doesNotMatch(html, /data-action="opt:cat"/, "a forced option is not offered");
+  assert.match(html, /data-action="opt:top"/);
+  h.handle("page:t@b", "opt:top", "4");
+  assert.deepStrictEqual(JSON.parse(storage.getItem(BOARDS_KEY)).page["t@b"].opts.top, 4);
+  // the plain page copy is separate
+  assert.deepStrictEqual(rowsIn(h.renderPage("t", { data: {}, ctx: {} })), ["a"]);
+  h.handle("page:t@b", "pin", "");
+  assert.deepStrictEqual(h.doc().boards[0].items[0].settings.opts, { cat: "b", top: 4 });
+});

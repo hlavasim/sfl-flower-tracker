@@ -70,14 +70,16 @@ export const targetList = {
     { key: "recipe", label: "recept" },
   ],
 
-  // data: { farm }; ctx: { inProgress(farm) → {name: qty}, icon(name) → HTML }; opts: the copy's options
+  // data: { farm }; ctx: { inProgress(farm) → {name: qty}, icon(name) → HTML, tracked? {doll: bool} }; opts: the copy's options
   build({ farm } = {}, ctx = {}, opts = {}) {
     if (!farm) return { rows: [], footer: "", empty: "Chybí data farmy." };
     const cat = CAT_LABEL[opts.cat] ? opts.cat : "dolls";
     const limit = Math.max(1, Math.round(Number(opts.limit)) || 1);
     const inv = farm.inventory || {};
     const pend = typeof ctx.inProgress === "function" ? ctx.inProgress(farm) || {} : {};
-    const names = cat === "dolls" ? Object.keys(DOLL_RECIPES).filter((n) => DOLL_RECIPES[n].length)
+    // dolls: those with a recipe; the DOLLS page's tracked ones only, when the page hands them over
+    const tracked = ctx.tracked && typeof ctx.tracked === "object" ? ctx.tracked : null;
+    const names = cat === "dolls" ? Object.keys(DOLL_RECIPES).filter((n) => DOLL_RECIPES[n].length && (!tracked || tracked[n]))
       : cat === "crabs" ? Object.keys(CRUSTACEAN_RECIPES)
       : cat === "flowers" ? Object.keys(FLOWER_RECIPES)
       : (Array.isArray(opts.foods) ? opts.foods : []).filter((n) => COOKING_RECIPES_DATA[n]);

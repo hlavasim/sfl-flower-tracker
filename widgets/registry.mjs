@@ -16,6 +16,7 @@ import { flipTable } from "./flip-table.mjs";
 import { worldIslands, worldSkillPoints } from "./world-dist.mjs";
 import { targetList } from "./target-list.mjs";
 import { flowersNeeds, flowerBeds } from "./flowers.mjs";
+import { crabTraps, craftingBox } from "./crafting.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -32,4 +33,6 @@ export const WIDGETS = {
   [targetList.type]: targetList,
   [flowersNeeds.type]: flowersNeeds,
   [flowerBeds.type]: flowerBeds,
+  [crabTraps.type]: crabTraps,
+  [craftingBox.type]: craftingBox,
 };
