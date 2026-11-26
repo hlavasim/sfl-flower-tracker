@@ -12198,6 +12198,7 @@
       // The game's own image map (app/item-icons.mjs, generated from its images.ts): sfl.world answers
       // names it does not know with a "?" image (status 200, so onerror never fires).
       if (window.__itemIcons && window.__itemIcons[name]) return window.__itemIcons[name];
+      if (name === "Coin" || name === "Coins") return "https://sunflower-land.com/game-assets/ui/coins.png";
       if (ITEM_IMAGE_MAP[name]) return ITEM_IMAGE_MAP[name];
       // Wearables: pull straight from the game repo via jsDelivr (covers brand-new ones sfl.world hasn't indexed).
       const wid = (typeof WEARABLE_IDS !== "undefined") && WEARABLE_IDS[name];
