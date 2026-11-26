@@ -189,3 +189,35 @@ test("📱 glances: XP (S/M), kitchens (M tiles, L rows with icons), leveling pl
   assert.match(bumpkinPlanWidget.glance({ farm, cook }, CTX, {}, "m").html, /XP \/ day<\/span><b>1\.4M<\/b>/);
   assert.match(bumpkinXp.glance({}, CTX, {}, "s").empty, /No farm data/);
 });
+
+test("📱 glances: banked food (S = XP and the level after eating, M / L = the biggest dishes) and cooking boosts (S = pet streak, M tiles, L rows)", () => {
+  assert.deepStrictEqual(bumpkinFood.sizes, ["s", "m", "l"]);
+  const fs = bumpkinFood.glance({ farm, cook }, CTX, {}, "s").html;
+  assert.match(fs, /^<div class="g-big">[\d.]+[kM]?<small> XP<\/small><\/div><div class="g-cap">L187 after eating · \+1<\/div>$/);
+  const top = [...cook.bankedFood.items].sort((a, b) => b.totalFoodXP - a.totalFoodXP);
+  const fm = bumpkinFood.glance({ farm, cook }, CTX, {}, "m").html;
+  assert.match(fm, /^<div class="g-split">/);
+  assert.strictEqual((fm.match(/class="g-row"/g) || []).length, 3);
+  assert.match(fm, new RegExp(`<span class="g-ic"><i>${top[0].name}</i></span><div class="g-n">${top[0].name}<div>${top[0].qty}×</div>`));
+  const fl = bumpkinFood.glance({ farm, cook }, CTX, {}, "l").html;
+  assert.strictEqual((fl.match(/class="g-row"/g) || []).length, Math.min(6, top.length));
+  assert.match(fl, new RegExp(`${top.length} kinds of food in stock`));
+  assert.match(bumpkinFood.glance({ farm }, CTX, {}, "s").empty, /Loading cooking data/);
+  assert.match(bumpkinFood.glance({ farm, cook: { ...cook, bankedFood: { totalXp: 0, items: [] } } }, CTX, {}, "s").empty, /No cooked food/);
+  assert.match(bumpkinFood.glance({}, CTX, {}, "s").empty, /No farm data/);
+
+  assert.deepStrictEqual(bumpkinBoosts.sizes, ["s", "m", "l"]);
+  const ps = cook.boosts.petStreakInfo;
+  const bs = bumpkinBoosts.glance({ farm, cook }, CTX, {}, "s").html;
+  assert.match(bs, new RegExp(`^<div class="g-big g-(ok|warn)">×${ps.multiplier}</div><div class="g-cap">pet streak ${ps.streak}w · (next week ✓|feed your pet!)`));
+  const bm = bumpkinBoosts.glance({ farm, cook }, CTX, {}, "m").html;
+  const xpN = cook.boosts.xpBoosts.filter((b) => !b.petStreak).length;
+  assert.match(bm, new RegExp(`<span>XP boosts</span><b>${xpN}</b>`));
+  assert.match(bm, /<span>pet streak<\/span><b>×/);
+  const bl = bumpkinBoosts.glance({ farm, cook }, CTX, {}, "l").html;
+  assert.match(bl, /^<div class="g-rows"><div class="g-row"><div class="g-n">Pet's Streak/);
+  assert.match(bl, /<i>Observatory<\/i><\/span><div class="g-n">Observatory<div>XP<\/div><\/div><span class="g-v">×1\.05/);
+  assert.ok((bl.match(/class="g-row"/g) || []).length <= 7);
+  assert.match(bumpkinBoosts.glance({ farm }, CTX, {}, "s").empty, /Loading cooking data/);
+  assert.match(bumpkinBoosts.glance({}, CTX, {}, "m").empty, /No farm data/);
+});

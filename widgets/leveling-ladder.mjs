@@ -3,6 +3,7 @@
 // that); on the board it is read-only.
 import { levelingInit, levelingPlan, levelingLadder, levelingInputsWithBook } from "../core/sections/leveling.mjs";
 import { sflIcon } from "../core/engine/power-formula.mjs";
+import { big, compact, rows as gRows } from "../ui/glance.mjs";
 
 // The board repaints often (each settings change, each data arrival): the plan is reused while the
 // farm, the inputs, the book and the saved config are the same.
@@ -58,4 +59,21 @@ export const levelingLadderWidget = {
     const rows = levelingLadder(farm, plan, 10, free || 0).map((r) => ({ ...r, target: r.ascension === target, clickable: !!ctx.rowClick && r.ascension !== target, now }));
     return { rows, footer: "", empty: "All ascensions up to A10 are behind you." };
   },
+};
+
+// ── iPhone glance face: S = total days to the target ascension and its date; M / L = the next
+// ascensions with their total days and FLOWER ──
+levelingLadderWidget.sizes = ["s", "m", "l"];
+levelingLadderWidget.size = "s";
+levelingLadderWidget.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = levelingLadderWidget.build(data, { ...ctx, rowClick: false });
+  if (!out.rows.length) return { empty: out.empty };
+  const t = out.rows.find((r) => r.target) || out.rows[0];
+  const d = date(t.cumDays, t.now);
+  const head = big(num(t.cumDays), { unit: " days", cap: `to the end of A${t.ascension}${d ? ` · ${d}` : ""}` }) +
+    `<div class="g-cap">${compact(t.cumFlower)} FLOWER in total</div>`;
+  if (size === "s") return { html: head };
+  const list = gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => ({ name: `${r.target ? "▶ " : ""}A${r.ascension}`, sub: date(r.cumDays, r.now) || "",
+    value: `${num(r.cumDays)} d · ${compact(r.cumFlower)}`, tone: r.target ? "accent" : "" })));
+  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
 };

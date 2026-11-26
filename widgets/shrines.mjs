@@ -4,6 +4,7 @@
 // section=eff's measured efficiency (the Power/Roadmap rule). The per-shrine marginal is the page's
 // _shrineMarginalSflPerDay (also used by the roadmap's renew table), reached through ctx.
 import { pill, bar } from "../ui/viz.mjs";
+import { big, ring as gRing, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" && n ? ctx.icon(n) : "");
@@ -77,6 +78,25 @@ export const shrinesRoi = {
       • Most speed-only shrines do nothing at the usual 12h login interval — the flat-yield ones (Legendary, Bear, Stag, Moth) usually pay.</div></details>`;
     return { rows: shown, summary, footer, empty: "No shrines to show with this filter." };
   },
+};
+
+// ── iPhone glance face: S = how many shrines are up (ring) and the net a day of all of them;
+// M / L = the shrines of this copy's filter, most profit first, active ones marked ──
+shrinesRoi.sizes = ["s", "m", "l"];
+shrinesRoi.size = "s";
+shrinesRoi.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const all = shrinesRoi.build(data, ctx, { show: "all" });
+  if (!all.rows.length) return { empty: all.empty === "No shrine data yet." ? all.empty : "No shrines." };
+  const n = all.rows.length, active = all.rows.filter((r) => r.active).length, profitable = all.rows.filter((r) => r.netTotal > 0).length;
+  if (size === "s") {
+    return { html: `<div class="g-corner">${gRing((active / n) * 100, { tone: "ok" })}</div>` +
+      big(active, { unit: `/${n}`, tone: active ? "ok" : "", cap: `active · ${profitable} profitable` }) };
+  }
+  const shown = shrinesRoi.build(data, ctx, opts).rows.slice().sort((a, b) => (b.active - a.active) || (b.netTotal - a.netTotal));
+  if (!shown.length) return { empty: "No shrines to show with this filter." };
+  return { html: gRows(shown.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.name,
+    sub: r.active ? r.timeLeft : `${(VERDICT[r.verdict] || ["—"])[0].toLowerCase()} · ${r.days} d`,
+    ...(r.active ? { chip: { text: "ACTIVE", tone: "ok" } } : { value: `${r.netTotal >= 0 ? "+" : ""}${r.netTotal.toFixed(2)}`, tone: r.netTotal >= 0 ? "ok" : "bad" }) }))) };
 };
 
 export const SHRINES_WIDGETS = [shrinesRoi];
