@@ -2569,6 +2569,16 @@
     .nav-more-menu { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); overflow: hidden; }
     .nav-more-menu .nav-link { font-size: 13px; border-bottom: 1px solid var(--c-row); }
     .nav-more-menu .nav-link:hover { background: var(--c-card2); }
+    /* phones: one row that scrolls sideways — tighter links, no A-/A+ (pinch zoom does that); the
+       MORE menu is fixed under the bar (toggleNavMore places it) so the scrolling row cannot clip it */
+    @media (max-width: 600px) {
+      .nav-bar.pixel-panel { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+      .nav-bar.pixel-panel::-webkit-scrollbar { display: none; }
+      .nav-link, .nav-more-btn { padding: 9px 10px; min-height: 38px; font-size: 13px; flex: none; }
+      .nav-zoom { display: none; }
+      .nav-more-wrap { position: static; flex: none; }
+      .nav-more-menu { position: fixed; left: 8px; right: 8px; width: auto; max-height: 70vh; overflow-y: auto; z-index: 1200; }
+    }
 
     .w-page-head { margin: 4px 0 16px; font-family: var(--c-font); color: var(--c-text); }
     .w-page-head h1 { font-size: 22px; font-weight: 700; margin: 0 0 2px; }
@@ -5851,8 +5861,8 @@
         { id: "world", label: "🌍 WORLD" },
       ];
       const overflow = [
-        ...(FARM_ID === "155498" ? [{ id: "speculation", label: "🎲 SPEKULACE" }] : []),
-        { id: "tickets", label: "🎟️ TICKETY" },
+        ...(FARM_ID === "155498" ? [{ id: "speculation", label: "🎲 SPECULATION" }] : []),
+        { id: "tickets", label: "🎟️ TICKETS" },
         { id: "leveling", label: "📈 LEVELING" },
         { id: "yakkamon", label: "🐲 YAKKAMON" },
         { id: "fishing", label: "🎣 FISHING" },
@@ -5903,6 +5913,11 @@
       const menu = document.getElementById("nav-more-menu");
       if (!menu) return;
       menu.classList.toggle("open");
+      // on a phone the menu is position:fixed (the bar scrolls sideways): put it right under the bar
+      if (menu.classList.contains("open") && getComputedStyle(menu).position === "fixed") {
+        const bar = menu.closest(".nav-bar");
+        menu.style.top = Math.round((bar ? bar.getBoundingClientRect().bottom : 48) + 4) + "px";
+      }
       if (menu.classList.contains("open")) {
         const close = (ev) => {
           if (!menu.contains(ev.target)) {
@@ -14653,7 +14668,7 @@
 
       el.innerHTML = h;
       // expand vs buy a new node: the NODES widget, the same frame (⚙, 📌) as on its own page
-      if (typeof __widgets !== "undefined") el.insertAdjacentHTML("afterbegin", _wLive("nodes-acq"));
+      if (typeof __widgets !== "undefined") el.insertAdjacentHTML("beforeend", _wLive("nodes-acq"));
     }
 
     // One ROADMAP widget's frame from the last section=roadmap payload.
