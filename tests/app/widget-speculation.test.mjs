@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { specCalendar, specTrades, specSkim, specEggs, tradeStats, skimStats, eggChart, SPECULATION_WIDGETS } from "../../widgets/speculation.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 // SPECULATION as widgets: the owner-only reads come from the page (ctx.spec), the farm from the store.
 const FARM = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url), "utf8")).farm;
@@ -130,55 +131,65 @@ test("the page renders the widgets and keeps the owner-only writes", () => {
   assert.ok(!/_specDrawEggChart|LightweightCharts\.createChart\(el, \{\s*height: 220/.test(src.slice(src.indexOf("SPEKULACE (farm 155498 only)"), src.indexOf("DIFF PAGE (farm 155498 only)"))));
 });
 
-test("📱 glance: calendar S = the season and how far into its week; M/L = the BUY / SELL signals", () => {
-  assert.deepStrictEqual(specCalendar.sizes, ["s", "m", "l"]);
-  const s = specCalendar.glance({ farm: FARM }, ctx(), {}, "s").html;
-  assert.match(s, /^<div class="g-corner"><svg class="g-ring g-info"/);
-  assert.match(s, /<div class="g-big">autumn<\/div><div class="g-cap">🍂 next season in 4 d · 2 signals<\/div>$/);
-  const m = specCalendar.glance({ farm: FARM }, ctx(), {}, "m").html;
-  assert.match(m, /^<div class="g-split">/);
-  assert.match(m, /<img data-i="Potato"><\/span><div class="g-n">Potato<div>held 1,683 · net \+12 %<\/div><\/div><span class="g-chip g-warn">SELL/);
-  assert.match(m, /Kale<div>net \+20 % · sell in spring<\/div><\/div><span class="g-chip g-info">BUY/);
-  assert.doesNotMatch(m, /Wheat/);
+test("📱 glance model, calendar: the season with how far into its week as a ring; every crop, BUY / SELL first", () => {
+  assert.strictEqual(specCalendar.look, "number");
+  const m = specCalendar.glanceModel({ farm: FARM }, ctx());
+  assert.deepStrictEqual([m.head.value, m.head.cap, m.head.ringTone], ["autumn", "🍂 next season in 4 d · 2 signals", "info"]);
+  assert.ok(m.head.ring > 0 && m.head.ring < 100);
+  assert.strictEqual(m.items.length, 3);
+  const { pct, ...potato } = m.items[0];
+  assert.deepStrictEqual(potato, { icon: '<img data-i="Potato">', name: "Potato", sub: "held 1,683 · net +12 %", chip: { text: "SELL", tone: "warn" } });
+  assert.strictEqual(Math.round(pct), 60, "net against the best crop's");
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["Potato", "Kale", "Wheat"]);
+  assert.match(renderLook(m, "list-4").html, /<div class="gx-n">Kale<div>net \+20 % · sell in spring<\/div><\/div><span class="gx-chip g-info">BUY<\/span>/);
+  assert.ok(looksFor(m).length >= 3);
   const quiet = { ...SPEC, cal: { ...CAL, items: CAL.items.filter((x) => x.signal === "noise") } };
-  assert.match(specCalendar.glance({}, ctx({ spec: quiet }), {}, "l").html, /no signal[\s\S]*No stable crop/);
+  assert.strictEqual(specCalendar.glanceModel({}, ctx({ spec: quiet })).foot, "No stable crop is in its buying or selling season this week.");
   let asked = 0;
-  assert.deepStrictEqual(specCalendar.glance({}, ctx({ spec: { err: {} }, ensure: () => asked++ }), {}, "s"), { empty: "Loading the calendar…" });
+  assert.deepStrictEqual(specCalendar.glanceModel({}, ctx({ spec: { err: {} }, ensure: () => asked++ })), { empty: "Loading the calendar…" });
   assert.strictEqual(asked, 1);
-  assert.deepStrictEqual(specCalendar.glance({}, ctx({ spec: { err: { cal: "401" } } }), {}, "s"), { empty: "Calendar did not load: 401" });
+  assert.deepStrictEqual(specCalendar.glanceModel({}, ctx({ spec: { err: { cal: "401" } } })), { empty: "Calendar did not load: 401" });
+  assert.strictEqual(specCalendar.glance, undefined, "the hand-written face is gone");
 });
 
-test("📱 glance: trades S = realised FLOWER; M = realised / open cost / open worth; L = the latest trades", () => {
-  const s = specTrades.glance({}, ctx(), {}, "s").html;
-  assert.match(s, /^<div class="g-big g-ok">\+0\.2<small> FLOWER<\/small><\/div><div class="g-cap">realised · 4 trades · 3 open<\/div>$/);
-  const m = specTrades.glance({}, ctx(), {}, "m").html;
-  assert.match(m, /<span>Open cost<\/span><b>7<\/b>/);                     // 1,000 × 0.002 + 10 × 0.5
-  assert.match(m, /<span>Open worth<\/span><b>≥ 2\.7<\/b>/);                // Barley has no price
-  const l = specTrades.glance({}, ctx(), {}, "l").html;
-  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 4);
-  assert.ok(l.indexOf("Genesis egg #803") < l.indexOf(">Kale<"), "newest first");
-  assert.match(l, /Genesis egg #803<div>open · 1 · RON/);
-  assert.match(l, /Kale<div>sold · 100 · FLOWER<\/div><\/div><span class="g-v g-ok">\+0\.2</);
-  assert.deepStrictEqual(specTrades.glance({}, ctx({ spec: { trades: [], err: {} } }), {}, "s"), { empty: "No trades yet." });
-  assert.match(specTrades.glance({}, ctx({ spec: { err: {} } }), {}, "m").empty, /Loading the trade log/);
+test("📱 glance model, trades: the realised FLOWER; every trade, newest first; open cost / worth as tiles", () => {
+  assert.strictEqual(specTrades.look, "number");
+  const m = specTrades.glanceModel({}, ctx());
+  assert.deepStrictEqual(m.head, { value: "+0.2", unit: " 🌸", tone: "ok", hero: "📒", cap: "realised · 4 trades · 3 open" });
+  assert.strictEqual(m.items.length, 4);
+  assert.deepStrictEqual(m.items[0], { icon: '<img data-i="Genesis egg #803">', name: "Genesis egg #803", sub: "open · 1 · RON", value: "+10", tone: "ok" });
+  assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["Realised", "+0.2"], ["Open cost", "7"], ["Open worth", "≥ 2.7"], ["Trades", 4]]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">\+0\.2<small> 🌸<\/small><\/div>/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(specTrades.glanceModel({}, ctx({ spec: { trades: [], err: {} } })), { empty: "No trades yet." });
+  assert.match(specTrades.glanceModel({}, ctx({ spec: { err: {} } })).empty, /Loading the trade log/);
+  assert.strictEqual(specTrades.glance, undefined);
 });
 
-test("📱 glance: skim S = sats per FLOWER and the verdict; M adds the game balance, BTC and what was skimmed", () => {
-  const s = specSkim.glance({ farm: FARM }, ctx(), {}, "s").html;
-  assert.match(s, /^<div class="g-big g-ok">120<small> sats<\/small><\/div><div class="g-cap">per FLOWER · \+19 % vs 30 d · good day to skim<\/div>$/);
-  const m = specSkim.glance({ farm: FARM }, ctx(), {}, "m").html;
-  assert.match(m, /BTC 24 h<div>\$90,000<\/div><\/div><span class="g-v g-bad">−1\.0 %/);
-  assert.match(m, /Skimmed<div>2 withdrawals<\/div><\/div><span class="g-v g-ok">0\.0015 ₿/);
-  assert.match(specSkim.glance({}, ctx({ spec: { ...SPEC, err: { ledger: "401" } } }), {}, "m").html, /Skimmed<div>enter the key/);
-  assert.match(specSkim.glance({}, ctx({ spec: { err: {} } }), {}, "s").empty, /Loading the skim data/);
+test("📱 glance model, skim: sats per FLOWER and the verdict; today / balance / BTC / skimmed; the last 30 days as a line", () => {
+  assert.strictEqual(specSkim.look, "number");
+  const m = specSkim.glanceModel({ farm: FARM }, ctx());
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.tone, m.head.cap], ["120", " sats", "ok", "per FLOWER · +19 % vs 30 d · good day to skim"]);
+  assert.strictEqual(m.items.length, 4);
+  assert.deepStrictEqual(m.items[3], { icon: "🏦", name: "Skimmed", sub: "2 withdrawals", value: "0.0015 ₿", tone: "ok" });
+  assert.strictEqual(m.series.length, 30);
+  assert.match(renderLook(m, "chart-2").html, /class="gx-split gx-split-chart"/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(specSkim.glanceModel({}, ctx({ spec: { ...SPEC, err: { ledger: "401" } } })).items[3], { icon: "🔒", name: "Skimmed", sub: "enter the key", value: "—" });
+  assert.match(specSkim.glanceModel({}, ctx({ spec: { err: {} } })).empty, /Loading the skim data/);
+  assert.strictEqual(specSkim.glance, undefined);
 });
 
-test("📱 glance: eggs S = the valid floor, its 24 h move and line; M adds the 10th ask, Bad Eggs and sales", () => {
-  const s = specEggs.glance({}, ctx(), {}, "s").html;
-  assert.match(s, /^<div class="g-big">50<small> RON<\/small><\/div><div class="g-cap">valid egg floor · \+25 % in 24 h<\/div><svg class="g-spark g-ok"/);
-  const m = specEggs.glance({}, ctx(), {}, "m").html;
-  assert.match(m, /Bad Eggs<div>\+2 last run<\/div><\/div><span class="g-v g-bad">110</);
-  assert.match(m, /Sales 1 h<div>median 52 RON<\/div><\/div><span class="g-v">4</);
-  assert.match(specEggs.glance({}, ctx({ spec: { eggs: [], err: {} } }), {}, "s").empty, /No egg snapshot yet/);
-  assert.match(specEggs.glance({}, ctx({ spec: { err: {} } }), {}, "s").empty, /Loading the egg snapshots/);
+test("📱 glance model, eggs: the valid floor and its 24 h move with its line; your eggs first, then the market", () => {
+  assert.strictEqual(specEggs.look, "chart-2");
+  const m = specEggs.glanceModel({}, ctx());
+  assert.deepStrictEqual(m.head, { value: "50", unit: " RON", cap: "valid egg floor · +25 % in 24 h", hero: "🥚" });
+  assert.strictEqual(m.items.length, 7);
+  assert.deepStrictEqual(m.items[1], { icon: "🥚", name: "#900", sub: "your egg", chip: { text: "Bad Egg", tone: "bad" } });
+  assert.deepStrictEqual(m.series, [40, 50]);
+  assert.match(renderLook(m, "list-4").html, /<div class="gx-n">#803<div>your egg<\/div><\/div><span class="gx-chip g-ok">valid<\/span>/);
+  assert.ok(looksFor(m).length >= 3);
+  assert.match(specEggs.glanceModel({}, ctx({ spec: { eggs: [], err: {} } })).empty, /No egg snapshot yet/);
+  assert.match(specEggs.glanceModel({}, ctx({ spec: { err: {} } })).empty, /Loading the egg snapshots/);
+  assert.strictEqual(specEggs.glance, undefined);
 });

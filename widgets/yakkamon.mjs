@@ -6,7 +6,7 @@
 // The rules (multiplier, bulk bonus, points, the trend) are core/yakkamon.mjs.
 import { YK, ykWeekAt, ykMult, ykPoints, ykNeedFor, ykTrend } from "../core/yakkamon.mjs";
 import { bar } from "../ui/viz.mjs";
-import { big, compact, ring, spark, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const fmt = (n, d) => (+n).toLocaleString("en-US", { maximumFractionDigits: d === undefined ? 0 : d });
@@ -484,36 +484,46 @@ export const ykVerdict = {
   },
 };
 
-// ── iPhone glance faces ─────────────────────────────────────────────────────────────────────
-// Facts, the published tiers / sources / ranks, the sign-up eggs and the verdict are reference
-// text with nothing to glance at, so they stay table-only.
+// ── iPhone glance models: one model per widget; the glance templates (ui/glance-templates.mjs) offer
+// every look it fills ──
 const signed = (v) => (v >= 0 ? "+" : "") + compact(v);
+// a reward's first monster as its icon
+const MONSTER = { Storm: "⛈️", Echo: "🔊", Ghost: "👻", Bloom: "🌸", Rare: "🥚" };
+const monsterIcon = (rew) => MONSTER[String(rew).replace(/^last /, "").split(/[ +]/)[0]] || "🚪";
 
-// live: S = the trainer number you'd get, the ring = how full your egg tier is; M/L add the
-// points the leaderboard's tier boundaries take today
-ykLive.sizes = ["s", "m", "l"];
-ykLive.size = "s";
-ykLive.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// live: your trainer number, the ring = how full your egg tier is; the leaderboard's tier boundaries
+// with the points they take today (the bar = share of #1)
+ykLive.look = "number";
+ykLive.glanceModel = (data = {}, ctx = {}) => {
   const su = ctx.live && ctx.live.signups, bd = ctx.live && ctx.live.board;
   if (!su) return { empty: ykLive.view(data, ctx).empty };
   const claimed = su.claimed || 0;
   const lo = Math.max(0, ...(su.tiers || []).map((t) => t.until).filter((u) => u <= claimed));
   const fill = su.tierUntil > lo ? ((claimed - lo) / (su.tierUntil - lo)) * 100 : 100;
-  const head = big(`#${compact(claimed + 1)}`, { cap: `you'd be · ${su.tier || "?"} egg · ${compact(su.remaining)} left` });
   const e = (bd && bd.entries) || [];
   const at = (r) => (e.find((x) => x.rank === r) || {}).points;
   const mult = ykMult(Math.max(1, ykWeekAt(nowOf(ctx))));
-  const list = (ranks) => LIVE_BOUNDS.filter(([r]) => ranks.includes(r) && at(r)).map(([r, what]) => ({ name: `#${r}`,
-    sub: size === "l" ? `${what} · ≈ ${compact(Math.ceil(at(r) / mult))} FLOWER` : what, value: compact(at(r)) }));
-  if (size === "s" || !e.length) return { html: `<div class="g-corner">${ring(fill, { tone: "warn" })}</div>` + head };
-  if (size === "m") return { html: `<div class="g-split"><div>${head}</div>${gRows(list([10, 50, 100]))}</div>` };
-  return { html: `<div class="g-corner">${ring(fill, { tone: "warn" })}</div>` + head + gRows(list([1, 3, 10, 50, 100])) };
+  const top = at(1) || 1;
+  const items = LIVE_BOUNDS.filter(([r]) => at(r)).map(([r, what]) => ({ icon: monsterIcon(what), name: `#${r}`,
+    sub: `${what} · ≈ ${compact(Math.ceil(at(r) / mult))} FLOWER`, value: compact(at(r)), pct: (at(r) / top) * 100 }));
+  return {
+    head: { value: `#${compact(claimed + 1)}`, cap: `you'd be · ${su.tier || "?"} egg · ${compact(su.remaining)} left`, ring: fill, ringTone: "warn", hero: "🥚" },
+    items,
+    tiles: [
+      { label: "signed up", value: compact(claimed) },
+      { label: "you'd be", value: `#${compact(claimed + 1)}` },
+      { label: "eggs left", value: compact(su.remaining) },
+      ...(at(50) ? [{ label: "#50 Storm", value: compact(at(50)) }] : []),
+    ],
+    foot: bd && bd.playerCount ? `${compact(bd.playerCount)} players with points · ${mult.toFixed(1)}× now` : "",
+  };
 };
 
-// placing: S = the #50 (Storm) threshold now, how far it moved, and its line; M adds #3 / #10 / #100
-ykPlacing.sizes = ["s", "m"];
-ykPlacing.size = "s";
-ykPlacing.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// placing: the #50 (Storm) threshold now, how far it moved, and its line; every tracked tier with
+// its move (the bar = share of the #3 threshold)
+const PLACING = [["p3", "#3", "last Storm + Echo"], ["p10", "#10", "last Storm + Ghost"], ["p50", "#50", "last Storm"], ["p100", "#100", "Echo"]];
+ykPlacing.look = "chart-2";
+ykPlacing.glanceModel = (data = {}, ctx = {}) => {
   const hist = Array.isArray(ctx.hist) ? ctx.hist : [];
   const series = (key) => hist.filter((r) => isFinite(r[key]));
   const p50 = series("p50");
@@ -521,55 +531,170 @@ ykPlacing.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
   const move = (pts, key) => pts[pts.length - 1][key] - pts[0][key];
   const hours = ((p50[p50.length - 1].t - p50[0].t) / 3600000).toFixed(0);
   const d50 = move(p50, "p50");
-  const head = big(compact(p50[p50.length - 1].p50), { unit: " pts", cap: `#50 Storm cut-off · ${signed(d50)} in ${hours} h` }) +
-    spark(p50.map((r) => r.p50), d50 > 0 ? "warn" : "ok");
-  if (size === "s") return { html: head };
-  const list = [["p3", "#3"], ["p10", "#10"], ["p100", "#100"]].map(([key, name]) => {
-    const pts = series(key);
-    if (!pts.length) return null;
-    const d = move(pts, key);
-    return { name, sub: `${signed(d)} in ${hours} h`, value: compact(pts[pts.length - 1][key]), tone: d > 0 ? "warn" : "" };
-  }).filter(Boolean);
-  return { html: `<div class="g-split"><div>${head}</div>${gRows(list)}</div>` };
+  const lines = PLACING.map(([key, name, what]) => ({ key, name, what, pts: series(key) })).filter((x) => x.pts.length);
+  const topNow = Math.max(...lines.map((x) => x.pts[x.pts.length - 1][x.key]));
+  const fit = ykTrend(hist, "p50");
+  const in7 = fit ? Math.max(0, fit.at(nowOf(ctx) + 7 * 86400000)) : null;
+  return {
+    head: { value: compact(p50[p50.length - 1].p50), unit: " pts", tone: d50 > 0 ? "warn" : "", cap: `#50 Storm cut-off · ${signed(d50)} in ${hours} h`, hero: "⛈️" },
+    items: lines.map(({ key, name, what, pts }) => {
+      const d = move(pts, key), cur = pts[pts.length - 1][key];
+      return { icon: monsterIcon(what), name, sub: `${signed(d)} in ${hours} h`, value: compact(cur), tone: d > 0 ? "warn" : "", pct: (cur / topNow) * 100 };
+    }),
+    tiles: [
+      { label: "#50 now", value: compact(p50[p50.length - 1].p50) },
+      { label: `#50 Δ${hours}h`, value: signed(d50) },
+      ...(fit ? [{ label: "#50 /day", value: signed(fit.slope) }, { label: "#50 in 7 d", value: compact(in7) }] : []),
+    ],
+    series: p50.map((r) => r.p50),
+    foot: `${hist.length} snapshots over ${hours} h`,
+  };
 };
 
-// planner: S = the week-1 deposit; M = week 1 / the top-ups / the total; L = the tranches in order
-ykPlanner.sizes = ["s", "m", "l"];
-ykPlanner.size = "s";
-ykPlanner.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// facts: this week's multiplier (or whether deposits are open) and the key facts as a list
+const FACT_ICON = ["🔗", "🌸", "🚪", "💰", "🎁", "✉️"];
+ykFacts.look = "number";
+ykFacts.glanceModel = (data = {}, ctx = {}) => {
+  const now = nowOf(ctx), week = ykWeekAt(now), open = now >= YK.depositStart, closed = now >= YK.depositEnd;
+  const daysToOpen = Math.ceil((YK.depositStart - now) / 86400000);
+  const dep = closed ? "closed" : open ? `week ${week} · ${ykMult(week).toFixed(1)}×` : `opens in ${daysToOpen} d`;
+  return {
+    head: closed ? { value: "closed", cap: "deposits no longer earn points", tone: "bad", hero: "💰" }
+      : open ? { value: ykMult(week).toFixed(1), unit: "×", cap: `week ${week} multiplier · deposits live`, tone: "ok", hero: "💰" }
+      : { value: daysToOpen, unit: " d", cap: "until deposits open", hero: "💰" },
+    items: [
+      { name: "Network", sub: "from Base or Ronin", value: "Ronin" },
+      { name: "Token", sub: "no new token", value: "FLOWER" },
+      { name: "Early access", sub: "4 waves by rank", value: "Q4 2026" },
+      { name: "Deposits", sub: "10 Aug – 16 Nov", value: dep, tone: closed ? "bad" : open ? "ok" : "" },
+      { name: "Free mint", sub: "10,000 NFTs", value: "sold out" },
+      { name: "Sign-up", sub: "no wallet needed", value: "free" },
+    ].map((it, i) => ({ icon: FACT_ICON[i], ...it })),
+  };
+};
+
+// planner: the week-1 deposit; every tranche in order (the bar = share of the biggest)
+ykPlanner.look = "number";
+ykPlanner.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = ykPlanner.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const rs = out.rows, first = rs.find((r) => r.w === 1), later = rs.filter((r) => r.w > 1);
   const lead = first || rs[0];
-  const head = big(compact(lead.amt), { unit: " FLOWER", tone: "ok",
-    cap: `week ${lead.w} deposit · ${compact(lead.pts)} pts${later.length ? ` · then ${later.length} top-ups` : ""}` });
-  if (size === "s") return { html: head };
-  if (size === "m") {
-    return { html: gTiles([
-      { label: "Week 1", value: compact(first ? first.amt : 0), sub: `${compact(first ? first.pts : 0)} pts` },
-      { label: "Top-ups", value: compact(later.reduce((a, r) => a + r.amt, 0)), sub: `${later.length} weeks` },
-      { label: "Total", value: compact(rs[rs.length - 1].run), sub: `${rs.length} deposits` },
-    ]) };
-  }
-  return { html: head + gRows(rs.slice(0, 6).map((r) => ({ name: `Week ${r.w}`,
-    sub: `${new Date(r.date).toLocaleDateString("en-US", { day: "numeric", month: "short" })} · ${r.mult.toFixed(1)}×`,
-    value: compact(r.amt), tone: r.w === 1 ? "ok" : "accent" }))) };
+  const max = Math.max(...rs.map((r) => r.amt));
+  return {
+    head: { value: compact(lead.amt), unit: " 🌸", tone: "ok", hero: "💰",
+      cap: `week ${lead.w} deposit · ${compact(lead.pts)} pts${later.length ? ` · then ${later.length} top-ups` : ""}` },
+    items: rs.map((r) => ({ icon: r.w === 1 ? "💰" : "📦", name: `Week ${r.w}`,
+      sub: `${new Date(r.date).toLocaleDateString("en-US", { day: "numeric", month: "short" })} · ${r.mult.toFixed(1)}×`,
+      value: compact(r.amt), tone: r.w === 1 ? "ok" : "accent", pct: max > 0 ? (r.amt / max) * 100 : 0 })),
+    tiles: [
+      { label: "Week 1", value: compact(first ? first.amt : 0) },
+      { label: "Top-ups", value: compact(later.reduce((a, r) => a + r.amt, 0)) },
+      { label: "Total", value: compact(rs[rs.length - 1].run) },
+    ],
+    foot: `${rs.length} deposits · Σ ${compact(rs[rs.length - 1].run)} FLOWER`,
+  };
 };
 
-// calculator: S = the points the deposit earns; M adds base / bonus / points per FLOWER
-ykCalculator.sizes = ["s", "m"];
-ykCalculator.size = "s";
-ykCalculator.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// calculator: the points the deposit earns; base / bonus (the bar = share of the total), points per
+// FLOWER and the next bonus cliff
+ykCalculator.look = "number";
+ykCalculator.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = ykCalculator.build(data, ctx, opts);
   const s = calcSettings(ctx, opts);
   const part = (k) => (out.rows.find((r) => r.k === k) || {}).pts || 0;
   const total = part("total");
   if (!(total > 0)) return { empty: "Enter a deposit amount to see its points." };
-  const head = big(compact(total), { unit: " pts", tone: "ok", cap: `${fmt(s.amount)} FLOWER in week ${s.week} · ${ykMult(s.week).toFixed(1)}×` });
-  if (size === "s") return { html: head };
-  return { html: `<div class="g-split"><div>${head}</div>${gRows([
-    { name: "Base", value: compact(part("base")) },
-    { name: "Bulk bonus", value: `+${compact(part("bonus"))}`, tone: "accent" },
-    { name: "Per FLOWER", value: `${(total / s.amount).toFixed(2)} pts` },
-  ])}</div>` };
+  const nextStep = [50, 500, 5000, 50000].find((x) => x > s.amount) || null;
+  const forgone = s.amount * (s.lockDays / s.roiDays);
+  return {
+    head: { value: compact(total), unit: " pts", tone: "ok", cap: `${fmt(s.amount)} FLOWER in week ${s.week} · ${ykMult(s.week).toFixed(1)}×`, hero: "💰" },
+    items: [
+      { icon: "🌸", name: "Base", sub: `${compact(s.amount)} × ${ykMult(s.week).toFixed(1)}`, value: compact(part("base")), pct: (part("base") / total) * 100 },
+      { icon: "🎁", name: "Bulk bonus", sub: `+${(stepRate(s.amount) * 100).toFixed(0)} % step`, value: `+${compact(part("bonus"))}`, tone: "accent", pct: (part("bonus") / total) * 100 },
+      { icon: "⚖️", name: "Per FLOWER", value: `${(total / s.amount).toFixed(2)} pts` },
+      ...(nextStep ? [{ icon: "⛰", name: "Next cliff", sub: `+${compact(nextStep - s.amount)} FLOWER to ${compact(nextStep)}`,
+        value: `+${compact(ykPoints(nextStep, s.week).total - total)}`, tone: "ok" }] : []),
+    ],
+    tiles: [
+      { label: "Deposit", value: compact(s.amount) },
+      { label: `Week ${s.week}`, value: `${ykMult(s.week).toFixed(1)}×` },
+      { label: "Total", value: compact(total) },
+      { label: "Forgone", value: compact(forgone) },
+    ],
+    foot: `forgone yield ≈ ${compact(forgone)} FLOWER (${s.lockDays} d locked ÷ ${s.roiDays} d payback)`,
+  };
+};
+
+// tiers: this week's multiplier against week 1's 3×; the four published tiers (the bar = points per
+// FLOWER against the best tier); the chart = the multiplier week by week
+ykTiers.look = "bars-4";
+ykTiers.glanceModel = (data = {}, ctx = {}) => {
+  const out = ykTiers.build(data, ctx);
+  const now = nowOf(ctx), week = ykWeekAt(now), m = ykMult(week);
+  return {
+    head: { value: m.toFixed(1), unit: "×", cap: now >= YK.depositStart ? `multiplier in week ${week} · week 1 was 3.0×` : "multiplier in week 1",
+      meter: (m / YK.multStart) * 100, meterTone: "accent", hero: "🌸" },
+    items: out.rows.map((r) => ({ icon: ctx.flower || "🌸", name: compact(r.flower), sub: `+${compact(r.bonus)} bonus at 3×`,
+      value: `${r.per.toFixed(2)}/FL`, pct: (r.per / r.maxPer) * 100 })),
+    tiles: out.rows.map((r) => ({ label: `${compact(r.flower)} 🌸`, value: compact(r.total) })),
+    series: Array.from({ length: 15 }, (_, i) => ykMult(i + 1)),
+    foot: "−0.2× a week until it rests at 1× from week 12",
+  };
+};
+
+// sources: every way to earn points (no amounts to compare, so no bars)
+const SOURCE_ICON = ["🥚", "💬", "💬", "🐦", "👛", "🤝", "🎟️", "🌸"];
+ykSources.look = "list-4";
+ykSources.glanceModel = () => ({
+  head: { value: "+6", unit: "/day", cap: "the only repeatable free source · deposits dwarf it", hero: "🥚" },
+  items: YK.actions.map((a, i) => ({ icon: SOURCE_ICON[i] || "•", name: a.what.replace(/ \(.*\)$/, ""), sub: `per ${a.per}`, value: a.pts.split(",")[0], tone: "ok" })),
+});
+
+// ranks: the rank where the NFTs stop; every reward band with its monster
+ykRanks.look = "list-4";
+ykRanks.glanceModel = () => ({
+  head: { value: "5,000", cap: "last rank with an NFT · 5,010 NFTs", tone: "accent", hero: "🥚" },
+  items: YK.ranks.map((r) => ({ icon: r.nft ? monsterIcon(r.rew) : r.wave === "—" ? "✖️" : "🚪", name: `#${r.r.replace(/ /g, "")}`, sub: r.wave,
+    value: r.nft ? r.rew : r.wave === "—" ? "nothing" : "access only", tone: r.nft ? "ok" : "" })),
+  tiles: [{ label: "NFTs", value: "5,010" }, { label: "trainers", value: "5,000" }, { label: "Legend to", value: "#2k" }, { label: "access to", value: "#100k" }],
+});
+
+// eggs: the sign-up egg you'd get now (from the live counter, when it loaded); every egg band
+const EGG_ICON = { Platinum: "💎", Gold: "🥇", Silver: "🥈", Bronze: "🥉", Basic: "🥚" };
+ykEggs.look = "icons-1";
+ykEggs.glanceModel = (data = {}, ctx = {}) => {
+  const su = ctx.live && ctx.live.signups;
+  const mine = su && su.tier ? String(su.tier).toLowerCase() : "";
+  return {
+    head: su ? { value: su.tier || "?", cap: `sign-up egg at #${compact((su.claimed || 0) + 1)}`, tone: "ok", hero: EGG_ICON[su.tier] || "🥚" }
+      : { value: YK.eggs.length, cap: "sign-up egg tiers · not an NFT", hero: "🥚" },
+    items: YK.eggs.map((e) => ({ icon: EGG_ICON[e.egg] || "🥚", name: e.egg, sub: `#${e.r.replace(/ /g, "")}`,
+      value: `≤${compact(Number(e.r.split("–")[1].replace(/\D/g, "")))}`, tone: e.egg.toLowerCase() === mine ? "ok" : "" })),
+  };
+};
+
+// verdict: the forgone yield (the real cost); the five points of the argument
+ykVerdict.look = "list-4";
+ykVerdict.glanceModel = (data = {}, ctx = {}) => {
+  const s = calcSettings(ctx, {});
+  const forgone = s.amount * (s.lockDays / s.roiDays);
+  const eq = YK.tiers[1];
+  return {
+    head: { value: compact(forgone), unit: " FLOWER", tone: "bad", cap: `forgone yield on ${compact(s.amount)} FLOWER · the real cost`, hero: "🧠" },
+    items: [
+      { icon: "✅", name: "A lock-up", sub: "not a purchase", chip: { text: "back", tone: "ok" } },
+      { icon: "🔒", name: "No withdrawals", sub: "until access, Q4 2026", chip: { text: "2–5 mo", tone: "bad" } },
+      { icon: "📉", name: "Forgone yield", sub: `${s.lockDays} d locked ÷ ${s.roiDays} d payback`, value: compact(forgone), tone: "bad" },
+      { icon: "🏆", name: "Deposit ranking", sub: `${compact(eq.flower)} FLOWER in week 1`, value: `${compact(eq.pts + eq.bonus)} pts`, tone: "info" },
+      { icon: "❓", name: "Unknowns", sub: "NFT price, launch", chip: { text: "option", tone: "warn" } },
+    ],
+    tiles: [
+      { label: "Deposit", value: compact(s.amount) },
+      { label: "Locked", value: `${s.lockDays} d` },
+      { label: "Payback", value: `${s.roiDays} d` },
+      { label: "Forgone", value: compact(forgone) },
+    ],
+    foot: "worth it only if the NFT + early access beat the forgone yield",
+  };
 };
