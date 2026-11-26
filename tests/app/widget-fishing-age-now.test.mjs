@@ -40,24 +40,24 @@ test("recipe fish are offered only when baits are not wanted (plan says they do 
 
 test("footer totals and the empty message", () => {
   const out = W.build({ farm: FARM, leveling: null }, { lvPlan: null });
-  assert.match(out.footer, /Celkem <b>[\d,]+<\/b> ryb/);
-  assert.match(out.footer, /slotů běží/);
+  assert.match(out.footer, /Total <b>[\d,]+<\/b> fish/);
+  assert.match(out.footer, /slots running/);
   const none = W.build({ farm: { inventory: {} }, leveling: null }, { lvPlan: null, bestWorm: "Grub" });
   assert.deepStrictEqual(none.rows, []);
-  assert.match(none.empty, /Chytej \(Grub\)/);
-  assert.match(W.build({ farm: null }).empty, /Chybí data farmy/);
+  assert.match(none.empty, /Go fishing \(Grub\)/);
+  assert.match(W.build({ farm: null }).empty, /No farm data/);
 });
 
 test("renders through the table: defaults show 14 rows; an extra column can be added", () => {
   const { rows } = W.build({ farm: FARM, leveling: null }, { lvPlan: null });
   const html = renderTable(W.columns, rows, W.defaults, { rowKey: W.rowKey });
   assert.strictEqual((html.match(/<tr data-row=/g) || []).length, Math.min(14, rows.length));
-  assert.doesNotMatch(html, />XP\/sůl</);
+  assert.doesNotMatch(html, />XP\/salt</);
   const withExtra = renderTable(W.columns, rows, { ...W.defaults, columns: ["name", "gainPerSalt"] }, { rowKey: W.rowKey });
-  assert.match(withExtra, />XP\/sůl</);
+  assert.match(withExtra, />XP\/salt</);
 });
 
-test("sůl Σ follows the order shown: sorted by XP, the running salt and its colour are recomputed", () => {
+test("salt Σ follows the order shown: sorted by XP, the running salt and its colour are recomputed", () => {
   const farm = { ...FARM, inventory: { ...FARM.inventory, Salt: "40" } };
   const { rows } = W.build({ farm, leveling: null }, { lvPlan: null });
   assert.ok(rows.length >= 3);
@@ -66,13 +66,13 @@ test("sůl Σ follows the order shown: sorted by XP, the running salt and its co
   const byName = new Map(rows.map((r) => [r.name, r]));
   let run = 0;
   const want = shown.map((n) => (run += byName.get(n).salt));
-  const got = [...html.matchAll(/title="[\d,]+ na tenhle řádek">([\d,]+)</g)].map((m) => Number(m[1].replace(/,/g, "")));
+  const got = [...html.matchAll(/title="[\d,]+ for this row">([\d,]+)</g)].map((m) => Number(m[1].replace(/,/g, "")));
   assert.deepStrictEqual(got, want.map((v) => Math.round(v)));
 });
 
 test("the hidden rest is counted under the table", () => {
   const { rows } = W.build({ farm: FARM, leveling: null }, { lvPlan: null });
-  if (rows.length > 14) assert.match(renderTable(W.columns, rows, W.defaults, { rowKey: W.rowKey }), new RegExp(`a dalších ${rows.length - 14}`));
+  if (rows.length > 14) assert.match(renderTable(W.columns, rows, W.defaults, { rowKey: W.rowKey }), new RegExp(`and ${rows.length - 14} more`));
 });
 
 test("the leveling plan is optional: the board paints without it and fills it in later", () => {

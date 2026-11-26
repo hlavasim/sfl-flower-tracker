@@ -52,7 +52,7 @@ test("filter by status and category: the panel lists the values, a toggle hides 
 });
 
 test("no farm, or no parser yet: an explanation, not a throw", () => {
-  assert.match(W.build({ farm: null }, CTX).empty, /Chybí data farmy/);
+  assert.match(W.build({ farm: null }, CTX).empty, /No farm data/);
   assert.match(W.build({ farm: {} }, {}).empty, /DASH/);
 });
 
@@ -74,5 +74,5 @@ test("what to list is this widget's own choice: non-ticket bounties, animal turn
   W.build({ farm: {} }, ctx, { showNonTicket: true, showAnimals: false, showFaction: false });
   assert.deepStrictEqual(seen.filters, { showNonTicket: true, showAnimals: false, showFaction: false });
   // the column the user filters by is called "typ"
-  assert.strictEqual(W.columns.find((c) => c.key === "category").label, "typ");
+  assert.strictEqual(W.columns.find((c) => c.key === "category").label, "type");
 });

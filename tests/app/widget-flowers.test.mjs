@@ -27,14 +27,14 @@ test("needs: one row per flower in the page's order; the page's mode unless the 
   assert.strictEqual(out.rows.length, Object.keys(FLOWER_RECIPES).length);
   const html = renderTable(flowersNeeds.columns, out.rows, flowersNeeds.defaults, { rowKey: flowersNeeds.rowKey });
   assert.strictEqual(keys(html)[0], "Yellow Pansy", "the most missing Sunpetal first");
-  assert.match(out.footer, /34 \/ 36|\d+ \/ \d+ hotovo/);
-  assert.match(out.footer, /zbývá 4/);
+  assert.match(out.footer, /34 \/ 36|\d+ \/ \d+ done/);
+  assert.match(out.footer, /4 left/);
   // own mode on this copy: collection of 3 → more missing
   const own = flowersNeeds.build({ farm: { inventory } }, CTX, { mode: "collection", n: 3 });
   const rp = own.rows.find((r) => r.name === "Red Pansy");
   assert.deepStrictEqual([rp.own, rp.missing > 1], [3, true]);
   assert.match(flowersNeeds.titleFor({ mode: "collection", n: 3 }), /📦 3/);
-  assert.strictEqual(flowersNeeds.titleFor({}), "🌸 Květiny – potřeba");
+  assert.strictEqual(flowersNeeds.titleFor({}), "🌸 Flowers – needed");
 });
 
 test("needs: hide what is done; filter by seed; the recipe and what uses it shown", () => {
@@ -54,7 +54,7 @@ test("needs: everything done → a ✓ message; no farm → a message", () => {
   const out = flowersNeeds.build({ farm: { inventory: all(9) } }, CTX, { hideDone: true });
   assert.strictEqual(out.rows.length, 0);
   assert.match(out.empty, /✓/);
-  assert.match(flowersNeeds.build({}, CTX, {}).empty, /Chybí data farmy/);
+  assert.match(flowersNeeds.build({}, CTX, {}).empty, /No farm data/);
 });
 
 test("beds: what grows and when, ready first; empty beds say so", () => {
@@ -65,8 +65,8 @@ test("beds: what grows and when, ready first; empty beds say so", () => {
   assert.deepStrictEqual(keys(html), ["b1", "b3", "b2"]);
   assert.match(html, /READY/);
   assert.match(html, /data-ready="\d+">1380m</);
-  assert.match(html, /prázdný/);
-  assert.match(out.footer, /1 hotový · 1 roste · 1 prázdný/);
+  assert.match(html, />empty</);
+  assert.match(out.footer, /1 ready · 1 growing · 1 empty/);
 });
 
 test("the real farm renders both", () => {

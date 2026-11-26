@@ -27,7 +27,7 @@ test("bumpkin: not ascended → the table level and the XP to the next one", () 
   const lvl = getTotalBumpkinLevel(XP, 0);
   assert.match(out.html, new RegExp(`LVL ${lvl}<`));
   const toNext = Math.round((BUMPKIN_XP_TABLE[lvl] - XP) / 1e3);
-  assert.match(out.html, new RegExp(`do L${lvl + 1}`));
+  assert.match(out.html, new RegExp(`to L${lvl + 1}`));
   assert.ok(toNext > 0);
 });
 
@@ -37,12 +37,12 @@ test("bumpkin: ascended → absolute level, the band being filled and the XP lef
   assert.match(out.html, new RegExp(`LVL ${getTotalBumpkinLevel(XP, 1)}<`));
   // 179 M XP is past band 1 (94 M + 50 M): the work band is A2
   assert.ok(XP >= _ascBaseline(1) + _ascBandXp(1));
-  assert.match(out.html, /pásmo A2/);
+  assert.match(out.html, /band A2/);
   assert.match(out.html, /w-bar/);
 });
 
 test("bumpkin: no farm or no bumpkin → an explanation", () => {
-  assert.match(bumpkinLevel.view({ farm: null }).empty, /Chybí data farmy/);
+  assert.match(bumpkinLevel.view({ farm: null }).empty, /No farm data/);
   assert.match(bumpkinLevel.view({ farm: {} }).empty, /Bumpkin/);
 });
 
@@ -69,12 +69,12 @@ test("weather: one row per item, state in words, uncovered rows marked; the foot
   const out = weatherProtection.build({ farm: FARM }, WCTX);
   const html = renderTable(weatherProtection.columns, out.rows, weatherProtection.defaults, { rowKey: weatherProtection.rowKey, rowClass: weatherProtection.rowClass });
   assert.deepStrictEqual(keys(html), ["Tornado Pinwheel", "Mangrove", "Thermal Stone", "Protective Pesticide"]);
-  assert.match(html, /spotřebovaný/);
+  assert.match(html, /used up/);
   assert.match(html, /data-row="Mangrove" class="w-st-miss"/);
   assert.match(html, /data-row="Tornado Pinwheel">/);
-  assert.match(out.footer, /2\/4 nekrytých — tsunami, insect plague/);
+  assert.match(out.footer, /2\/4 uncovered — tsunami, insect plague/);
   const all = weatherProtection.build({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, state: "ok" })) });
-  assert.match(all.footer, /Všechny 4 aktivní/);
+  assert.match(all.footer, /All 4 active/);
 });
 
 // ── Beehives ──
@@ -93,13 +93,13 @@ test("beehives: full first, then by time; idle and empty hives say so; a swarm i
   assert.match(html, /#111/);
   assert.match(html, /READY/);
   assert.match(html, /data-ready="\d+">120m</);
-  assert.match(html, /bez květin/);
-  assert.match(html, /prázdný/);
-  assert.match(html, /🐝 roj/);
-  assert.match(out.footer, /1 plný/);
+  assert.match(html, /no flowers/);
+  assert.match(html, />empty</);
+  assert.match(html, /🐝 swarm/);
+  assert.match(out.footer, /1 full/);
 });
 
 test("beehives: no hives → an explanation", () => {
-  assert.match(beehives.build({ farm: FARM }, { ...HCTX, hives: () => [] }).empty, /úl/);
-  assert.match(beehives.build({ farm: null }, HCTX).empty, /Chybí data farmy/);
+  assert.match(beehives.build({ farm: FARM }, { ...HCTX, hives: () => [] }).empty, /beehive/);
+  assert.match(beehives.build({ farm: null }, HCTX).empty, /No farm data/);
 });

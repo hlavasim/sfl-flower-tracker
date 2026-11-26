@@ -2676,6 +2676,30 @@
     .w-table tr.w-row-click:hover { background: rgba(255,255,255,0.04); }
     .w-error { color: var(--red); }
     /* the settings popover: floats under the cog, never pushes the table down */
+    .w-pinmenu { position: fixed; z-index: 1000; min-width: 220px; background: var(--bg-card); border: 2px solid var(--border-brown);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; }
+    .w-pinmenu-h { color: var(--sunpetal); font-weight: bold; padding: 4px 8px; }
+    .w-pinmenu button { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text-primary); font: inherit; padding: 6px 8px; cursor: pointer; }
+    .w-pinmenu button:hover { background: rgba(255,215,0,0.12); color: var(--sunpetal); }
+    .w-dim { color: var(--text-dim); }
+    .w-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 1100; background: var(--bg-card); color: var(--sunpetal);
+      border: 2px solid var(--sunpetal); padding: 8px 14px; font-family: 'Courier New', monospace; font-size: 0.85rem; box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
+    .w-add-btn { border-color: var(--sunpetal) !important; color: var(--sunpetal) !important; }
+    .w-gallery { position: fixed; inset: 0; z-index: 900; background: rgba(0,0,0,0.72); overflow: auto; padding: 24px 12px; }
+    .w-gal-panel { max-width: 1280px; margin: 0 auto; background: var(--bg-dark); border: 3px solid var(--border-brown); padding: 12px 16px;
+      font-family: 'Courier New', monospace; font-size: 0.85rem; color: var(--text-primary); }
+    .w-gal-head { display: flex; justify-content: space-between; align-items: center; color: var(--sunpetal); font-weight: bold; font-size: 1rem; margin-bottom: 4px; }
+    .w-gal-cat { color: var(--sunpetal); font-family: 'Press Start 2P', cursive; font-size: 0.6rem; margin: 14px 0 6px; }
+    .w-gal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+    .w-gal-card { display: flex; flex-direction: column; text-align: left; background: var(--bg-card); border: 2px solid var(--border-brown); color: inherit;
+      font: inherit; padding: 8px; cursor: pointer; min-height: 120px; }
+    .w-gal-card:hover { border-color: var(--sunpetal); }
+    .w-gal-card.added { border-color: var(--green); }
+    .w-gal-title { font-weight: bold; color: var(--sunpetal); margin-bottom: 6px; }
+    .w-gal-prev { flex: 1; max-height: 230px; overflow: hidden; font-size: 0.78em; pointer-events: none; color: var(--text-secondary);
+      -webkit-mask-image: linear-gradient(#000 75%, transparent); mask-image: linear-gradient(#000 75%, transparent); }
+    .w-gal-add { margin-top: 6px; color: var(--sunpetal); text-align: right; }
+    .w-gal-card.added .w-gal-add::after { content: " ✓"; color: var(--green); }
     /* the settings popover: readable type, as wide as its content needs (not the widget's width) */
     .w-pop { position: absolute; top: 30px; right: 8px; z-index: 60; width: min(420px, calc(100vw - 24px)); background: var(--bg-card);
       font-family: 'Courier New', monospace; font-size: 0.8rem; line-height: 1.35;
@@ -2742,7 +2766,9 @@
           } });
         window.__wFresh = frame.freshness;
         window.__wPatch = frame.patchFrames; window.__wFocusKey = frame.focusKey; window.__wRefocus = frame.refocus;
-        frame.bindFrames(document.body, (id, action, value) => window.__widgets.handle(id, action, value));
+        // 📌 on a page widget asks which board (window._wPinMenu); everything else goes to the host
+        frame.bindFrames(document.body, (id, action, value, e) => (action === "pin" && window._wPinMenu
+          ? window._wPinMenu(id, null, e && e.target) : window.__widgets.handle(id, action, value)));
       }).catch((e) => console.error("[widgets] did not load", e));
     Promise.all([import("/core/browser-engine.mjs"), import("/app/store.mjs")]).then(async ([engine, store]) => {
       // The last good results of the shared resources survive a reload (sfl_wcache:*, never synced):
@@ -10155,7 +10181,7 @@
       html += `<div class="header pixel-panel pixel-font">
         <h1>FLOWER TRACKER</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)} | ${targetText}${season ? ` | Season: ${escHTML(season)}` : ""}</div>
-        <div>${_wPinBtn("target-list", "Květiny do limitu", { cat: "flowers" })}</div>
+        <div>${_wPinBtn("target-list", "Flowers to the limit", { cat: "flowers" })}</div>
       </div>`;
 
       // Mode toggle + N slider
@@ -10184,7 +10210,7 @@
         const swarmActive = beehives.some(h => h.hasSwarm);
         const now = Date.now();
         html += `<div class="growing-section pixel-panel pixel-font">
-          <div class="growing-title">BEEHIVES${swarmActive ? ' <span style="color:var(--yellow)">BEE SWARM!</span>' : ''} ${_wPinBtn("beehives", "Úly")}</div>
+          <div class="growing-title">BEEHIVES${swarmActive ? ' <span style="color:var(--yellow)">BEE SWARM!</span>' : ''} ${_wPinBtn("beehives", "Beehives")}</div>
           <div class="growing-grid">`;
 
         for (const hive of beehives) {
@@ -12286,7 +12312,7 @@
         </div>
         <div class="treasury-secondary">${formatUSD(usdTotal)} &nbsp;|&nbsp; ${formatBTC(btcTotal)}</div>
         <div class="treasury-rates">1 ${sflIcon()} = ${rates.sflUsd.toFixed(4)} USD &nbsp;|&nbsp; 1 BTC = ${formatUSD(rates.btcUsd)}</div>
-        <div style="margin-top:6px">${_wPinBtn("treasury-value", "Hodnota farmy")}</div>
+        <div style="margin-top:6px">${_wPinBtn("treasury-value", "Farm value")}</div>
         <div style="margin-top:8px;font-size: 0.5625rem">
           <span style="color:var(--text-dim)">Coin rate:</span>
           <select onchange="setCoinMode(this.value)" style="font-family:'Courier New',monospace;font-size: 0.5625rem;background:#111;color:var(--text-primary);border:2px solid var(--border-brown);padding:2px 4px">
@@ -18551,40 +18577,150 @@
       if (type === "beehives") return { hives: (farm) => (farm.beehives ? extractBeehiveDetails(farm.beehives) : []), countdown: dashFormatCountdown };
       return {};
     }
-    // 📌 on a page that is not itself a widget frame (DASH): pin the widget with its defaults.
-    // Function declarations (hoisted): the pages that call _wPinBtn sit earlier in this script.
+    // 📌: every pin asks which board — the boards, or a new one. A page widget's frame sends its frame
+    // id; a page button (_wPinBtn) the widget type and preset options. Function declarations (hoisted):
+    // the pages that call _wPinBtn sit earlier in this script.
     function _wPinned(type) { return __widgets.doc().boards.reduce((a, b) => a + b.items.filter((x) => x.type === type).length, 0); }
-    function _wPinText(label, n) { return `📌 ${escHTML(label)}${n ? ` (připnuto ${n}×)` : ""}`; }
-    window._wPin = (type, btn) => {
-      if (typeof __widgets === "undefined") return;
-      // data-preset: the pinned copy's options (📌 Panenky do limitu → {"cat":"dolls"})
-      __widgets.handle("page:" + type, "pin", (btn && btn.dataset.preset) || "");
-      if (btn) { btn.classList.add("on"); btn.innerHTML = _wPinText(btn.dataset.label, _wPinned(type)); }
-      if (getPage() === "board" && window._wRerender) window._wRerender();
-    };
-    // Where 📌 pins: the board visited last, else the first.
-    function _wPinTargetName() {
-      const d = __widgets.doc();
-      const b = d.boards.find((x) => x.id === d.last) || d.boards[0];
-      return b ? b.name : "";
-    }
+    function _wPinText(label, n) { return `📌 ${escHTML(label)}${n ? ` (pinned ${n}×)` : ""}`; }
     function _wPinBtn(type, label, preset) {
       if (typeof __widgets === "undefined") return "";
       const n = _wPinned(type);
       const pre = preset ? ` data-preset="${escHTML(JSON.stringify(preset))}"` : "";
-      return `<button class="dash-toggle-btn w-pin-btn${n ? " on" : ""}" data-label="${escHTML(label)}"${pre} onclick="_wPin('${type}', this)" title="připnout na nástěnku „${escHTML(_wPinTargetName())}“ (ta, kde jsi byl naposledy)">${_wPinText(label, n)}</button>`;
+      return `<button class="dash-toggle-btn w-pin-btn${n ? " on" : ""}" data-label="${escHTML(label)}"${pre} onclick="_wPin('${type}', this)" title="pin to a board (you choose which)">${_wPinText(label, n)}</button>`;
     }
+    window._wPin = (type, btn) => {
+      if (typeof __widgets === "undefined") return;
+      let opts = null;
+      try { opts = btn && btn.dataset.preset ? JSON.parse(btn.dataset.preset) : null; } catch (e) { opts = null; }
+      _wPinMenu("page:" + type, opts, btn);
+    };
+    function _wPinMenuClose() {
+      const m = document.getElementById("w-pinmenu");
+      if (m) m.remove();
+      document.removeEventListener("pointerdown", _wPinMenuOutside, true);
+    }
+    function _wPinMenuOutside(e) { if (!e.target.closest || !e.target.closest("#w-pinmenu")) _wPinMenuClose(); }
+    // A new board by name; its id, or null when cancelled.
+    function _wCreateBoard() {
+      const name = String(prompt("Name of the new board:", "Board") || "").trim().slice(0, 40);
+      if (!name) return null;
+      const id = "b" + Date.now().toString(36);
+      __widgets.addBoard({ id, name });
+      return id;
+    }
+    function _wToast(text) {
+      const t = document.createElement("div");
+      t.className = "w-toast";
+      t.textContent = text;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2200);
+    }
+    window._wPinMenu = (frameId, opts, anchor) => {
+      _wPinMenuClose();
+      const d = __widgets.doc();
+      const type = String(frameId).replace(/^page:/, "").split("@")[0];
+      const m = document.createElement("div");
+      m.id = "w-pinmenu";
+      m.className = "w-pinmenu";
+      m.innerHTML = '<div class="w-pinmenu-h">Pin to…</div>' + d.boards.map((b) => {
+        const n = b.items.filter((x) => x.type === type).length;
+        return `<button type="button" data-board="${escHTML(b.id)}">📌 ${escHTML(b.name)}${n ? ` <span class="w-dim">(${n}× already)</span>` : ""}</button>`;
+      }).join("") + '<button type="button" data-new="1">＋ New board…</button>';
+      m.addEventListener("click", (e) => {
+        const btn = e.target.closest && e.target.closest("button");
+        if (!btn) return;
+        const board = btn.dataset.new ? _wCreateBoard() : btn.dataset.board;
+        _wPinMenuClose();
+        if (!board) return;
+        __widgets.handle(frameId, "pin", JSON.stringify({ board, opts }));
+        const name = (__widgets.doc().boards.find((x) => x.id === board) || {}).name || "";
+        _wToast(`Pinned to “${name}” — every copy keeps its own ⚙ settings`);
+        if (anchor && anchor.classList && anchor.classList.contains("w-pin-btn")) {
+          anchor.classList.add("on");
+          anchor.innerHTML = _wPinText(anchor.dataset.label, _wPinned(type));
+        }
+        if (getPage() === "board" && window._wRerender) window._wRerender();
+      });
+      document.body.appendChild(m);
+      const r = anchor && anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : { left: 20, bottom: 80 };
+      m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.offsetWidth - 8)) + "px";
+      m.style.top = Math.max(8, Math.min(r.bottom + 4, window.innerHeight - m.offsetHeight - 8)) + "px";
+      setTimeout(() => document.addEventListener("pointerdown", _wPinMenuOutside, true), 0);
+    };
     // Shown in place of a widget panel when the widget modules did not load.
     function _wMissing(title) {
-      return '<div class="pixel-panel w-error" style="padding:8px 10px;margin:8px 0;font-size:0.5rem">' + escHTML(title) + ': panel se nenačetl (moduly widgetů) — zkus RELOAD.</div>';
+      return '<div class="pixel-panel w-error" style="padding:8px 10px;margin:8px 0;font-size:0.5rem">' + escHTML(title) + ': the widget modules did not load — try RELOAD.</div>';
     }
-    // One button per board (DASH opens the dashboard page), a new one, and deleting one of your own.
+
+    // ＋ Add widget: every widget, by the page it comes from, previewed on your own data; a click adds
+    // a new copy (with its own settings) to the board. The target list is offered once per category.
+    const _wGalleryCats = [["chores", "CHORES"], ["flowers", "FLOWERS"], ["dolls", "DOLLS"], ["crustaceans", "CRABS"], ["board", "TARGETS"],
+      ["bumpkin", "BUMPKIN"], ["fishing", "FISHING"], ["leveling", "LEVELING"], ["treasury", "TREASURY"], ["tickets", "TICKETS"],
+      ["flips", "FLIPS"], ["world", "WORLD"]];
+    function _wGalleryItems() {
+      const out = [];
+      for (const [type, w] of Object.entries(__widgets.registry)) {
+        if (type === "target-list") {
+          for (const cat of ["dolls", "crabs", "flowers", "foods"]) out.push({ type, page: "board", opts: { cat } });
+        } else out.push({ type, page: w.page || "board", opts: null });
+      }
+      return out;
+    }
+    function _wGalleryTitle(it) {
+      const w = __widgets.registry[it.type];
+      return typeof w.titleFor === "function" ? w.titleFor({ ...((w.defaults || {}).opts || {}), ...(it.opts || {}) }) : w.title;
+    }
+    window._wGalleryClose = () => { const g = document.getElementById("w-gallery"); if (g) g.remove(); };
+    window._wGallery = (boardId) => {
+      window._wGalleryClose();
+      const board = __widgets.doc().boards.find((b) => b.id === boardId);
+      if (!board) return;
+      const items = _wGalleryItems();
+      const g = document.createElement("div");
+      g.id = "w-gallery";
+      g.className = "w-gallery";
+      let html = `<div class="w-gal-panel"><div class="w-gal-head"><span>＋ Add a widget to “${escHTML(board.name)}”</span>` +
+        `<button type="button" class="w-btn" onclick="_wGalleryClose()" title="close">✕</button></div>` +
+        `<div class="w-dim" style="margin-bottom:8px">Previews use your farm. Add the same widget as often as you like — each copy keeps its own ⚙ settings.</div>`;
+      for (const [page, label] of _wGalleryCats) {
+        const here = items.map((it, k) => ({ ...it, k })).filter((it) => it.page === page);
+        if (!here.length) continue;
+        html += `<div class="w-gal-cat">${escHTML(label)}</div><div class="w-gal-grid">` + here.map((it) =>
+          `<button type="button" class="w-gal-card" data-k="${it.k}"><div class="w-gal-title">${escHTML(_wGalleryTitle(it))}</div>` +
+          `<div class="w-gal-prev" id="w-gal-prev-${it.k}">Loading…</div><div class="w-gal-add">＋ Add</div></button>`).join("") + `</div>`;
+      }
+      g.innerHTML = html + "</div>";
+      g.addEventListener("click", (e) => {
+        if (e.target === g) { window._wGalleryClose(); return; }
+        const card = e.target.closest && e.target.closest(".w-gal-card");
+        if (!card) return;
+        const it = items[Number(card.dataset.k)];
+        __widgets.handle("page:" + it.type, "pin", JSON.stringify({ board: boardId, opts: it.opts }));
+        _wToast(`Added “${_wGalleryTitle(it)}”`);
+        card.classList.add("added");
+        if (getPage() === "board" && window._wRerender) window._wRerender();
+      });
+      document.body.appendChild(g);
+      // the previews, each as its data arrives (the store shares and caches the fetches)
+      if (items.some((it) => it.type === "dash-actions") && Object.keys(dashP2P).length === 0) dashFetchP2P().catch(() => {});
+      items.forEach((it, k) => {
+        __widgets.loadData(it.type, FARM_ID, __store).then(({ data }) => {
+          const el = document.getElementById("w-gal-prev-" + k);
+          if (el) el.innerHTML = __widgets.preview(it.type, { data, ctx: _wCtx(it.type), opts: it.opts });
+        }).catch((err) => {
+          const el = document.getElementById("w-gal-prev-" + k);
+          if (el) el.textContent = "No preview: " + ((err && err.message) || err);
+        });
+      });
+    };
+
+    // One button per board, a new one, and deleting one of your own.
     function _wBoardSwitcher(currentId) {
       const btn = (b) => `<button class="dash-toggle-btn${b.id === currentId ? " on" : ""}" data-board="${escHTML(b.id)}" onclick="_wOpenBoard(this.dataset.board)">📌 ${escHTML(b.name)}</button>`;
       return '<div class="dash-toolbar">' + __widgets.doc().boards.map(btn).join("") +
-        '<button class="dash-toggle-btn" onclick="_wNewBoard()">＋ nová nástěnka</button>' +
+        '<button class="dash-toggle-btn" onclick="_wNewBoard()">＋ New board</button>' +
         (currentId !== "main"
-          ? `<button class="dash-toggle-btn" data-board="${escHTML(currentId)}" onclick="_wDeleteBoard(this.dataset.board)" title="smaže nástěnku i s jejími widgety">🗑 smazat tuhle nástěnku</button>` : "") +
+          ? `<button class="dash-toggle-btn" data-board="${escHTML(currentId)}" onclick="_wDeleteBoard(this.dataset.board)" title="deletes the board with its widgets">🗑 Delete this board</button>` : "") +
         '</div>';
     }
     window._wOpenBoard = (id) => {
@@ -18596,16 +18732,13 @@
       main();
     };
     window._wNewBoard = () => {
-      const name = String(prompt("Název nové nástěnky:", "Nástěnka") || "").trim().slice(0, 40);
-      if (!name) return;
-      const id = "b" + Date.now().toString(36);
-      __widgets.addBoard({ id, name });
-      _wOpenBoard(id);
+      const id = _wCreateBoard();
+      if (id) _wOpenBoard(id);
     };
     window._wDeleteBoard = (id) => {
       const b = __widgets.doc().boards.find((x) => x.id === id);
       if (!b || id === "main") return;
-      if (!confirm(`Smazat nástěnku „${b.name}“ i s ${b.items.length} widgety?`)) return;
+      if (!confirm(`Delete the board “${b.name}” with its ${b.items.length} widgets?`)) return;
       __widgets.removeBoard(id);
       _wOpenBoard(__widgets.doc().boards[0].id);
     };
@@ -18613,7 +18746,7 @@
     // The ?board= one, else the board visited last, else the first.
     async function renderBoard() {
       const app = document.getElementById("app");
-      if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("Můj dashboard"); return; }
+      if (typeof __widgets === "undefined") { app.innerHTML = _wMissing("DASH"); return; }
       window._wRerender = renderBoard; window._wRefresh = null;
       const page = getPage();
       const seq = _navSeq;
@@ -18622,14 +18755,14 @@
       const want = new URLSearchParams(window.location.search).get("board") || d0.last;
       const board = d0.boards.find((b) => b.id === want) || d0.boards[0];
       const boardId = board.id;
-      __widgets.visit(boardId);   // 📌 on a page now pins here
+      __widgets.visit(boardId);   // the 📌 menu lists this board first next time
       const head = '<div class="header pixel-panel pixel-font"><h1>📌 ' + escHTML(board.name) + '</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) +
-          ' · připnuté panely, každý se svým nastavením</div>' + _wBoardSwitcher(boardId) +
-          '<div>' + _wPinBtn("target-list", "🎯 přidat „Do limitu“ (kategorie a limit v ⚙)", { cat: "foods" }) + '</div></div>';
-      if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Zadej Farm ID nahoře.</div>'; return; }
+          ' · your widgets, each with its own ⚙ settings</div>' + _wBoardSwitcher(boardId) +
+          `<div><button class="dash-toggle-btn w-add-btn" data-board="${escHTML(boardId)}" onclick="_wGallery(this.dataset.board)">＋ Add widget</button></div></div>`;
+      if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Enter your Farm ID above.</div>'; return; }
       if (!board.items.length) {
-        app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;line-height:1.7">Zatím tu nic není. ' +
-          'Na stránce s panelem (třeba 🎣 FISHING → „Do sudu teď“) klikni na 📌 a panel se objeví tady.</div>';
+        app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;line-height:1.7">Nothing here yet. ' +
+          'Click ＋ Add widget, or 📌 on a panel of any page.</div>';
         return;
       }
       // Paint from what the store already holds, then again as each need arrives: a slow optional
@@ -21672,7 +21805,7 @@
       // x-axis-labeled with the island name, so no separate color legend (that
       // would just repeat the label the bar already carries).
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND ${_wPinBtn("world-islands", "Hráči podle ostrova")}</div>
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND ${_wPinBtn("world-islands", "Players by island")}</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms in the current scope</div>
         ${_barChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28, highlight: (r) => me && me.island_type === r.key,
           rankTag: me ? _youTag(_rankIn(_worldData.islandRows, me.island_type,
@@ -21683,7 +21816,7 @@
       // ascension bands keep stacking, so this runs one row per level from 1 up to
       // whatever the crawl has found so far. Long list -> scroll, not truncation.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS ${_wPinBtn("world-skill-points", "Hráči podle skill pointů")}</div>
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS ${_wPinBtn("world-skill-points", "Players by skill points")}</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Skill points earned from XP <b>as it stands now</b> — food still sitting uneaten does not count. This is the game's getTotalBumpkinLevel (1 point per level, ascension bands included), so post-ascension reads 150 + 50 per completed band + the level within it. <b>Caveat above 200:</b> the game caps pre-ascension skill points there, so higher values are this curve (x1.03 XP per level) extrapolated — they keep extreme farms distinguishable but are not points the game grants.</div>
         ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.total_level === r.key,
           rankTag: me ? _youTag(_rankIn(_worldData.levelRows, me.total_level, (r) => r.key > me.total_level)) : null })}
@@ -25446,7 +25579,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       let h = `<div class="header pixel-panel pixel-font"><h1>🎟️ TICKETY</h1>
         <div class="farm-id">${escHTML(c.name)} · ${icon} ${tk} · týden ${tl.week}${tl.weeks ? ` z ${tl.weeks}` : ""}</div>
-        <div style="margin-top:6px">${_wPinBtn("ticket-checklist", "Tickety tento týden")}</div></div>`;
+        <div style="margin-top:6px">${_wPinBtn("ticket-checklist", "Tickets this week")}</div></div>`;
 
       // 1. Four numbers.
       const tile = (label, value, sub, color) => `<div class="pixel-panel" style="padding:10px 12px;text-align:center;min-width:0">
@@ -26099,7 +26232,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       h += `<div class="flip-ctrl">`;
       h += `<input type="text" placeholder="🔎 search NFT" value="${escHTML(q)}" oninput="_flipSearch(this.value)" style="background:#1c160f;border:1px solid var(--border-brown);color:var(--text-primary);border-radius:5px;padding:4px 8px;font-size:0.6rem;font-family:'Courier New',monospace;min-width:140px">`;
       for (const [k, lbl] of _flipSorts) h += `<button class="roi-pill${sort === k ? " active" : ""}" onclick="_flipSetSort('${k}')">${lbl}</button>`;
-      h += _wPinBtn("flip-table", "Flipy NFT") + `</div>`;
+      h += _wPinBtn("flip-table", "NFT flips") + `</div>`;
       h += _mktPausedNotice(d.items[0]?.updatedAt, 3);
       h += `<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:6px">${d.count} boostovaných NFT s bid i ask · <span class="flip-good">zelená</span> marže ≥15 % (zdravý flip) · <span class="flip-bad">červená</span> net ≤0 (spread nepokryje poplatek)</div>`;
       h += `<div style="overflow-x:auto"><table class="flip-t"><thead><tr>

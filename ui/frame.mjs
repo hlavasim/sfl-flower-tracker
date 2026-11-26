@@ -7,14 +7,14 @@ export const ROW_PX = 40;   // one unit of a board item's height (h)
 
 // A store entry → the freshness badge: { text, level: loading|ok|stale|error }.
 export function freshness(entry, now = Date.now()) {
-  if (!entry) return { text: "načítám…", level: "loading" };
+  if (!entry) return { text: "loading…", level: "loading" };
   const age = (t) => {
     const min = Math.floor((now - t) / 60_000);
-    return min < 1 ? "teď" : `před ${min} min`;
+    return min < 1 ? "now" : `${min} min ago`;
   };
   if (entry.status === "ok") return { text: age(entry.asOf), level: "ok" };
-  if (entry.stale) return { text: `starší data (${age(entry.asOf)}) — ${entry.error}`, level: "stale" };
-  return { text: `chyba — ${entry.error}`, level: "error" };
+  if (entry.stale) return { text: `older data (${age(entry.asOf)}) — ${entry.error}`, level: "stale" };
+  return { text: `error — ${entry.error}`, level: "error" };
 }
 
 // place "page": cog + pin (pinned = how many copies are on boards). place "board": a drag handle
@@ -25,18 +25,18 @@ export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, 
   const btn = (action, label, title, value = "", cls = "") =>
     `<button type="button" class="w-btn${cls}" data-action="${action}" data-value="${esc(value)}" title="${esc(title)}" aria-label="${esc(title)}">${label}</button>`;
   const board = place === "board";
-  const tools = btn("refresh", "↻", "načíst znovu") + (cog ? btn("cog", "⚙", "nastavení", "", settingsOpen ? " on" : "") : "") + (board
-    ? btn("remove", "✕", "odebrat z dashboardu")
-    : btn("pin", pinned ? `📌 ${pinned}` : "📌", pinned ? `připnuto ${pinned}× — připnout další kopii` : "připnout na můj dashboard"));
-  const grip = board ? `<span class="w-grip" data-drag="item" title="táhni a pusť na jiný widget">⠿</span>` : "";
+  const tools = btn("refresh", "↻", "reload") + (cog ? btn("cog", "⚙", "settings", "", settingsOpen ? " on" : "") : "") + (board
+    ? btn("remove", "✕", "remove from the board")
+    : btn("pin", pinned ? `📌 ${pinned}` : "📌", pinned ? `pinned ${pinned}× — pin another copy` : "pin to a board"));
+  const grip = board ? `<span class="w-grip" data-drag="item" title="drag and drop onto another widget">⠿</span>` : "";
   const style = board
     ? ` style="grid-column:span ${Math.min(12, Math.max(1, w))}${h > 0 ? `;height:${h * ROW_PX}px` : ""}"` : "";
   const pop = settingsOpen && settingsHtml
-    ? `<div class="w-pop" data-pop role="dialog" aria-label="Nastavení"><div class="w-pop-head"><span>Nastavení</span>` +
-      `<button type="button" class="w-btn" data-action="cog" data-value="" title="zavřít" aria-label="zavřít">✕</button></div>${settingsHtml}</div>` : "";
+    ? `<div class="w-pop" data-pop role="dialog" aria-label="Settings"><div class="w-pop-head"><span>Settings</span>` +
+      `<button type="button" class="w-btn" data-action="cog" data-value="" title="close" aria-label="close">✕</button></div>${settingsHtml}</div>` : "";
   return `<section class="w-frame pixel-panel${board ? " w-on-board" : ""}" data-frame="${esc(id)}"${style}>` +
     `<header class="w-head">${grip}<span class="w-title">${esc(title)}</span>${badge}<span class="w-tools">${tools}</span></header>` +
-    pop + `<div class="w-body">${body}</div>` + (board ? `<span class="w-resize" data-resize title="táhni pro změnu velikosti"></span>` : "") + `</section>`;
+    pop + `<div class="w-body">${body}</div>` + (board ? `<span class="w-resize" data-resize title="drag to resize"></span>` : "") + `</section>`;
 }
 
 // Resize geometry. The pointer's distance from the frame's left edge, in grid steps (a column plus

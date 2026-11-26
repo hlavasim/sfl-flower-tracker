@@ -28,7 +28,7 @@ test("islands: share and bar per row, my island highlighted", () => {
   assert.match(html, /60\.0 %/);
   assert.match(html, /class="w-hbar"><span style="width:100\.0%/);
   assert.match(html, /data-row="volcano" class="w-row-hl"/);
-  assert.match(footer, /1[\s ]?000 farem/);
+  assert.match(footer, /1,000 farms/);
 });
 
 test("skill points: highest first, my level highlighted, farms above me in the footer", () => {
@@ -36,7 +36,7 @@ test("skill points: highest first, my level highlighted, farms above me in the f
   const html = renderTable(worldSkillPoints.columns, rows, worldSkillPoints.defaults, opts(worldSkillPoints));
   assert.deepStrictEqual(keys(html), ["300", "285", "150", "1"]);
   assert.match(html, /data-row="285" class="w-row-hl"/);
-  assert.match(footer, /nad tebou 50 farem/);
+  assert.match(footer, /50 farms above you/);
   assert.match(footer, /top 5[,.]0 %/);
 });
 

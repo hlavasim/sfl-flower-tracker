@@ -61,8 +61,9 @@ async function renderBoardWith(boardsJson, { slowLeveling = false, page = "board
 
 test("an empty board explains how to pin", async () => {
   const { html } = await renderBoardWith(null);
-  assert.match(html, /MŮJ DASHBOARD|Můj dashboard/);
-  assert.match(html, /klikni na 📌/);
+  assert.match(html, /My dashboard/);
+  assert.match(html, /Click ＋ Add widget/);
+  assert.match(html, /onclick="_wGallery\(this\.dataset\.board\)">＋ Add widget</);
 });
 
 test("a pinned widget renders in the grid with its own settings and board controls", async () => {
@@ -82,14 +83,14 @@ test("a pinned widget renders in the grid with its own settings and board contro
 test("a pinned widget whose type is gone does not break the board", async () => {
   const boards = JSON.stringify({ schema: 1, page: {}, boards: [{ id: "main", name: "B", items: [{ i: "x", type: "removed-widget", settings: {}, w: 6 }] }] });
   const { html } = await renderBoardWith(boards);
-  assert.match(html, /už neexistuje/);
+  assert.match(html, /no longer exists/);
 });
 
 test("a slow optional need (the leveling plan) does not hold the board: it paints with the farm alone", async () => {
   const boards = JSON.stringify({ schema: 1, page: {}, boards: [{ id: "main", name: "B", items: [{ i: "w1", type: "fishing-age-now", settings: {}, w: 6 }] }] });
   const { html } = await renderBoardWith(boards, { slowLeveling: true });
   assert.match(html, /<tr data-row=/);
-  assert.doesNotMatch(html, /Načítám/);
+  assert.doesNotMatch(html, /Loading…/);
 });
 
 test("review #4/#6: a newer board render supersedes an older one's late paints; widgets load apart from the engine", () => {
@@ -155,4 +156,17 @@ test("FLOWERS: the needs table and the beds are the page's own widgets, the page
   assert.doesNotMatch(body, /<div class="seed-header pixel-font">/);
   assert.doesNotMatch(body, /summary-bar/);
   assert.doesNotMatch(body, /CURRENTLY GROWING/);
+});
+
+test("📌 asks which board (the boards, or a new one); ＋ Add widget shows every widget by page with a live preview", () => {
+  // a page widget's 📌 and the page buttons both go to the menu
+  assert.match(SRC, /action === "pin" && window\._wPinMenu\s*\? window\._wPinMenu\(id, null, e && e\.target\)/);
+  assert.match(SRC, /_wPinMenu\("page:" \+ type, opts, btn\);/);
+  assert.match(SRC, /'<div class="w-pinmenu-h">Pin to…<\/div>'/);
+  assert.match(SRC, /'<button type="button" data-new="1">＋ New board…<\/button>'/);
+  assert.match(SRC, /__widgets\.handle\(frameId, "pin", JSON\.stringify\(\{ board, opts \}\)\);/);
+  // the gallery: categories by page, the target list once per category, previews through the store
+  assert.match(SRC, /for \(const cat of \["dolls", "crabs", "flowers", "foods"\]\) out\.push/);
+  assert.match(SRC, /el\.innerHTML = __widgets\.preview\(it\.type, \{ data, ctx: _wCtx\(it\.type\), opts: it\.opts \}\);/);
+  assert.match(SRC, /__widgets\.handle\("page:" \+ it\.type, "pin", JSON\.stringify\(\{ board: boardId, opts: it\.opts \}\)\);/);
 });

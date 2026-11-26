@@ -6,12 +6,12 @@ import { renderFrame, freshness, bindFrames, spanAt, rowsAt, dropIndex, patchFra
 
 test("freshness reads the store entry: loading, ok with age, stale, error", () => {
   const now = 10 * 60_000;
-  assert.deepStrictEqual(freshness(null, now), { text: "načítám…", level: "loading" });
-  assert.deepStrictEqual(freshness({ status: "ok", asOf: now - 30_000 }, now), { text: "teď", level: "ok" });
-  assert.deepStrictEqual(freshness({ status: "ok", asOf: now - 5 * 60_000 }, now), { text: "před 5 min", level: "ok" });
+  assert.deepStrictEqual(freshness(null, now), { text: "loading…", level: "loading" });
+  assert.deepStrictEqual(freshness({ status: "ok", asOf: now - 30_000 }, now), { text: "now", level: "ok" });
+  assert.deepStrictEqual(freshness({ status: "ok", asOf: now - 5 * 60_000 }, now), { text: "5 min ago", level: "ok" });
   assert.deepStrictEqual(freshness({ status: "error", stale: true, asOf: now - 3 * 60_000, error: "x 429" }, now),
-    { text: "starší data (před 3 min) — x 429", level: "stale" });
-  assert.deepStrictEqual(freshness({ status: "error", stale: false, error: "boom" }, now), { text: "chyba — boom", level: "error" });
+    { text: "older data (3 min ago) — x 429", level: "stale" });
+  assert.deepStrictEqual(freshness({ status: "error", stale: false, error: "boom" }, now), { text: "error — boom", level: "error" });
 });
 
 test("on its page: title, badge, cog and a pin button; no board controls", () => {
@@ -45,7 +45,7 @@ test("on the board: a drag handle, cog, remove and a resize corner; no pin, arro
 test("the settings open as a popover with its own close button, only when open", () => {
   assert.doesNotMatch(renderFrame({ id: "x", title: "X", place: "page", body: "", settingsHtml: "<i>S</i>" }), /<i>S<\/i>|data-pop/);
   const html = renderFrame({ id: "x", title: "X", place: "page", body: "", settingsHtml: "<i>S</i>", settingsOpen: true });
-  assert.match(html, /<div class="w-pop" data-pop[^>]*>.*Nastavení.*data-action="cog".*<i>S<\/i>/s);
+  assert.match(html, /<div class="w-pop" data-pop[^>]*>.*Settings.*data-action="cog".*<i>S<\/i>/s);
 });
 
 test("resize geometry: the pointer position snaps to twelfths of the grid and to 40 px rows", () => {

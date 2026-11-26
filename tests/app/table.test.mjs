@@ -67,9 +67,9 @@ test("render: density and text size reach the markup; the sorted column is marke
 });
 
 test("render: top N says how many rows it left out", () => {
-  assert.match(renderTable(COLS, ROWS, { rows: { mode: "top", top: 2 } }, { rowKey: key }), /… a dalších 1/);
-  assert.doesNotMatch(renderTable(COLS, ROWS, { rows: { mode: "top", top: 3 } }, { rowKey: key }), /a dalších/);
-  assert.doesNotMatch(renderTable(COLS, ROWS, {}, { rowKey: key }), /a dalších/);
+  assert.match(renderTable(COLS, ROWS, { rows: { mode: "top", top: 2 } }, { rowKey: key }), /… and 1 more/);
+  assert.doesNotMatch(renderTable(COLS, ROWS, { rows: { mode: "top", top: 3 } }, { rowKey: key }), /more</);
+  assert.doesNotMatch(renderTable(COLS, ROWS, {}, { rowKey: key }), /more</);
 });
 
 test("render: a header tooltip, a trusted header label, and a widget's row classes", () => {
@@ -109,7 +109,7 @@ test("top N keeps a row the widget marks (keepRow) visible below a '…' line", 
   const html = renderTable(COLS, ROWS, { rows: { mode: "top", top: 1 } }, { rowKey: key, keepRow: (r) => r.name === "Eel" });
   assert.deepStrictEqual([...html.matchAll(/data-row="([^"]+)"/g)].map((m) => m[1]), ["Tuna", "Eel"]);
   assert.match(html, /class="w-gap"/);
-  assert.match(html, /a dalších 1/);
+  assert.match(html, /and 1 more/);
   const inside = renderTable(COLS, ROWS, { rows: { mode: "top", top: 3 } }, { rowKey: key, keepRow: (r) => r.name === "Eel" });
   assert.doesNotMatch(inside, /w-gap/);
 });

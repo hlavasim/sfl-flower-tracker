@@ -2,7 +2,7 @@
 // the next level (not ascended). A view widget — no table, no settings.
 import { getTotalBumpkinLevel, _ascBaseline, _ascBandXp, _withinAscensionLevel, BUMPKIN_XP_TABLE } from "../core/engine/power-helpers.mjs";
 
-const mxp = (n) => (n >= 1e6 ? `${(n / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} M` : Math.round(n).toLocaleString("cs-CZ"));
+const mxp = (n) => (n >= 1e6 ? `${(n / 1e6).toLocaleString("en-US", { maximumFractionDigits: 1 })} M` : Math.round(n).toLocaleString("en-US"));
 const bar = (pct) => `<div class="w-bar"><span style="width:${Math.max(0, Math.min(100, pct)).toFixed(1)}%"></span></div>`;
 
 export const bumpkinLevel = {
@@ -12,8 +12,8 @@ export const bumpkinLevel = {
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
 
   view({ farm }) {
-    if (!farm) return { empty: "Chybí data farmy." };
-    if (!farm.bumpkin) return { empty: "Farma nemá Bumpkina." };
+    if (!farm) return { empty: "No farm data." };
+    if (!farm.bumpkin) return { empty: "The farm has no Bumpkin." };
     const xp = +farm.bumpkin.experience || 0;
     const asc = (farm.island && farm.island.ascensionLevel) || 0;
     const level = getTotalBumpkinLevel(xp, asc);
@@ -26,13 +26,13 @@ export const bumpkinLevel = {
       const within = _withinAscensionLevel(xp, band);
       pct = ((xp - base) / size) * 100;
       const uncapped = 150 + (band - 1) * 50 + within;
-      sub = `pásmo A${band} · L${within}/50${uncapped > level ? ` · XP odpovídá L${uncapped}` : ""}`;
-      left = `do konce pásma ${mxp(Math.max(0, base + size - xp))} XP`;
+      sub = `band A${band} · L${within}/50${uncapped > level ? ` · XP equals L${uncapped}` : ""}`;
+      left = `${mxp(Math.max(0, base + size - xp))} XP to the end of the band`;
     } else {
       const prev = BUMPKIN_XP_TABLE[level - 1] || 0, next = BUMPKIN_XP_TABLE[Math.min(level, 199)];
       pct = level >= 200 ? 100 : ((xp - prev) / (next - prev)) * 100;
       sub = `XP ${mxp(xp)}`;
-      left = level >= 200 ? "maximum před ascenzí" : `do L${level + 1} ${mxp(next - xp)} XP`;
+      left = level >= 200 ? "max before ascension" : `${mxp(next - xp)} XP to L${level + 1}`;
     }
     return {
       html: `<div class="w-tile"><div class="w-tile-big">LVL ${level}</div><div class="w-tile-sub">${sub}</div>${bar(pct)}` +

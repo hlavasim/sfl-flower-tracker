@@ -32,11 +32,11 @@ test("tickets: open sources first (most tickets first), done ones after, zero-ti
   assert.deepStrictEqual(keys(html), ["b1", "c1", "c2", "a1", "daily", "d1"]);
   assert.match(html, /data-row="d1" class="w-st-done"/);
   assert.match(html, /Betty<\/b>: 15× Wheat/);
-  assert.match(html, /20 \/ 50 · zbývá 30/);
-  assert.match(html, /splněno — vyzvedni u NPC/);
-  assert.match(html, /Odevzdej <b>Cow<\/b> na levelu 5\+/);
-  assert.match(html, /Vyzvedni denní odměnu/);
-  assert.match(footer, /5 zbývá · <b[^>]*>\+19</);
+  assert.match(html, /20 \/ 50 · 30 left/);
+  assert.match(html, /complete — claim it at the NPC/);
+  assert.match(html, /Deliver <b>Cow<\/b> at level 5\+/);
+  assert.match(html, /Claim the daily reward/);
+  assert.match(footer, /5 left · <b[^>]*>\+19</);
 });
 
 test("tickets: the cost per ticket is a column (sortable), groups are a filter", () => {
@@ -48,7 +48,7 @@ test("tickets: the cost per ticket is a column (sortable), groups are a filter",
 });
 
 test("tickets: not loaded → an explanation", () => {
-  assert.match(ticketChecklist.build({ tickets: null }).empty, /tickety/i);
+  assert.match(ticketChecklist.build({ tickets: null }).empty, /tickets/i);
 });
 
 test("store: tickets POSTs the recorded weeks like the TICKETY page", async () => {
@@ -83,7 +83,7 @@ test("flips: rows, margin colours, escaped names, market link; frozen feed is sa
   assert.match(html, /marketplace\/collectibles\/1/);
   assert.match(html, /flip-good">26%/);
   assert.match(html, /flip-bad">-5%/);
-  assert.match(footer, /Sběr každou hodinu/);
+  assert.match(footer, /Collected hourly/);
   const old = { ...FLIPS, items: FLIPS.items.map((i) => ({ ...i, updatedAt: "2026-09-01T00:00:00Z" })) };
-  assert.match(flipTable.build({ flips: old }).footer, /pozastaven/);
+  assert.match(flipTable.build({ flips: old }).footer, /paused/);
 });

@@ -30,7 +30,7 @@ test("dolls to the limit: have + in progress vs the limit; done rows hidden by d
   assert.deepStrictEqual([rows[0].have, rows[0].pend, rows[0].need, rows[0].missing], [3, 0, 10, 7]);
   assert.match(rows[0].recipe, /4× Leather, 5× Wool/);
   // dolls without a recipe (not craftable yet) are left out, as the DASH suggestions do
-  assert.match(footer, /18 \/ 19 na limitu/);
+  assert.match(footer, /18 \/ 19 at the limit/);
   // with done rows shown, Angler Doll is there and done
   const shown = byName(W.build({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10, hideDone: false })).rows);
   assert.strictEqual(Object.keys(shown).length, 19);
@@ -41,13 +41,13 @@ test("dolls to the limit: have + in progress vs the limit; done rows hidden by d
 test("everything at the limit: a ✓ message instead of an empty table", () => {
   const out = W.build({ farm: { inventory: all(Object.keys(CRUSTACEAN_RECIPES), 5) } }, {}, opts({ cat: "crabs", limit: 5 }));
   assert.strictEqual(out.rows.length, 0);
-  assert.match(out.empty, /✓ Vše na limitu \(16\)/);
+  assert.match(out.empty, /✓ All at the limit \(16\)/);
 });
 
 test("crustaceans: pot and chum as the recipe; one without chum says so", () => {
   const r = byName(W.build({ farm: { inventory: {} } }, {}, opts({ cat: "crabs", limit: 2 })).rows);
   assert.match(r["Blue Crab"].recipe, /Crab Pot · 3× Heart Leaf/);
-  assert.match(r["Isopod"].recipe, /Crab Pot · bez návnady/);
+  assert.match(r["Isopod"].recipe, /Crab Pot · no bait/);
   assert.strictEqual(r["Isopod"].missing, 2);
 });
 
@@ -64,7 +64,7 @@ test("flowers: a flower that other flowers are grown from also needs what they s
 test("food: only the picked dishes; nothing picked → a hint; recipe and kitchen shown", () => {
   const none = W.build({ farm: { inventory: {} } }, {}, opts({ cat: "foods", foods: [] }));
   assert.strictEqual(none.rows.length, 0);
-  assert.match(none.empty, /Vyber jídla/);
+  assert.match(none.empty, /Pick dishes/);
   const r = W.build({ farm: { inventory: { "Pumpkin Soup": "4" } } }, {}, opts({ cat: "foods", limit: 5, foods: ["Pumpkin Soup", "Nope"] })).rows;
   assert.deepStrictEqual(r.map((x) => [x.name, x.missing]), [["Pumpkin Soup", 1]]);
   assert.match(r[0].recipe, /🔥 Fire Pit · 10× Pumpkin/);
@@ -75,8 +75,8 @@ test("food: only the picked dishes; nothing picked → a hint; recipe and kitche
 });
 
 test("title names the category and the limit; table: most missing first, icon from the page", () => {
-  assert.strictEqual(W.titleFor(opts({ cat: "dolls", limit: 10 })), "🎯 Panenky do 10");
-  assert.strictEqual(W.titleFor(opts({ cat: "foods", limit: 3 })), "🎯 Jídla do 3");
+  assert.strictEqual(W.titleFor(opts({ cat: "dolls", limit: 10 })), "🎯 Dolls to 10");
+  assert.strictEqual(W.titleFor(opts({ cat: "foods", limit: 3 })), "🎯 Dishes to 3");
   const { rows } = W.build({ farm: { inventory: { Doll: "8" } } }, { icon: (n) => `<i>${n}</i>` }, opts({ cat: "dolls", limit: 10 }));
   const html = renderTable(W.columns, rows, W.defaults, { rowKey: W.rowKey });
   const order = [...html.matchAll(/data-row="([^"]+)"/g)].map((m) => m[1]);
@@ -85,7 +85,7 @@ test("title names the category and the limit; table: most missing first, icon fr
 });
 
 test("no farm: a clear empty message", () => {
-  assert.match(W.build({}, {}, opts({})).empty, /Chybí data farmy/);
+  assert.match(W.build({}, {}, opts({})).empty, /No farm data/);
 });
 
 test("dolls: the page's tracked dolls (ctx.tracked) narrow the list", () => {

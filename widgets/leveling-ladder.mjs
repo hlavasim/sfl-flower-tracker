@@ -17,12 +17,12 @@ function planFor(farm, leveling, book, saved) {
   return out;
 }
 
-const num = (n) => (Number.isFinite(n) ? Math.round(n).toLocaleString("cs-CZ") : "—");
-const date = (d, now) => (Number.isFinite(d) && d > 0 ? new Date(now + d * 86400000).toLocaleDateString("cs-CZ") : "");
+const num = (n) => (Number.isFinite(n) ? Math.round(n).toLocaleString("en-US") : "—");
+const date = (d, now) => (Number.isFinite(d) && d > 0 ? new Date(now + d * 86400000).toLocaleDateString("en-US") : "");
 
 export const levelingLadderWidget = {
   type: "leveling-ladder",
-  title: "🪜 Po ascenzích",
+  title: "🪜 By ascension",
   page: "leveling",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId }, leveling: { res: "leveling", farm: farmId }, book: { res: "book" } }),
   // Without the book the bids and bud prices are missing; the ladder still stands and refills.
@@ -32,14 +32,14 @@ export const levelingLadderWidget = {
   rowLabel: (r) => `A${r.ascension}`,
   rowClass: (r) => [r.target && "w-row-hl", r.clickable && "w-row-click"].filter(Boolean).join(" "),
   columns: [
-    { key: "ascension", label: "ascenze", fmt: (v, r) => `<span style="white-space:nowrap">${r.target ? "▶ " : ""}${r.fromLevel > 1 ? `dodělat A${v} (L${r.fromLevel}→50)` : `A${v}`}</span>` },
-    { key: "xp", label: "XP", align: "right", fmt: (v) => `${(v / 1e6).toLocaleString("cs-CZ", { maximumFractionDigits: 1 })} M` },
-    { key: "days", label: "dní", align: "right", fmt: num },
+    { key: "ascension", label: "ascension", fmt: (v, r) => `<span style="white-space:nowrap">${r.target ? "▶ " : ""}${r.fromLevel > 1 ? `finish A${v} (L${r.fromLevel}→50)` : `A${v}`}</span>` },
+    { key: "xp", label: "XP", align: "right", fmt: (v) => `${(v / 1e6).toLocaleString("en-US", { maximumFractionDigits: 1 })} M` },
+    { key: "days", label: "days", align: "right", fmt: num },
     { key: "flower", label: "FLOWER", labelHtml: sflIcon(), align: "right", fmt: num },
-    { key: "cumDays", label: "celkem dní", align: "right", fmt: (v) => `<b>${num(v)}</b>` },
-    { key: "date", label: "datum", align: "right", get: (r) => r.cumDays, fmt: (v, r) => date(v, r.now) },
-    { key: "cumFlower", label: "celkem FLOWER", labelHtml: `celkem ${sflIcon()}`, align: "right", fmt: (v) => `<b>${num(v)}</b>` },
-    { key: "points", label: "body", title: "Volné skill body na konci (1 za level; levely ascenze se počítají po vylepšení ostrova)", align: "right", fmt: (v) => (v == null ? "" : String(v)) },
+    { key: "cumDays", label: "total days", align: "right", fmt: (v) => `<b>${num(v)}</b>` },
+    { key: "date", label: "date", align: "right", get: (r) => r.cumDays, fmt: (v, r) => date(v, r.now) },
+    { key: "cumFlower", label: "total FLOWER", labelHtml: `total ${sflIcon()}`, align: "right", fmt: (v) => `<b>${num(v)}</b>` },
+    { key: "points", label: "points", title: "Free skill points at the end (1 per level; ascension levels count after the island upgrade)", align: "right", fmt: (v) => (v == null ? "" : String(v)) },
   ],
 
   // data: { farm, leveling: <compute?section=leveling data>, book: <marketplace book> }
@@ -47,15 +47,15 @@ export const levelingLadderWidget = {
   //       otherwise { savedLeveling } and the plan is computed here like the page does.
   //       rowClick: the page wires a row click (sets the target).
   build({ farm, leveling, book }, ctx = {}) {
-    if (!farm) return { rows: [], footer: "", empty: "Chybí data farmy." };
+    if (!farm) return { rows: [], footer: "", empty: "No farm data." };
     let { plan, cfg, free } = ctx;
     if (!plan) {
-      if (!leveling || !leveling.inputs) return { rows: [], footer: "", empty: "Plán LEVELINGu se nenačetl." };
+      if (!leveling || !leveling.inputs) return { rows: [], footer: "", empty: "The LEVELING plan did not load." };
       ({ plan, cfg, free } = planFor(farm, leveling, book || null, ctx.savedLeveling));
     }
     const now = Date.now();
     const target = cfg && cfg.target ? cfg.target.ascension : null;
     const rows = levelingLadder(farm, plan, 10, free || 0).map((r) => ({ ...r, target: r.ascension === target, clickable: !!ctx.rowClick && r.ascension !== target, now }));
-    return { rows, footer: "", empty: "Všechny ascenze do A10 máš za sebou." };
+    return { rows, footer: "", empty: "All ascensions up to A10 are behind you." };
   },
 };

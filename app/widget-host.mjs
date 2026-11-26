@@ -49,20 +49,20 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       if (widget.view) {
         // a tile or a chart: its own HTML, no table settings
         const out = widget.view(data || {}, ctx || {}, settings.opts || {}) || {};
-        return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`, settingsHtml: "" };
+        return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`, settingsHtml: "" };
       }
       const out = widget.build(data || {}, ctx || {}, settings.opts || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
       return {
         html: out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
-          : `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`,
+          : `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`,
         settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab,
           options: (widget.options || []).filter((o) => !force || !(o.key in force)), optionsLabel: widget.optionsLabel }),
       };
     } catch (e) {
       // The cog still offers a reset, so a bad saved setting is never a dead end.
-      return { html: `<div class="w-error">Widget spadl: ${esc((e && e.message) || e)}</div>`,
-        settingsHtml: `<div class="w-settings"><button type="button" data-action="reset" data-value="">výchozí nastavení</button></div>` };
+      return { html: `<div class="w-error">The widget failed: ${esc((e && e.message) || e)}</div>`,
+        settingsHtml: `<div class="w-settings"><button type="button" data-action="reset" data-value="">reset to defaults</button></div>` };
     }
   }
 
@@ -81,10 +81,10 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     const id = `b:${boardId}:${item.i}`;
     const widget = registry[item.type];
     if (!widget) {
-      return renderFrame({ id, title: item.type, place: "board", w: item.w, h: item.h, body: `<div class="w-error">Tenhle widget už neexistuje — odeber ho.</div>` });
+      return renderFrame({ id, title: item.type, place: "board", w: item.w, h: item.h, body: `<div class="w-error">This widget no longer exists — remove it.</div>` });
     }
     const settings = effective(widget, item.settings);
-    const b = pending ? { html: `<div class="w-fresh">Načítám…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id));
+    const b = pending ? { html: `<div class="w-fresh">Loading…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id));
     return renderFrame({ id, title: titleOf(widget, settings), place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: !widget.view,
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
@@ -121,12 +121,15 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
     if (f.place === "page" && action === "pin") {
       const settings = withForce(effective(f.widget, pageSettings(doc, f.key)), f.force);
-      // value: optional JSON of options to preset on the pinned copy (📌 "Panenky do limitu" → {cat: "dolls"})
-      let preset = null;
-      try { preset = value ? JSON.parse(value) : null; } catch { preset = null; }
-      if (preset && typeof preset === "object" && !Array.isArray(preset)) settings.opts = { ...(settings.opts || {}), ...preset };
-      // the board visited last, else the first (a synced document from another device may have no "main")
-      return save(pin(doc, { type: f.type, settings }, pinTarget(doc)), frameId);
+      // value: optional JSON { board, opts }: the board to pin to (the one chosen in the 📌 menu) and
+      // options to preset on the copy (📌 "Dolls to the limit" → { opts: { cat: "dolls" } })
+      let v = null;
+      try { v = value ? JSON.parse(value) : null; } catch { v = null; }
+      if (!v || typeof v !== "object" || Array.isArray(v)) v = {};
+      if (v.opts && typeof v.opts === "object" && !Array.isArray(v.opts)) settings.opts = { ...(settings.opts || {}), ...v.opts };
+      // the chosen board, else the one visited last, else the first (a synced document may have no "main")
+      const board = typeof v.board === "string" && doc.boards.some((b) => b.id === v.board) ? v.board : pinTarget(doc);
+      return save(pin(doc, { type: f.type, settings }, board), frameId);
     }
     if (f.place === "board") {
       if (action === "remove") { open.delete(frameId); return save(unpin(doc, f.boardId, f.item.i), frameId); }
@@ -185,7 +188,14 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   // A page-level document change (add/remove a board, remember the visited one); saved, no re-render.
   const update = (fn) => { const next = fn(doc); if (next !== doc) { doc = next; saveBoards(storage, doc); } return doc; };
 
-  return { doc: () => doc, update,
+  // The gallery's preview: the widget's body with its defaults (plus opts), no frame or controls.
+  function preview(type, { data, ctx, opts = null } = {}) {
+    const widget = registry[type];
+    if (!widget) return "";
+    return body(widget, withForce(effective(widget, {}), opts), data, ctx, null).html;
+  }
+
+  return { doc: () => doc, update, preview,
     addBoard: (b) => update((d) => addBoard(d, b)), removeBoard: (id) => update((d) => removeBoard(d, id)),
     visit: (id) => update((d) => setLastBoard(d, id)), reload: () => { doc = loadBoards(storage); }, registry, renderPage, renderItem, handle,
     needsOf, loadData, peekData, freshOf };

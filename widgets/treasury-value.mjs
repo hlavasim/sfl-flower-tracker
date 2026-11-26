@@ -12,14 +12,14 @@ const usd = (n) => "$" + (+n || 0).toLocaleString("en-US", { maximumFractionDigi
 
 export const treasuryValue = {
   type: "treasury-value",
-  title: "💰 Hodnota farmy",
+  title: "💰 Farm value",
   page: "treasury",
   needs: (farmId) => ({ treasury: { res: "treasury", farm: farmId } }),
 
   // data: { treasury: { value: { totals, rates }, pricesOk } }   ctx: { catColors? }
   view({ treasury }, ctx = {}) {
     const v = treasury && treasury.value;
-    if (!v || !v.totals) return { empty: "Ocenění z Treasury se nenačetlo." };
+    if (!v || !v.totals) return { empty: "The Treasury valuation did not load." };
     const { totals, rates = {} } = v;
     const grand = totals.grand || 0;
     const colors = ctx.catColors || {};
@@ -36,7 +36,7 @@ export const treasuryValue = {
     const usdTotal = grand * (rates.sflUsd || 0);
     const btc = rates.btcUsd > 0 ? usdTotal / rates.btcUsd : 0;
     const warn = treasury.pricesOk === false
-      ? `<div style="color:#ff8c42">⚠ ceny se nenačetly — část farmy počítá jako 0</div>` : "";
+      ? `<div style="color:#ff8c42">⚠ prices did not load — part of the farm counts as 0</div>` : "";
     return {
       html: `<div class="w-tile">${warn}<div class="w-tile-big">${sfl(grand)} ${sflIcon()}</div>` +
         `<div class="w-tile-sub">${usd(usdTotal)} · ${btc.toFixed(8)} BTC</div></div>` +

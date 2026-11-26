@@ -64,7 +64,7 @@ export function applyRows(columns, rows, settings = {}, rowKey = (r) => r.key, k
 // column extras: title (header tooltip), labelHtml (trusted header HTML instead of label),
 // cumulative (the cell gets the running sum of get() in the order shown).
 // opts.rowClass(row) → class names for the row; opts.keepRow(row) → shown even past "top N".
-export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.key, empty = "Žádné řádky.", rowClass, keepRow } = {}) {
+export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.key, empty = "No rows.", rowClass, keepRow } = {}) {
   const cols = visibleColumns(columns, settings);
   const { rows: shown, missing, hidden, kept } = applyRows(columns, rows, settings, rowKey, keepRow);
   const sort = settings.sort || {};
@@ -89,9 +89,9 @@ export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.ke
   };
   const gap = kept.length ? `<tr class="w-gap"><td colspan="${cols.length || 1}">…</td></tr>` + kept.map(rowHtml).join("") : "";
   const body = shown.map(rowHtml).join("") + gap;
-  const more = hidden ? `<tr><td colspan="${cols.length || 1}" class="w-more">… a dalších ${hidden}</td></tr>` : "";
+  const more = hidden ? `<tr><td colspan="${cols.length || 1}" class="w-more">… and ${hidden} more</td></tr>` : "";
   const none = shown.length ? more : `<tr><td colspan="${cols.length || 1}" class="w-empty">${esc(empty)}</td></tr>`;
-  const miss = missing.length ? `<div class="w-missing">Vybrané, ale teď bez řádku: ${missing.map(esc).join(", ")}</div>` : "";
+  const miss = missing.length ? `<div class="w-missing">Picked, but without a row now: ${missing.map(esc).join(", ")}</div>` : "";
   return `<table class="${cls}"${size ? ` style="font-size:${size}%"` : ""}><thead><tr>${head}</tr></thead><tbody>${body}${none}</tbody></table>${miss}`;
 }
 
@@ -210,11 +210,11 @@ function optionsHtml(options, opts) {
   }).join("");
 }
 
-// The cog panel's HTML: three tabs (Sloupce / Řádky / Vzhled), the inactive ones hidden. Every
+// The cog panel's HTML: tabs (Columns / Rows / Filter / Look), the inactive ones hidden. Every
 // control carries data-action / data-value; the frame delegates the events (and the drag of a
 // column's grip, which reports col-move) and feeds them to applyTableAction.
-const TABS = [["cols", "Sloupce"], ["rows", "Řádky"], ["filter", "Filtr"], ["look", "Vzhled"]];
-export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab, options = [], optionsLabel = "Volby" } = {}) {
+const TABS = [["cols", "Columns"], ["rows", "Rows"], ["filter", "Filter"], ["look", "Look"]];
+export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab, options = [], optionsLabel = "Options" } = {}) {
   const filterCols = columns.filter((c) => c.filter);
   // the widget's own options, when it has any, come first and open by default
   const tabsHere = [...(options.length ? [["opts", optionsLabel]] : []), ...TABS.filter(([t]) => t !== "filter" || filterCols.length)];
@@ -225,7 +225,7 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
   const colRows = order.map((k) => {
     const on = shown.includes(k);
     return `<div class="w-col-row${on ? "" : " off"}" data-col="${esc(k)}">` +
-      (on ? `<span class="w-grip" data-drag="col" title="táhni pro změnu pořadí">⠿</span>` : `<span class="w-grip-none"></span>`) +
+      (on ? `<span class="w-grip" data-drag="col" title="drag to reorder">⠿</span>` : `<span class="w-grip-none"></span>`) +
       `<label><input type="checkbox" data-action="col-toggle" data-value="${esc(k)}"${on ? " checked" : ""}> ${esc(byKey.get(k).label)}</label></div>`;
   }).join("");
   // Coerced here too: the panel prints these into attributes.
@@ -253,12 +253,12 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
   const section = (t, html) => `<div class="w-sec" data-tab="${t}"${t === active ? "" : " hidden"}>${html}</div>`;
   return `<div class="w-settings"><div class="w-tabs">${tabs}</div>` +
     (options.length ? section("opts", optionsHtml(options, settings.opts || {})) : "") +
-    section("cols", `<div class="w-cols">${colRows}</div><div class="w-hint">Zaškrtni, co zobrazit; ⠿ táhni pro pořadí. Řadí se klikem na hlavičku tabulky.</div>`) +
-    section("rows", `<div class="w-segs">${mode("all", "Všechny")}${mode("top", "Prvních N")}${mode("picked", "Jen vybrané")}</div>` +
-      (sel.mode === "top" ? `<label class="w-line">Počet <input type="number" min="1" value="${sel.top}" data-action="rows-top"></label>` : "") +
+    section("cols", `<div class="w-cols">${colRows}</div><div class="w-hint">Tick what to show; drag ⠿ to reorder. Click a table header to sort.</div>`) +
+    section("rows", `<div class="w-segs">${mode("all", "All")}${mode("top", "First N")}${mode("picked", "Picked only")}</div>` +
+      (sel.mode === "top" ? `<label class="w-line">Count <input type="number" min="1" value="${sel.top}" data-action="rows-top"></label>` : "") +
       (sel.mode === "picked" ? `<div class="w-picks">${picks}</div>` : "")) +
     (filterCols.length ? section("filter", filters) : "") +
-    section("look", `<label class="w-line">Písmo <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +
-      `<label class="w-line"><input type="checkbox" data-action="density" data-value="${settings.density === "compact" ? "normal" : "compact"}"${settings.density === "compact" ? " checked" : ""}> Husté řádky</label>`) +
-    `<div class="w-foot"><button type="button" class="w-link" data-action="reset" data-value="">Obnovit výchozí</button></div></div>`;
+    section("look", `<label class="w-line">Text size <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +
+      `<label class="w-line"><input type="checkbox" data-action="density" data-value="${settings.density === "compact" ? "normal" : "compact"}"${settings.density === "compact" ? " checked" : ""}> Compact rows</label>`) +
+    `<div class="w-foot"><button type="button" class="w-link" data-action="reset" data-value="">Reset to defaults</button></div></div>`;
 }

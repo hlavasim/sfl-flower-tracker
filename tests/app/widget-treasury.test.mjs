@@ -30,7 +30,7 @@ test("total in SFL, USD and BTC; a pie with each category's share, tiny ones lef
 });
 
 test("prices missing: the total is flagged, not passed off as real", () => {
-  assert.match(treasuryValue.view({ treasury: { ...T, pricesOk: false } }, {}).html, /ceny se nenačetly/);
+  assert.match(treasuryValue.view({ treasury: { ...T, pricesOk: false } }, {}).html, /prices did not load/);
 });
 
 test("no valuation yet → an explanation", () => {

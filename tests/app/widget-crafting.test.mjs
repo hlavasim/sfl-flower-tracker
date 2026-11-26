@@ -30,7 +30,7 @@ test("traps: each catch with its quantity, ready ones first, empty traps counted
   assert.match(html, /READY/);
   assert.match(html, />60m</);
   assert.match(html, /<i>Isopod<\/i>/);
-  assert.match(out.footer, /1 k vybrání · 1 v pasti · 3 pasti/);
+  assert.match(out.footer, /1 to collect · 1 in traps · 3 traps/);
 });
 
 test("crafting box: what is being made and when; idle says so", () => {
@@ -40,6 +40,6 @@ test("crafting box: what is being made and when; idle says so", () => {
   assert.match(html, />2m</);
   const idle = craftingBox.build({ farm: { craftingBox: { status: "idle" } } }, CTX);
   assert.strictEqual(idle.rows.length, 0);
-  assert.match(idle.empty, /nic nevyrábí/);
-  assert.match(crabTraps.build({}, CTX).empty, /Chybí data farmy/);
+  assert.match(idle.empty, /is idle/);
+  assert.match(crabTraps.build({}, CTX).empty, /No farm data/);
 });

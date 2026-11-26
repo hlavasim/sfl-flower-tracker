@@ -7,7 +7,7 @@ const when = (r) => (r.ready ? `<span class="dash-ready-badge green">READY</span
 
 export const crabTraps = {
   type: "crab-traps",
-  title: "🦀 Pasti",
+  title: "🦀 Crab traps",
   page: "crustaceans",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
   defaults: { sort: { key: "when", dir: "asc" } },
@@ -15,14 +15,14 @@ export const crabTraps = {
   rowLabel: (r) => r.name,
   rowClass: (r) => (r.ready ? "w-st-ready" : ""),
   columns: [
-    { key: "name", label: "úlovek", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml}${esc(v)}</span>` },
-    { key: "qty", label: "kusů", align: "right" },
-    { key: "when", label: "kdy", get: (r) => (r.ready ? 0 : r.readyAt), fmt: (v, r) => when(r) },
+    { key: "name", label: "catch", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml}${esc(v)}</span>` },
+    { key: "qty", label: "qty", align: "right" },
+    { key: "when", label: "when", get: (r) => (r.ready ? 0 : r.readyAt), fmt: (v, r) => when(r) },
   ],
 
   // ctx: { countdown(ms) → text, icon(name) → HTML, now? }
   build({ farm } = {}, ctx = {}) {
-    if (!farm) return { rows: [], footer: "", empty: "Chybí data farmy." };
+    if (!farm) return { rows: [], footer: "", empty: "No farm data." };
     const now = ctx.now || Date.now();
     const spots = (farm.crabTraps && farm.crabTraps.trapSpots) || {};
     const rows = [];
@@ -36,8 +36,8 @@ export const crabTraps = {
       }
     }
     const n = Object.keys(spots).length, ready = rows.filter((r) => r.ready).length;
-    const footer = `<div style="color:var(--text-dim)">${ready} k vybrání · ${rows.length - ready} v pasti · ${n} ${n === 1 ? "past" : n < 5 ? "pasti" : "pastí"}</div>`;
-    return { rows, footer, empty: "V pastech nic není." };
+    const footer = `<div style="color:var(--text-dim)">${ready} to collect · ${rows.length - ready} in traps · ${n} ${n === 1 ? "trap" : "traps"}</div>`;
+    return { rows, footer, empty: "Nothing in the traps." };
   },
 };
 
@@ -51,16 +51,16 @@ export const craftingBox = {
   rowLabel: (r) => r.name,
   rowClass: (r) => (r.ready ? "w-st-ready" : ""),
   columns: [
-    { key: "name", label: "vyrábí se", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml}${esc(v)}</span>` },
-    { key: "when", label: "kdy", get: (r) => r.readyAt, fmt: (v, r) => when(r) },
+    { key: "name", label: "crafting", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml}${esc(v)}</span>` },
+    { key: "when", label: "when", get: (r) => r.readyAt, fmt: (v, r) => when(r) },
   ],
 
   build({ farm } = {}, ctx = {}) {
-    if (!farm) return { rows: [], footer: "", empty: "Chybí data farmy." };
+    if (!farm) return { rows: [], footer: "", empty: "No farm data." };
     const now = ctx.now || Date.now();
     const cb = farm.craftingBox;
     const name = cb && cb.status === "crafting" && cb.item ? cb.item.collectible || cb.item.wearable : null;
-    if (!name) return { rows: [], footer: "", empty: "Crafting box teď nic nevyrábí." };
+    if (!name) return { rows: [], footer: "", empty: "The crafting box is idle right now." };
     const readyAt = toMs(cb.readyAt || 0), ready = !!readyAt && readyAt <= now;
     return { rows: [{ name, readyAt, ready, iconHtml: icon(ctx, name),
       countdown: !ready && readyAt && typeof ctx.countdown === "function" ? ctx.countdown(readyAt - now) : "" }], footer: "", empty: "" };

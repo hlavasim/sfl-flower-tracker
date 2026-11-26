@@ -9,7 +9,7 @@ export const BOARDS_KEY = "sfl_boards";
 const W_DEFAULT = 6;
 
 export function emptyBoards() {
-  return { schema: 1, boards: [{ id: "main", name: "Můj dashboard", items: [] }], page: {} };
+  return { schema: 1, boards: [{ id: "main", name: "My dashboard", items: [] }], page: {} };
 }
 
 const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);

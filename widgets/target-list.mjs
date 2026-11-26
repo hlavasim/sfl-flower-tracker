@@ -8,7 +8,7 @@ import { COOKING_RECIPES_DATA, COOKING_INGREDIENTS, COOKING_BUILDING_EMOJI } fro
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const count = (inv, name) => { const v = parseFloat(inv[name]); return Number.isFinite(v) ? Math.floor(v) : 0; };
 
-const CATS = [["dolls", "Panenky"], ["crabs", "Korýši"], ["flowers", "Květiny"], ["foods", "Jídla"]];
+const CATS = [["dolls", "Dolls"], ["crabs", "Crustaceans"], ["flowers", "Flowers"], ["foods", "Dishes"]];
 const CAT_LABEL = Object.fromEntries(CATS);
 
 // Flowers grown from another flower: that one also needs what they still miss (the FLOWERS page's
@@ -35,7 +35,7 @@ function recipeOf(cat, name) {
   if (cat === "dolls") return (DOLL_RECIPES[name] || []).map((x) => `${x.qty}× ${x.item}`).join(", ");
   if (cat === "crabs") {
     const r = CRUSTACEAN_RECIPES[name];
-    return `${r.pot} · ${r.chum ? `${r.qty}× ${r.chum}` : "bez návnady"}${r.alt ? ` (nebo ${r.alt})` : ""}`;
+    return `${r.pot} · ${r.chum ? `${r.qty}× ${r.chum}` : "no bait"}${r.alt ? ` (or ${r.alt})` : ""}`;
   }
   if (cat === "flowers") { const r = FLOWER_RECIPES[name]; return `${r.seed} + ${r.input}`; }
   const b = (COOKING_RECIPES_DATA[name] || {}).building || "";
@@ -45,16 +45,16 @@ function recipeOf(cat, name) {
 
 export const targetList = {
   type: "target-list",
-  title: "🎯 Do limitu",
-  titleFor: (o) => `🎯 ${CAT_LABEL[o.cat] || "Do limitu"} do ${o.limit ?? "?"}`,
+  title: "🎯 To the limit",
+  titleFor: (o) => `🎯 ${CAT_LABEL[o.cat] || "To the limit"} to ${o.limit ?? "?"}`,
   page: "board",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
-  optionsLabel: "Cíl",
+  optionsLabel: "Target",
   options: [
-    { key: "cat", label: "Kategorie", kind: "select", choices: CATS },
-    { key: "limit", label: "Limit (kusů od každého)", kind: "number", min: 1, max: 9999 },
-    { key: "hideDone", label: "Skrýt hotové", kind: "bool" },
-    { key: "foods", label: "Jídla", kind: "checklist", choices: (o) => (o.cat === "foods"
+    { key: "cat", label: "Category", kind: "select", choices: CATS },
+    { key: "limit", label: "Limit (of each item)", kind: "number", min: 1, max: 9999 },
+    { key: "hideDone", label: "Hide done", kind: "bool" },
+    { key: "foods", label: "Dishes", kind: "checklist", choices: (o) => (o.cat === "foods"
       ? Object.entries(COOKING_RECIPES_DATA).map(([n, r]) => [n, `${COOKING_BUILDING_EMOJI[r.building] || ""} ${n}`]) : []) },
   ],
   defaults: { opts: { cat: "dolls", limit: 10, hideDone: true, foods: [] }, sort: { key: "missing", dir: "desc" } },
@@ -62,17 +62,17 @@ export const targetList = {
   rowLabel: (r) => r.name,
   rowClass: (r) => (r.done ? "w-st-ready" : ""),
   columns: [
-    { key: "name", label: "položka", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml || ""}${esc(v)}</span>` },
-    { key: "have", label: "máš", align: "right" },
-    { key: "pend", label: "běží", align: "right", title: "rozkvétá / vyrábí se / v pastích", fmt: (v) => (v ? esc(v) : "") },
-    { key: "need", label: "cíl", align: "right", title: "u květin i to, co spotřebují recepty dalších květin" },
-    { key: "missing", label: "chybí", align: "right", fmt: (v) => (v ? `<b>${esc(v)}</b>` : "✓") },
-    { key: "recipe", label: "recept" },
+    { key: "name", label: "item", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml || ""}${esc(v)}</span>` },
+    { key: "have", label: "have", align: "right" },
+    { key: "pend", label: "running", align: "right", title: "blooming / crafting / in traps", fmt: (v) => (v ? esc(v) : "") },
+    { key: "need", label: "target", align: "right", title: "for flowers, also what other flowers' recipes use up" },
+    { key: "missing", label: "missing", align: "right", fmt: (v) => (v ? `<b>${esc(v)}</b>` : "✓") },
+    { key: "recipe", label: "recipe" },
   ],
 
   // data: { farm }; ctx: { inProgress(farm) → {name: qty}, icon(name) → HTML, tracked? {doll: bool} }; opts: the copy's options
   build({ farm } = {}, ctx = {}, opts = {}) {
-    if (!farm) return { rows: [], footer: "", empty: "Chybí data farmy." };
+    if (!farm) return { rows: [], footer: "", empty: "No farm data." };
     const cat = CAT_LABEL[opts.cat] ? opts.cat : "dolls";
     const limit = Math.max(1, Math.round(Number(opts.limit)) || 1);
     const inv = farm.inventory || {};
@@ -83,7 +83,7 @@ export const targetList = {
       : cat === "crabs" ? Object.keys(CRUSTACEAN_RECIPES)
       : cat === "flowers" ? Object.keys(FLOWER_RECIPES)
       : (Array.isArray(opts.foods) ? opts.foods : []).filter((n) => COOKING_RECIPES_DATA[n]);
-    if (cat === "foods" && !names.length) return { rows: [], footer: "", empty: "Vyber jídla v ⚙ → Cíl." };
+    if (cat === "foods" && !names.length) return { rows: [], footer: "", empty: "Pick dishes in ⚙ → Target." };
     const held = (n) => count(inv, n) + (pend[n] || 0);
     const needOf = cat === "flowers" ? flowerNeeds(limit, held) : () => limit;
     const all = names.map((name) => {
@@ -95,7 +95,7 @@ export const targetList = {
     const done = all.filter((r) => r.done).length;
     const rows = opts.hideDone ? all.filter((r) => !r.done) : all;
     const left = all.reduce((a, r) => a + r.missing, 0);
-    const footer = `<div style="color:var(--text-dim)">${done} / ${all.length} na limitu · chybí celkem ${left}</div>`;
-    return { rows, footer, empty: `✓ Vše na limitu (${all.length}).` };
+    const footer = `<div style="color:var(--text-dim)">${done} / ${all.length} at the limit · ${left} missing in total</div>`;
+    return { rows, footer, empty: `✓ All at the limit (${all.length}).` };
   },
 };

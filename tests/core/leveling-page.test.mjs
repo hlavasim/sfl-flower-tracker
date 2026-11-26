@@ -73,5 +73,5 @@ test("DASH suggestions take per-widget limits; the target widget gets the page's
   assert.match(SRC, /__widgets\.renderPage\("crafting-box", /);
   assert.match(SRC, /__widgets\.renderPage\("crab-traps", /);
   assert.match(SRC, /if \(type === "target-list"\) return \{ inProgress: extractInProgress, tracked: getTrackedDolls\(\),/);
-  assert.match(SRC, /_wPinBtn\("target-list", "Květiny do limitu", \{ cat: "flowers" \}\)/);
+  assert.match(SRC, /_wPinBtn\("target-list", "Flowers to the limit", \{ cat: "flowers" \}\)/);
 });

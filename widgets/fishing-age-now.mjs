@@ -36,7 +36,7 @@ function baitsWanted(farm, leveling, ctx) {
 
 export const fishingAgeNow = {
   type: "fishing-age-now",
-  title: "🧂 Do sudu teď",
+  title: "🧂 Age now",
   page: "fishing",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId }, leveling: { res: "leveling", farm: farmId } }),
   // The plan only decides whether recipe fish are kept for baits; without it they are kept.
@@ -45,24 +45,24 @@ export const fishingAgeNow = {
   rowKey: (r) => r.name,
   rowLabel: (r) => r.name,
   columns: [
-    { key: "name", label: "ryba", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml || ""} ${esc(v)}</span>` },
-    { key: "age", label: "kolik", align: "right", fmt: (v) => `<b style="color:var(--sunpetal)">${fmt(v)}</b>` },
-    { key: "why", label: "proč", fmt: (v, r) => `<span style="color:${GROUP_COLOR[r.group]}">${esc(v)}</span>` },
+    { key: "name", label: "fish", fmt: (v, r) => `<span style="white-space:nowrap">${r.iconHtml || ""} ${esc(v)}</span>` },
+    { key: "age", label: "how many", align: "right", fmt: (v) => `<b style="color:var(--sunpetal)">${fmt(v)}</b>` },
+    { key: "why", label: "why", fmt: (v, r) => `<span style="color:${GROUP_COLOR[r.group]}">${esc(v)}</span>` },
     { key: "xp", label: "XP", align: "right", fmt: (v) => fmt(v) },
     // running salt in the order shown (the table sums it), coloured against the salt held
-    { key: "run", label: "sůl Σ", align: "right", title: "sůl průběžně, v pořadí tabulky", get: (r) => r.salt, cumulative: true,
-      fmt: (v, r) => `<span style="color:${SALT_COLOR[v <= r.saltHeld + 1e-9 ? "ok" : v - r.salt < r.saltHeld ? "partial" : "over"]}" title="${fmt(r.salt)} na tenhle řádek">${fmt(v)}</span>` },
-    { key: "qty", label: "máš", align: "right", extra: true, fmt: (v) => fmt(v) },
-    { key: "keep", label: "necháš", align: "right", extra: true, fmt: (v) => (v ? fmt(v) : "") },
-    { key: "salt", label: "sůl", align: "right", extra: true, fmt: (v) => fmt(v) },
-    { key: "agedXp", label: "XP/ks", align: "right", extra: true, get: (r) => r.agedXp * r.mult, fmt: (v) => fmt(v) },
-    { key: "gainPerSalt", label: "XP/sůl", align: "right", extra: true, get: (r) => (r.salt ? r.xp / r.salt : null), fmt: (v) => (v == null ? "" : fmt(v)) },
+    { key: "run", label: "salt Σ", align: "right", title: "running salt, in table order", get: (r) => r.salt, cumulative: true,
+      fmt: (v, r) => `<span style="color:${SALT_COLOR[v <= r.saltHeld + 1e-9 ? "ok" : v - r.salt < r.saltHeld ? "partial" : "over"]}" title="${fmt(r.salt)} for this row">${fmt(v)}</span>` },
+    { key: "qty", label: "have", align: "right", extra: true, fmt: (v) => fmt(v) },
+    { key: "keep", label: "keep", align: "right", extra: true, fmt: (v) => (v ? fmt(v) : "") },
+    { key: "salt", label: "salt", align: "right", extra: true, fmt: (v) => fmt(v) },
+    { key: "agedXp", label: "XP/pc", align: "right", extra: true, get: (r) => r.agedXp * r.mult, fmt: (v) => fmt(v) },
+    { key: "gainPerSalt", label: "XP/salt", align: "right", extra: true, get: (r) => (r.salt ? r.xp / r.salt : null), fmt: (v) => (v == null ? "" : fmt(v)) },
   ],
 
   // data: { farm: <game farm>, leveling: <compute?section=leveling data> }
   // ctx:  { lvPlan?, savedLeveling?, marvelPlanned?, cookSettings?, icon?(name), bestWorm? }
   build({ farm, leveling }, ctx = {}) {
-    if (!farm) return { rows: [], footer: "", empty: "Chybí data farmy." };
+    if (!farm) return { rows: [], footer: "", empty: "No farm data." };
     const owned = farm.inventory || {};
     const ownedLc = {};
     for (const [k, v] of Object.entries(owned)) ownedLc[k.toLowerCase()] = +v || 0;
@@ -72,9 +72,9 @@ export const fishingAgeNow = {
     const rows = agingNow({ owned, baitsWanted: baitsWanted(farm, leveling, ctx) }).map((r) => {
       const before = run;
       run += r.salt;
-      const why = r.group === "free" ? "žádný bait ji nechce"
-        : r.group === "surplus" ? `přebytek: máš ${fmt(r.qty)}, necháš ${fmt(r.keep)} (2× na ${fmt(ownedLc[String(r.partner).toLowerCase()] || 0)}× ${r.partner})`
-        : `drží ji ${r.bait}, ale baity teď neděláš`;
+      const why = r.group === "free" ? "no bait needs it"
+        : r.group === "surplus" ? `surplus: have ${fmt(r.qty)}, keep ${fmt(r.keep)} (2× per ${fmt(ownedLc[String(r.partner).toLowerCase()] || 0)}× ${r.partner})`
+        : `held for ${r.bait}, but you are not making baits now`;
       return {
         ...r, mult, why, xp: r.age * r.agedXp * mult, run, saltHeld,
         saltState: run <= saltHeld + 1e-9 ? "ok" : before < saltHeld ? "partial" : "over",
@@ -87,10 +87,10 @@ export const fishingAgeNow = {
     const busy = ((shed.racks && shed.racks.aging) || []).length;
     const over = tot.salt > saltHeld;
     const footer = rows.length
-      ? `<div style="color:var(--text-dim)">Celkem <b>${fmt(tot.n)}</b> ryb · <b>${fmt(tot.xp)}</b> XP · sůl <b${over ? ' style="color:var(--red)"' : ""}>${fmt(tot.salt)}</b> z tvých ${fmt(saltHeld)}` +
-        ` · sud ${busy}/${slots} slotů běží${over ? ' · <span style="color:var(--red)">červené už sůl nepokryje</span>' : ""}</div>`
+      ? `<div style="color:var(--text-dim)">Total <b>${fmt(tot.n)}</b> fish · <b>${fmt(tot.xp)}</b> XP · salt <b${over ? ' style="color:var(--red)"' : ""}>${fmt(tot.salt)}</b> of your ${fmt(saltHeld)}` +
+        ` · shed ${busy}/${slots} slots running${over ? ' · <span style="color:var(--red)">your salt does not cover the red ones</span>' : ""}</div>`
       : "";
-    const empty = `Nemáš co stárnout — všechno, co držíš, je v poměru, který recepty spárují. Chytej${ctx.bestWorm ? ` (${ctx.bestWorm})` : ""}.`;
+    const empty = `Nothing to age — everything you hold is in the ratio the recipes pair up. Go fishing${ctx.bestWorm ? ` (${ctx.bestWorm})` : ""}.`;
     return { rows, footer, empty, totals: { ...tot, saltHeld, slots, busy } };
   },
 };

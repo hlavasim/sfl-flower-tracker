@@ -84,7 +84,7 @@ test("host: the cog opens on the options tab; pin with preset opts pins a board 
   const h = createHost({ registry: { o: W }, storage: mem() });
   h.handle("page:o", "cog", "");
   assert.match(h.renderPage("o", { data: {} }), /data-value="opts" aria-selected="true"/);
-  h.handle("page:o", "pin", JSON.stringify({ cat: "b", limit: 10 }));
+  h.handle("page:o", "pin", JSON.stringify({ opts: { cat: "b", limit: 10 } }));
   const item = h.doc().boards[0].items[0];
   assert.deepStrictEqual(item.settings.opts, { cat: "b", limit: 10, hide: true });
   assert.deepStrictEqual(rowsIn(h.renderItem(h.doc().boards[0].id, item, { data: {} })), ["b-10-true"]);

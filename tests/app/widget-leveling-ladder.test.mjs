@@ -50,7 +50,7 @@ test("the target row is highlighted, rows are clickable only where the page wire
   assert.match(renderTable(W.columns, page.rows, W.defaults, opts), /data-row="A6" class="w-row-click"/);
   const html = renderTable(W.columns, out.rows, W.defaults, opts);
   assert.match(html, /<th[^>]*><img[^>]*><\/th>/);
-  assert.match(html, /<th[^>]*title="Volné skill body[^"]*"[^>]*>body/);
+  assert.match(html, /<th[^>]*title="Free skill points[^"]*"[^>]*>points/);
 });
 
 test("the plan is computed once for the same farm, inputs and saved config (board repaints)", () => {
@@ -65,13 +65,13 @@ test("the plan is computed once for the same farm, inputs and saved config (boar
 });
 
 test("no farm / no leveling inputs: an explanation, not a throw", () => {
-  assert.match(W.build({ farm: null }).empty, /Chybí data farmy/);
-  assert.match(W.build({ farm, leveling: null }).empty, /nenačetl/);
+  assert.match(W.build({ farm: null }).empty, /No farm data/);
+  assert.match(W.build({ farm, leveling: null }).empty, /did not load/);
 });
 
 test("renders: target row marked, a partly done band says where it starts", () => {
   const out = W.build({ farm, leveling, book: null }, { savedLeveling: { target: { ascension: 5, level: 50 } } });
   const html = renderTable(W.columns, out.rows, W.defaults, { rowKey: W.rowKey });
   assert.match(html, /data-row="A5"[^>]*><td>[^<]*<span[^>]*>▶ /);
-  assert.match(html, /dodělat A\d+ \(L\d+→50\)/);
+  assert.match(html, /finish A\d+ \(L\d+→50\)/);
 });

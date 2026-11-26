@@ -8,7 +8,7 @@ const STALE_H = 3;
 
 export const flipTable = {
   type: "flip-table",
-  title: "💱 Flipy NFT",
+  title: "💱 NFT flips",
   page: "flips",
   needs: () => ({ flips: { res: "flips" } }),
   defaults: { sort: { key: "margin", dir: "desc" }, rows: { mode: "top", top: 20, picked: [] } },
@@ -21,20 +21,20 @@ export const flipTable = {
     { key: "avgTrade10", label: "avg10", align: "right", extra: true, fmt: kf },
     { key: "spreadPct", label: "spread", align: "right", fmt: (v) => (v == null ? "—" : `${v.toFixed(0)}%`) },
     { key: "net", label: "net", align: "right", fmt: (v) => `<span class="${v <= 0 ? "flip-bad" : "flip-good"}">${kf(v)}</span>` },
-    { key: "margin", label: "marže", align: "right", fmt: (v, r) => `<span class="${v >= 15 ? "flip-good" : r.net <= 0 ? "flip-bad" : ""}">${(+v || 0).toFixed(0)}%</span>` },
-    { key: "trades", label: "obch./den", align: "right", get: (r) => r.tradesToday || 0, fmt: (v, r) => `${v}/d ${r.nTrades10 || 0}/10` },
-    { key: "pressure", label: "tlak o/l", align: "right", extra: true, get: (r) => (r.offerPressure || 0) - (r.listingPressure || 0), fmt: (v, r) => `${r.offerPressure || 0}/${r.listingPressure || 0}` },
-    { key: "collection", label: "druh", extra: true, filter: true, fmt: (v) => esc(v) },
+    { key: "margin", label: "margin", align: "right", fmt: (v, r) => `<span class="${v >= 15 ? "flip-good" : r.net <= 0 ? "flip-bad" : ""}">${(+v || 0).toFixed(0)}%</span>` },
+    { key: "trades", label: "trades/day", align: "right", get: (r) => r.tradesToday || 0, fmt: (v, r) => `${v}/d ${r.nTrades10 || 0}/10` },
+    { key: "pressure", label: "pressure o/l", align: "right", extra: true, get: (r) => (r.offerPressure || 0) - (r.listingPressure || 0), fmt: (v, r) => `${r.offerPressure || 0}/${r.listingPressure || 0}` },
+    { key: "collection", label: "kind", extra: true, filter: true, fmt: (v) => esc(v) },
   ],
 
   // data: { flips: { count, items } }   ctx: { icon?(name) → html }
   build({ flips }, ctx = {}) {
-    if (!flips || !Array.isArray(flips.items)) return { rows: [], footer: "", empty: "Data orderbooku se nenačetla." };
+    if (!flips || !Array.isArray(flips.items)) return { rows: [], footer: "", empty: "The orderbook data did not load." };
     const rows = flips.items.map((it) => ({ ...it, iconHtml: ctx.icon ? ctx.icon(it.name) : "" }));
     const upd = rows[0] && rows[0].updatedAt;
     const stale = upd && (Date.now() - new Date(upd).getTime()) / 3600000 > STALE_H;
-    const footer = `<div style="color:var(--text-dim)">${stale ? "⏸ Sběr pozastaven (hra omezila marketplace API) — data zamrzlá" : "Sběr každou hodinu"}` +
-      `${upd ? ` · poslední: ${new Date(upd).toLocaleString("cs-CZ")}` : ""}</div>`;
-    return { rows, footer, empty: "Žádné NFT s bid i ask." };
+    const footer = `<div style="color:var(--text-dim)">${stale ? "⏸ Collection paused (the game restricted the marketplace API) — data frozen" : "Collected hourly"}` +
+      `${upd ? ` · last: ${new Date(upd).toLocaleString("en-US")}` : ""}</div>`;
+    return { rows, footer, empty: "No NFTs with both a bid and an ask." };
   },
 };

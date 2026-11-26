@@ -130,7 +130,7 @@ test("unknown frames, types and actions are ignored, not thrown", () => {
   assert.strictEqual(h.handle("b:main:missing", "remove", ""), false);
   assert.strictEqual(h.handle("page:t", "fly", ""), false);
   assert.strictEqual(h.handle("garbage", "sort", ""), false);
-  assert.match(h.renderItem("main", { i: "z", type: "gone", settings: {}, w: 6 }, { data: {} }), /už neexistuje/);
+  assert.match(h.renderItem("main", { i: "z", type: "gone", settings: {}, w: 6 }, { data: {} }), /no longer exists/);
 });
 
 test("a widget that throws while building shows the error in its frame, the page survives", () => {
@@ -165,7 +165,7 @@ test("loadData: a widget's needs go through the store; a need named farm gets th
 test("freshOf: the worst of a widget's entries decides the badge", () => {
   const h = createHost({ registry: { t: T }, storage: mem() });
   const now = 10 * 60_000;
-  assert.strictEqual(h.freshOf([{ status: "ok", asOf: now - 60_000 }, { status: "ok", asOf: now - 4 * 60_000 }], now).text, "před 4 min");
+  assert.strictEqual(h.freshOf([{ status: "ok", asOf: now - 60_000 }, { status: "ok", asOf: now - 4 * 60_000 }], now).text, "4 min ago");
   assert.strictEqual(h.freshOf([{ status: "ok", asOf: now }, { status: "error", stale: false, error: "x" }], now).level, "error");
   assert.strictEqual(h.freshOf([], now).level, "loading");
 });
@@ -189,7 +189,7 @@ test("a pending board item shows its frame and controls with a loading body", ()
   const h = createHost({ registry: { t: T }, storage: mem() });
   const html = h.renderItem("main", { i: "a", type: "t", settings: {}, w: 6 }, { data: {}, pending: true });
   assert.match(html, /data-action="remove"/);
-  assert.match(html, /Načítám/);
+  assert.match(html, /Loading/);
   assert.doesNotMatch(html, /prázdno/);
 });
 
@@ -247,4 +247,24 @@ test("a page variant: its own frame and settings, forced options hidden from the
   assert.deepStrictEqual(rowsIn(h.renderPage("t", { data: {}, ctx: {} })), ["a"]);
   h.handle("page:t@b", "pin", "");
   assert.deepStrictEqual(h.doc().boards[0].items[0].settings.opts, { cat: "b", top: 4 });
+});
+
+test("📌 with a chosen board pins there; an unknown board falls back to the last visited", () => {
+  const storage = mem();
+  storage.setItem(BOARDS_KEY, JSON.stringify({ schema: 1, page: {}, boards: [{ id: "main", name: "M", items: [] }, { id: "x", name: "X", items: [] }] }));
+  const h = createHost({ registry: { t: T }, storage });
+  h.handle("page:t", "pin", JSON.stringify({ board: "x" }));
+  h.handle("page:t", "pin", JSON.stringify({ board: "x" }));
+  h.handle("page:t", "pin", JSON.stringify({ board: "gone" }));
+  assert.deepStrictEqual(h.doc().boards.map((b) => b.items.length), [1, 2], "two copies on X, each its own item");
+  const [a, b] = h.doc().boards[1].items;
+  assert.notStrictEqual(a.i, b.i);
+});
+
+test("preview: the widget's body with its defaults plus the given options, no frame", () => {
+  const h = createHost({ registry: { t: T }, storage: mem() });
+  const html = h.preview("t", { data: DATA, ctx: {} });
+  assert.doesNotMatch(html, /data-frame/);
+  assert.deepStrictEqual(rowsIn(html), ["a", "b"]);
+  assert.strictEqual(h.preview("nope", {}), "");
 });
