@@ -21,6 +21,7 @@ export const LEVELING_ITEMS = [
   // ── RYBOLOV: more fish per cast, more casts, baits, fish XP ──
   item("Walrus", "fishing", C, "+1 fish"),
   item("Alba", "fishing", C, "50% chance +1 basic fish"),
+  item("Dumbo Octopus", "fishing", C, "20% chance +1 fish"),
   item("Pink Dolphin", "fishing", C, "+1 fish in spring"),
   item("Jellyfish", "fishing", C, "+1 fish in summer"),
   item("Poseidon", "fishing", C, "+1 fish in autumn"),
