@@ -3280,16 +3280,16 @@
       background: linear-gradient(160deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), var(--c-card); box-shadow: 0 10px 28px rgba(0,0,0,0.28);
       transition: box-shadow 0.15s, border-color 0.15s; }
     .w-glance.pixel-panel:hover { border-color: rgba(255,255,255,0.16); box-shadow: 0 14px 34px rgba(0,0,0,0.36); }
-    .w-glance .w-head { margin-bottom: 6px; gap: 6px; min-height: 22px; }
-    .w-glance .w-title { font-size: 12.5px; font-weight: 600; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-    .w-glance .w-fresh-ok, .w-glance .w-fresh-loading { display: none; }
+    .w-glance > .w-head { margin-bottom: 6px; gap: 6px; min-height: 22px; }
+    .w-glance > .w-head .w-title { font-size: 12.5px; font-weight: 600; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .w-glance > .w-head .w-fresh-ok, .w-glance > .w-head .w-fresh-loading { display: none; }
     /* the tools float over the corner (shown on hover), so the title keeps the whole width */
-    .w-glance .w-tools { position: absolute; top: 9px; right: 9px; z-index: 2; background: var(--c-card2); border-radius: 999px; padding: 1px 2px;
+    .w-glance > .w-head .w-tools { position: absolute; top: 9px; right: 9px; z-index: 2; background: var(--c-card2); border-radius: 999px; padding: 1px 2px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-    .w-glance .w-grip { position: absolute; top: 12px; left: 4px; z-index: 2; }
-    .w-glance .w-tools, .w-glance .w-grip { opacity: 0; transition: opacity 0.15s; }
-    .w-glance:hover .w-tools, .w-glance:hover .w-grip, .w-glance:focus-within .w-tools { opacity: 1; }
-    @media (hover: none) { .w-glance .w-tools { opacity: 0.55; } }
+    .w-glance > .w-head .w-grip { position: absolute; top: 12px; left: 4px; z-index: 2; }
+    .w-glance > .w-head .w-tools, .w-glance > .w-head .w-grip { opacity: 0; transition: opacity 0.15s; }
+    .w-glance:hover > .w-head .w-tools, .w-glance:hover > .w-head .w-grip, .w-glance:focus-within > .w-head .w-tools { opacity: 1; }
+    @media (hover: none) { .w-glance > .w-head .w-tools { opacity: 0.55; } }
     .w-board > .w-glance > .w-body, .w-glance > .w-body { display: flex; flex-direction: column; position: relative; overflow: hidden; cursor: pointer; min-height: 0;
       container-type: size; }
     .w-glance .w-empty-msg { margin: auto 0; color: var(--c-dim); font-size: 12.5px; }
@@ -3314,8 +3314,8 @@
     /* glance looks (ui/glance-templates.css) on a board and in the gallery: em-sized from the cell */
     /* the whole card scales with its cell (padding, title, body), as the looks were designed at 170 px */
     .w-board > .w-glance.pixel-panel { font-size: var(--fs, 13px); padding: 1em 1.15em 1.15em; border-radius: 1.7em; }
-    .w-board > .w-glance .w-head { margin-bottom: 0.5em; min-height: 1.6em; }
-    .w-board > .w-glance .w-title { font-size: 0.96em; }
+    .w-board > .w-glance > .w-head { margin-bottom: 0.5em; min-height: 1.6em; }
+    .w-board > .w-glance > .w-head .w-title { font-size: 0.96em; }
     .w-board > .w-glance > .w-body { font-size: 1em; }
     .w-board > .w-glance > .w-body > .gx { height: 100%; }
     .w-gal-v .w-gal-face { font-size: 13px; }
