@@ -64,15 +64,21 @@ function cropUrl(expr, folders) {
   return folder && file ? `${PROTECTED}/crops/${folder}/${file}.png` : null;
 }
 
-// "Name": { image: expr, … } → Name: URL
+// "Name": { …, image: expr, … } → Name: URL. The image is not always the first key — Sproutroot
+// Surprise opens with boostedDescriptions, and only reading the first line left it on "?".
 export function itemIconsOf(imagesTs, sunnysideTs, plantTs = "") {
   const imports = importsOf(imagesTs);
   const sunny = sunnysideOf(sunnysideTs);
   const folders = cropFoldersOf(plantTs);
   const out = {};
-  for (const m of imagesTs.matchAll(/^ {2}(?:"([^"]+)"|([\w$]+)):\s*\{\s*\n\s*image:\s*([^,\n]+),/gm)) {
-    const name = m[1] || m[2];
-    const expr = m[3].trim();
+  let name = null;
+  for (const line of imagesTs.split(/\r?\n/)) {
+    const open = line.match(/^ {2}(?:"([^"]+)"|([\w$]+)):\s*\{\s*$/);
+    if (open) { name = open[1] || open[2]; continue; }
+    if (/^ {2}\},?\s*$/.test(line)) { name = null; continue; }
+    const img = name && line.match(/^ {4}image:\s*([^,\n]+),/);
+    if (!img) continue;
+    const expr = img[1].trim();
     const url = expr.startsWith("SUNNYSIDE.") ? sunny[expr.slice(10)]
       : expr.startsWith("CROP_LIFECYCLE") ? cropUrl(expr, folders) : imports[expr];
     if (url && !(name in out)) out[name] = url;

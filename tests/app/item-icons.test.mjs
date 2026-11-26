@@ -42,6 +42,26 @@ test("the generator resolves imported assets and SUNNYSIDE paths", () => {
   });
 });
 
+test("an item whose image is not the first key still gets it (Sproutroot Surprise showed \"?\")", () => {
+  const images = `import sproutrootSurprise from "assets/icons/sproutroot_surprise.webp";
+export const ITEM_DETAILS = {
+  "Sproutroot Surprise": {
+    boostedDescriptions: [
+      {
+        name: "Knowledge Crab",
+        image: SUNNYSIDE.crafting.timber,
+      },
+    ],
+    image: sproutrootSurprise,
+    description: "z",
+  },
+};`;
+  assert.deepStrictEqual(itemIconsOf(images, SUNNY), {
+    "Sproutroot Surprise": "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/icons/sproutroot_surprise.webp",
+  });
+  assert.match(ITEM_ICONS["Sproutroot Surprise"] || "", /sproutroot_surprise\.webp$/, "the generated map carries it");
+});
+
 test("crops: the lifecycle art folder from plant.ts", () => {
   const plant = `export const IMAGES: Record<CropName, string> = {
   Sunflower: "sunflower",
@@ -133,4 +153,19 @@ test("the page's getItemIcon: no '?' for null, skill ranks ('Fishy Feast 3') or 
   assert.strictEqual(get(null), "", "no image for no name (was /img/source/null.png)");
   assert.strictEqual(get("Heart Leaf"), "U/heart", "the game's own spelling differs in case");
   assert.strictEqual(get("Unknown Thing"), "SFLW/Unknown%20Thing.png", "an unknown name still tries sfl.world");
+});
+
+test("getItemIcon: pet species, NFT breeds, Pet, Banana Seed and the game-boost row get game art, not sfl.world's '?'", () => {
+  const SRC = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const start = SRC.indexOf("    function getItemIcon(name) {");
+  const body = SRC.slice(start, SRC.indexOf("\n    }\n", start) + 6);
+  const ic = { Barkley: "U/barkley", Meowchi: "U/meowchi", Twizzle: "U/twizzle", Burro: "U/burro", Mudhorn: "U/mudhorn", Waddles: "U/waddles", "Banana Plant": "U/banana-plant" };
+  const get = new Function("window", "ITEM_IMAGE_MAP", "ITEM_ICON_BASE", body + "\nreturn getItemIcon;")({ __itemIcons: ic }, {}, "SFLW/");
+  for (const [n, u] of [["Dog", "U/barkley"], ["Cat", "U/meowchi"], ["Owl", "U/twizzle"], ["Horse", "U/burro"], ["Bull", "U/mudhorn"], ["Penguin", "U/waddles"], ["Banana Seed", "U/banana-plant"]]) {
+    assert.strictEqual(get(n), u, n);
+  }
+  for (const n of ["Dragon", "Phoenix", "Griffin", "Ram", "Warthog", "Wolf", "Bear", "Pet"]) assert.match(get(n), /pet_nft_egg\.png$/, n);
+  assert.match(get("Game boosts (API-missing)"), /icons\/lightning\.png$/);
+  // the real map has every pet the aliases point at
+  for (const n of ["Barkley", "Meowchi", "Twizzle", "Burro", "Mudhorn", "Waddles", "Nibbles", "Banana Plant"]) assert.ok(ITEM_ICONS[n], n);
 });

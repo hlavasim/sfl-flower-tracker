@@ -3060,6 +3060,24 @@
     .w-frame .gift-dd-time, .w-frame .gift-dd-meta, .w-frame .gift-dropdown-item .gift-dd-have { font-size: 11.5px; background: none; }
     .v-lvl-row { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: center; }
     .v-lvl-row > label, .v-lvl-row select { min-width: 0; max-width: 100%; }   /* a long worm-mix option fits a phone */
+    /* ── polish of leftovers: readable small text, clean footers and notes, map tags ── */
+    .v-pol-sub { font-size: 11.5px; }
+    .v-pol-note { font-family: var(--c-font); font-size: 12px; line-height: 1.55; }
+    .v-pol-count { font-family: var(--c-font); font-size: 12px; color: var(--c-dim); }
+    .v-pol-mkt .v-kpis { margin-top: 10px; }
+    .v-pol-mkt .v-kpi b img { height: 0.8em; vertical-align: -0.05em; }
+    .v-pol-mkt .market-sparkline { margin: 0 0 8px; }
+    .v-pol-rows > .volume-leader-row { background: transparent; }
+    .v-pol-rows > .volume-leader-row:hover { background: var(--c-card2); }
+    .v-pol-foot { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; font-family: var(--c-font); }
+    .v-pol-foot .refresh-btn { font-family: var(--c-font); font-size: 13px; padding: 7px 14px; border-radius: 999px; background: var(--c-card);
+      border: 1px solid var(--c-line); color: var(--c-muted); box-shadow: none; transform: none; }
+    .v-pol-foot .refresh-btn:hover { color: var(--c-text); background: var(--c-card2); }
+    .v-pol-foot .timestamp { margin: 0; font-family: var(--c-font); font-size: 12px; color: var(--c-dim); }
+    .v-pol-fold { margin: 0; }
+    .v-pol-fold > summary { font-size: 13px; padding: 4px 2px 8px; }
+    .v-pol-tagbox { container-type: size; }
+    .v-pol-tag { font: 700 clamp(5px, 50cqmin, 14px)/1 var(--c-font); color: #c9a227; text-align: center; overflow: hidden; }
     .v-lvl-kitchens { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 4px 14px; margin-top: 8px; }
     .v-lvl-set label { cursor: pointer; }
     .v-lvl-set img, .v-mini img, .v-note img { height: 1.2em; vertical-align: -0.25em; margin-right: 3px; }
@@ -10108,9 +10126,9 @@
         html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "dolls", force: { cat: "dolls" } });
       }
 
-      html += `<div class="footer">
+      html += `<div class="footer v-pol-foot">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
-        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+        <div class="timestamp">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
       </div>`;
 
       app.innerHTML = html;
@@ -10143,9 +10161,9 @@
         html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "crabs", force: { cat: "crabs" } });
       }
 
-      html += `<div class="footer">
+      html += `<div class="footer v-pol-foot">
         <button class="refresh-btn" onclick="refresh()">REFRESH</button>
-        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+        <div class="timestamp">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
       </div>`;
 
       app.innerHTML = html;
@@ -10181,9 +10199,9 @@
         for (const t of types) html += _wLive(t);
       }
 
-      html += `<div class="footer">
+      html += `<div class="footer v-pol-foot">
         <button class="refresh-btn" onclick="(window._wRefresh || refresh)()">REFRESH</button>
-        <div class="timestamp pixel-font">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
+        <div class="timestamp">Updated: ${new Date().toLocaleTimeString("cs-CZ")}</div>
       </div>`;
 
       app.innerHTML = html;
@@ -11457,6 +11475,18 @@
       // names it does not know with a "?" image (status 200, so onerror never fires).
       const ic = window.__itemIcons;
       if (ic && ic[name]) return ic[name];
+      // names the game draws with other art: a pet species as its first pet; an NFT breed (each token
+      // has its own art, the breed none) and a bare "Pet" as the game's NFT pet egg; the game calls
+      // the banana seed "Banana Plant"; the game-only boost row as the game's lightning icon
+      if (!getItemIcon._alias) {
+        const egg = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/icons/pet_nft_egg.png";
+        getItemIcon._alias = { Dog: "Barkley", Cat: "Meowchi", Owl: "Twizzle", Horse: "Burro", Bull: "Mudhorn", Penguin: "Waddles", Hamster: "Nibbles",
+          Dragon: egg, Phoenix: egg, Griffin: egg, Ram: egg, Warthog: egg, Wolf: egg, Bear: egg, Pet: egg,
+          "Banana Seed": "Banana Plant", "Game boosts (API-missing)": "https://sunflower-land.com/game-assets/icons/lightning.png" };
+      }
+      const alias = Object.prototype.hasOwnProperty.call(getItemIcon._alias, name) ? getItemIcon._alias[name] : null;
+      if (alias && alias.startsWith("https://")) return alias;
+      if (alias && ic && ic[alias]) return ic[alias];
       if (ic) {
         // a skill rank ("Fishy Feast 3") is drawn as its skill; a bounty's plural ("Bananas") as its item
         const base = String(name).replace(/ [2-9]$/, "");
@@ -12149,7 +12179,7 @@
       return `<div style="margin-bottom:16px">
         <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
           <h3>\ud83d\udcc8 P2P PRICE TRACKER</h3>
-          <span class="sales-section-count">${sorted.length} items</span>
+          <span class="sales-section-count v-pol-count">${sorted.length} items</span>
         </div>
         <div class="sales-section-body" style="display:none" id="p2p-history-section">
           <input class="ph-search" type="text" placeholder="Search items..." oninput="filterPHRows(this,'p2p-history-section')">
@@ -12164,7 +12194,7 @@
       return `<div style="margin-bottom:16px">
         <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'; if(this.nextElementSibling.style.display!=='none' && !this.dataset.loaded){this.dataset.loaded='1';switchNftTab('collectibles')}">
           <h3>\ud83c\udfa8 NFT PRICE TRACKER</h3>
-          <span class="sales-section-count">click to load</span>
+          <span class="sales-section-count v-pol-count">click to load</span>
         </div>
         <div class="sales-section-body" style="display:none">
           <div class="ph-tabs" id="nft-history-tabs">
@@ -12192,7 +12222,8 @@
     }
 
     // ── Resolve marketplace item name from collection + id ──
-    function _resolveMarketName(collection, itemId) {
+    function _resolveMarketName(collection, itemId, apiName) {
+      if (apiName) return apiName;   // marketplace-history names its rows from the generated id table
       const id = parseInt(itemId);
       const map = _NFT_NAMES[collection];
       if (map && map[id]) return map[id];
@@ -12259,27 +12290,18 @@
         const sparkDays = totals.filter(t => t.total_volume != null);
         const sparkVals = sparkDays.slice().reverse().map(t => parseFloat(t.total_volume) || 0);
 
-        let html = `<div class="market-overview pixel-font">
-          <div class="market-overview-title">\ud83d\udcca MARKET OVERVIEW</div>
-          <div class="market-overview-stats">`;
+        let html = `<div class="v-pol-mkt">
+          <div class="w-head"><span class="w-title">\ud83d\udcca Market overview</span></div>
+          <div class="v-kpis">`;
 
         if (hasDelta) {
           html += `
-            <div class="market-overview-stat">
-              <span class="label">Volume (24h)</span>
-              <span class="value">${_fmtBigNum(vol)} ${sflIcon()}</span>
-            </div>
-            <div class="market-overview-stat">
-              <span class="label">Trades (24h)</span>
-              <span class="value">${_fmtBigNum(trades)}</span>
-            </div>`;
+            <div class="v-kpi"><b>${_fmtBigNum(vol)} ${sflIcon()}</b><span>Volume (24h)</span></div>
+            <div class="v-kpi"><b>${_fmtBigNum(trades)}</b><span>Trades (24h)</span></div>`;
         }
 
         html += `
-            <div class="market-overview-stat">
-              <span class="label">\ud83c\udf38 Flower Price</span>
-              <span class="value" style="color:var(--lily)">${flower.toFixed(4)}</span>
-            </div>
+            <div class="v-kpi"><b>${flower.toFixed(4)}</b><span>\ud83c\udf38 FLOWER price</span></div>
           </div>`;
 
         if (sparkVals.length >= 2) {
@@ -12290,22 +12312,21 @@
         if (!isCumulative) {
           const movers = (moversResp?.items || []).slice(0, 5);
           if (movers.length > 0) {
-            html += `<div class="market-movers">
-              <div class="market-movers-title">TOP MOVERS (24h)</div>`;
+            html += `<table class="w-table"><thead><tr><th>#</th><th>top movers (24h)</th><th class="r">volume</th><th class="r">quantity</th></tr></thead><tbody>`;
             for (let i = 0; i < movers.length; i++) {
               const m = movers[i];
-              const name = _resolveMarketName(m.collection, m.item_id);
-              html += `<div class="market-mover-row">
-                <span class="market-mover-rank">${i + 1}.</span>
-                <span class="market-mover-name">${_mktIcon(name)}${escHTML(name)}</span>
-                <span class="market-mover-vol">${_fmtBigNum(m.total_volume)} SFL</span>
-                <span class="market-mover-trades">${_fmtBigNum(m.total_quantity || 0)} qty</span>
-              </div>`;
+              const name = _resolveMarketName(m.collection, m.item_id, m.name);
+              html += `<tr>
+                <td class="v-dim">${i + 1}</td>
+                <td><span class="v-item">${_mktIcon(name)}${escHTML(name)}</span></td>
+                <td class="r nw"><b>${_fmtBigNum(m.total_volume)}</b> ${sflIcon()}</td>
+                <td class="r nw v-dim">${_fmtBigNum(m.total_quantity || 0)}</td>
+              </tr>`;
             }
-            html += `</div>`;
+            html += `</tbody></table>`;
           }
         } else {
-          html += `<div style="font-size:0.5rem;color:var(--text-dim);margin-top:4px">Volume/trades data collecting \u2014 available after 2+ daily snapshots</div>`;
+          html += `<div class="v-pol-note v-dim">Volume/trades data collecting \u2014 available after 2+ daily snapshots</div>`;
         }
 
         html += `</div>`;
@@ -12336,7 +12357,7 @@
 
         let rowsHtml = "";
         for (const item of items) {
-          const name = _resolveMarketName(item.collection, item.item_id);
+          const name = _resolveMarketName(item.collection, item.item_id, item.name);
           const imgUrl = getItemIcon(name);
           const vol = parseFloat(item.total_volume) || 0;
           const qty = parseInt(item.total_quantity || 0);
@@ -12356,9 +12377,9 @@
         container.innerHTML = `<div style="margin-bottom:16px">
           <div class="sales-section-header pixel-font" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
             <h3>\ud83c\udfc6 VOLUME LEADERS (7 DAYS)</h3>
-            <span class="sales-section-count">${items.length} items</span>
+            <span class="sales-section-count v-pol-count">${items.length} items</span>
           </div>
-          <div class="sales-section-body">${rowsHtml}</div>
+          <div class="sales-section-body v-pol-rows">${rowsHtml}</div>
         </div>`;
       } catch (e) {
         console.warn("[Volume Leaders]", e);
@@ -16791,7 +16812,7 @@
         fold("marv", "🗺️ Marine Marvels — map planner and the order", w("fishing-marvels") + w("fishing-order"), model.marvelPlanned) +
         fold("hist", "📜 History — what fishing cost you, fish prices, treasure",
           w("fishing-cost") + w("fishing-per-fish") + w("fishing-guaranteed") + w("fishing-treasure"), false) +
-        '<div class="v-note" style="text-align:center">Catch rates and costs are YOUR history, not published drop tables. Guaranteed-catch pairs and map-piece chances are the game\'s published values; prices are live p2p.</div>';
+        '<div class="v-note v-pol-note" style="text-align:center">Catch rates and costs are YOUR history, not published drop tables. Guaranteed-catch pairs and map-piece chances are the game\'s published values; prices are live p2p.</div>';
     }
     // What the FISHING widgets need from the page: the model (for the copy's options; on a board it
     // starts the history fetch and repaints when it lands) and the icons.
@@ -17065,7 +17086,7 @@
           <p><b>There is no public code yet.</b> <code>github.com/yakkamon/yakkamon</code> exists but is an <b>empty placeholder</b> (2 commits, just a package.json and a README reading &ldquo;blank landing page project&rdquo;, MIT, 0 stars). Unlike Sunflower Land, which is fully open-source, there is <b>nothing to read</b> here — so none of the mechanics can be verified in source, only taken from marketing. A community site lives at <code>github.com/yakkamon-world/yakkamonworld</code>.</p>
           <div class="v-yakkamon-chips">${links.map(([l, u]) => `<a class="v-yakkamon-chip" href="${u}" target="_blank" rel="noopener">${l} ↗</a>`).join("")}</div>
           <p class="v-yakkamon-note v-yakkamon-warn">⚠ <b>Scam warning:</b> the team says their <b>previous X account was compromised</b>. Only <b>@yakkamon_game</b> is official. Never sign anything from a link that did not come from these domains.</p></div>`);
-      h += `<p class="v-yakkamon-note v-yakkamon-dim" style="text-align:center;margin-bottom:12px">Source: yakkamon.com + docs.yakkamon.com, read 8 Aug 2026; rank ladder re-cut 12 Aug 2026; signup counter, leaderboard and prices are live. The bulk-bonus shape is <b>measured off the live board</b>, not interpolated — the four amounts Yakkamon publishes are exact and the rate is flat between them.</p>`;
+      h += `<p class="v-yakkamon-note v-yakkamon-dim v-pol-note" style="text-align:center;margin-bottom:12px">Source: yakkamon.com + docs.yakkamon.com, read 8 Aug 2026; rank ladder re-cut 12 Aug 2026; signup counter, leaderboard and prices are live. The bulk-bonus shape is <b>measured off the live board</b>, not interpolated — the four amounts Yakkamon publishes are exact and the rate is flat between them.</p>`;
       app.innerHTML = h;
     }
 
@@ -17866,11 +17887,16 @@
         const src = (decNodeArt[it.name] ? decCdnBase + "/" + decNodeArt[it.name] : null)
           || (decCdn[it.name] ? decCdnBase + "/" + decCdn[it.name] : null)
           || (decRepo[it.name] ? _jsdAssets + "/" + decRepo[it.name] : null)
-          || decBuildIcon[it.name] || ITEM_IMAGE_MAP[it.name] || (it.node ? getItemIcon(it.name) : null);
+          || decBuildIcon[it.name] || ITEM_IMAGE_MAP[it.name]
+          || (window.__itemIcons && window.__itemIcons[it.name])   // the game's own image map (banners, letter tiles…)
+          || (it.node ? getItemIcon(it.name) : null);
+        // No art at all: a short tag that scales with the tile (the full name was 4px text) — a
+        // letter tile shows its letter, anything else its initials; hover gives the name.
+        const tag = (/^Letter (\S) Tile$/.exec(it.name) || [])[1] || it.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 3);
         const inner = src
           ? `<img src="${src}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onerror="this.style.display='none'">`
-          : `<span style="font-size:${Math.max(4, Math.min(7, 2 + it.w))}px;color:#c9a227;line-height:1.05;text-align:center;padding:1px;overflow:hidden;word-break:break-word">${escHTML(it.name)}</span>`;
-        cells.push(`<div title="${escHTML(it.name)} · ${it.x},${it.y} · ${it.w}×${it.h}" style="grid-column:${col(it.x)} / span ${it.w};grid-row:${row(it.y)} / span ${it.h};background:${src ? "#241a10" : "#2b2113"};outline:1px solid rgba(0,0,0,0.35);outline-offset:-1px;display:flex;align-items:center;justify-content:center;overflow:hidden">${inner}</div>`);
+          : `<span class="v-pol-tag">${escHTML(tag)}</span>`;
+        cells.push(`<div${src ? "" : ` class="v-pol-tagbox"`} title="${escHTML(it.name)} · ${it.x},${it.y} · ${it.w}×${it.h}" style="grid-column:${col(it.x)} / span ${it.w};grid-row:${row(it.y)} / span ${it.h};background:${src ? "#241a10" : "#2b2113"};outline:1px solid rgba(0,0,0,0.35);outline-offset:-1px;display:flex;align-items:center;justify-content:center;overflow:hidden">${inner}</div>`);
       }
       /*
        * Tile size. "fit" divides the available width by the map's column count so the whole
@@ -17916,13 +17942,13 @@
             : _decLayout === "text"
               ? `The word is written across the top expansions (a 42 × 6 strip), all in <b>pansies</b> so only the colour changes and the letters stay sharp. A short word (SAJMON) gets a bigger, bolder 5-wide font; SAJMONIUM needs the 3-wide one. Style <b>${escHTML(decTextStyles[_decTextStyle].label)}</b>: ${escHTML(decTextStyles[_decTextStyle].hint)} Every other tile of the band is the field colour. Only letters of SAJMONIUM are available.`
               : "Five contiguous colour bands, the same count of every flower inside each. Fills as many whole sets as the space allows."}</div>
-        <div class="w-title" style="margin-bottom:4px">Your own layout (JSON)</div>
+        <details class="w-fold v-pol-fold"${_decCustom || window._decJsonOpen ? " open" : ""} ontoggle="window._decJsonOpen=this.open"><summary>Your own layout (JSON) — paste, check or copy</summary>
         <div class="v-dim" style="margin-bottom:6px">Format is <code>{"x,y": "Flower Name"}</code> — one entry per tile, coordinates in the game's own grid (hover the map to read them). Paste yours and press Check: the map redraws from it and everything above — colour balance, what to grow, collisions — is recomputed against it.</div>
         <textarea id="dec-json" class="v-dec-json" spellcheck="false">${escHTML(asJson)}</textarea>
         <div class="v-dec-line">
           <button class="dash-toggle-btn on" onclick="_decApplyJson()">Check</button>
           <button class="dash-toggle-btn" onclick="var t=document.getElementById('dec-json');t.select();document.execCommand('copy')">Copy</button>
-        </div>
+        </div></details>
       </div>`;
 
       /*
@@ -18017,7 +18043,7 @@
         const fresh = __widgets.needsOf(type, FARM_ID).length ? __widgets.freshOf(p.entries) : null;
         html += __widgets.renderPage(type, { data: p.data, ctx: _wCtx(type), fresh });
       }
-      html += `<div class="footer">
+      html += `<div class="footer v-pol-foot">
         <button class="refresh-btn" onclick="window._wRefresh && window._wRefresh()">REFRESH</button>
         <div class="timestamp">Updated: ${new Date().toLocaleTimeString("en-US")}</div>
       </div>`;
