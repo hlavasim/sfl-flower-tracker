@@ -4,7 +4,7 @@
 // so the page's onerror never fires) — Timber, Crimsteel, Kelp Fibre… showed "?".
 //
 //   node scripts/gen-item-icons.mjs            (fetches the two files from GitHub main)
-//   node scripts/gen-item-icons.mjs <images.ts> <sunnyside.ts> <plant.ts> <bumpkinSkills.ts>
+//   node scripts/gen-item-icons.mjs <images.ts> <sunnyside.ts> <plant.ts> <bumpkinSkills.ts> <bumpkin.ts>
 import { readFileSync, writeFileSync } from "node:fs";
 
 const RAW = "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/";
@@ -104,6 +104,17 @@ export function skillIconsOf(skillsTs, sunnysideTs, items = {}, plantTs = "") {
   return out;
 }
 
+// Wearables are not in images.ts either: the game draws each from assets/wearables/<ITEM_IDS[name]>.webp
+// (bumpkin.ts). sfl.world answered "?" for the ones it has not indexed (Duende Hat, Firefly Aura…).
+export function wearableIconsOf(bumpkinTs) {
+  const block = bumpkinTs.split(/^export const ITEM_IDS[^{]*\{/m)[1] || "";
+  const out = {};
+  for (const m of block.split(/^\};/m)[0].matchAll(/^ {2}(?:"([^"]+)"|([\w$]+)): (\d+),/gm)) {
+    out[m[1] || m[2]] = `${ASSETS}assets/wearables/${m[3]}.webp`;
+  }
+  return out;
+}
+
 if (process.argv[1] && process.argv[1].endsWith("gen-item-icons.mjs")) {
   const images = await source(process.argv[2], "features/game/types/images.ts");
   const sunny = await source(process.argv[3], "assets/sunnyside.ts");
@@ -111,6 +122,8 @@ if (process.argv[1] && process.argv[1].endsWith("gen-item-icons.mjs")) {
   const skillsTs = await source(process.argv[5], "features/game/types/bumpkinSkills.ts");
   const icons = itemIconsOf(images, sunny, plant);
   for (const [k, v] of Object.entries(skillIconsOf(skillsTs, sunny, icons, plant))) if (!(k in icons)) icons[k] = v;
+  const bumpkinTs = await source(process.argv[6], "features/game/types/bumpkin.ts");
+  for (const [k, v] of Object.entries(wearableIconsOf(bumpkinTs))) if (!(k in icons)) icons[k] = v;
   const keys = Object.keys(icons).sort();
   const body = keys.map((k) => `  ${JSON.stringify(k)}: ${JSON.stringify(icons[k])},`).join("\n");
   writeFileSync(new URL("../app/item-icons.mjs", import.meta.url),

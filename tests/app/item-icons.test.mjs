@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { itemIconsOf, sunnysideOf, skillIconsOf } from "../../scripts/gen-item-icons.mjs";
+import { readFileSync } from "node:fs";
+import { itemIconsOf, sunnysideOf, skillIconsOf, wearableIconsOf } from "../../scripts/gen-item-icons.mjs";
 import { ITEM_ICONS } from "../../app/item-icons.mjs";
 
 // Item icons come from the game's own image map, not from sfl.world guesses (which answer "?" for
@@ -70,7 +71,7 @@ test("the generated map covers the items that showed \"?\" and the common ones",
 test("the page reads the game's map first", async () => {
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
-  assert.match(src, /if \(window\.__itemIcons && window\.__itemIcons\[name\]\) return window\.__itemIcons\[name\];/);
+  assert.match(src, /const ic = window\.__itemIcons;\s+if \(ic && ic\[name\]\) return ic\[name\];/);
   assert.match(src, /import\("\/app\/item-icons\.mjs"\)/);
 });
 
@@ -103,4 +104,33 @@ export const BUMPKIN_REVAMP_SKILL_TREE = {
     "Lucky Pick": items["Apple Seed"],
   });
   assert.ok(ITEM_ICONS["Sturdy Shovel"] && ITEM_ICONS["Beetle Nest"] && ITEM_ICONS["Lean Compost"], "the generated map carries the skills");
+});
+
+test("wearables: ITEM_IDS of bumpkin.ts → the game's wearables/<id>.webp (sfl.world showed \"?\" for new ones like Duende Hat)", () => {
+  const bumpkin = `export const ITEM_IDS: Record<BumpkinItem, number> = {
+  "Farmer Shirt": 1,
+  "Duende Hat": 590,
+};
+export const BUMPKIN_ITEM_PART = {`;
+  assert.deepStrictEqual(wearableIconsOf(bumpkin), {
+    "Farmer Shirt": "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/wearables/1.webp",
+    "Duende Hat": "https://raw.githubusercontent.com/sunflower-land/sunflower-land/main/src/assets/wearables/590.webp",
+  });
+  assert.ok(ITEM_ICONS["Duende Hat"] && ITEM_ICONS["Firefly Aura"], "the generated map carries the wearables");
+});
+
+test("the page's getItemIcon: no '?' for null, skill ranks ('Fishy Feast 3') or plurals ('Bananas', 'coins')", () => {
+  const SRC = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const start = SRC.indexOf("    function getItemIcon(name) {");
+  const body = SRC.slice(start, SRC.indexOf("\n    }\n", start) + 6);
+  const window = { __itemIcons: { "Fishy Feast": "U/ff", Banana: "U/banana", Olive: "U/olive", Beetroot: "U/beet", "Heart leaf": "U/heart" } };
+  const get = new Function("window", "ITEM_IMAGE_MAP", "ITEM_ICON_BASE", body + "\nreturn getItemIcon;")(window, {}, "SFLW/");
+  assert.strictEqual(get("Fishy Feast 3"), "U/ff");
+  assert.strictEqual(get("Bananas"), "U/banana");
+  assert.strictEqual(get("Olives"), "U/olive");
+  assert.strictEqual(get("Beetroots"), "U/beet");
+  assert.match(get("coins"), /coins\.png$/);
+  assert.strictEqual(get(null), "", "no image for no name (was /img/source/null.png)");
+  assert.strictEqual(get("Heart Leaf"), "U/heart", "the game's own spelling differs in case");
+  assert.strictEqual(get("Unknown Thing"), "SFLW/Unknown%20Thing.png", "an unknown name still tries sfl.world");
 });
