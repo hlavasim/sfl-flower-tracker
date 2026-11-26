@@ -128,3 +128,62 @@ test("book: the marketplace book, one fetch shared by everyone", async () => {
   assert.deepStrictEqual(a.data, { items: { A: { f: 1 } } });
   assert.strictEqual(f.calls.length, 1);
 });
+
+// ── instant first paint: the last good result of a persisted resource survives a reload ──
+function memStorage(init = {}) {
+  const m = new Map(Object.entries(init));
+  return { m, getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) };
+}
+const RES = {
+  kept: { ttl: 60_000, persist: true, load: (_, { json }) => json("/kept") },
+  plain: { ttl: 60_000, load: (_, { json }) => json("/plain") },
+};
+
+test("persist: a fresh result of a persisted resource is saved; others are not", async () => {
+  const st = memStorage();
+  const s = createStore({ fetch: fakeFetch({ "/kept": { v: 1 }, "/plain": { v: 2 } }), resources: RES, persist: st, now: () => 1000 });
+  await s.get({ res: "kept", farm: 1 });
+  await s.get({ res: "plain", farm: 1 });
+  const keys = [...st.m.keys()];
+  assert.deepStrictEqual(keys, ["sfl_wcache:" + keyOf({ res: "kept", farm: 1 })]);
+  assert.deepStrictEqual(JSON.parse(st.m.get(keys[0])), { asOf: 1000, data: { v: 1 } });
+});
+
+test("persist: after a reload peek shows the saved result at once (with its age), get refreshes it", async () => {
+  const st = memStorage({ ["sfl_wcache:" + keyOf({ res: "kept", farm: 1 })]: JSON.stringify({ asOf: 1000, data: { v: "old" } }) });
+  let t = 1000 + 5 * 60_000;
+  const f = fakeFetch({ "/kept": { v: "new" } });
+  const s = createStore({ fetch: f, resources: RES, persist: st, now: () => t });
+  const p = s.peek({ res: "kept", farm: 1 });
+  assert.deepStrictEqual([p.status, p.data, p.asOf], ["ok", { v: "old" }, 1000]);
+  const r = await s.get({ res: "kept", farm: 1 });
+  assert.deepStrictEqual(r.data, { v: "new" });
+  assert.strictEqual(f.calls.length, 1);
+});
+
+test("persist: a saved result older than 12 h, broken JSON or a full storage never shows or throws", async () => {
+  const k = "sfl_wcache:" + keyOf({ res: "kept", farm: 1 });
+  const now = 20 * 3600_000;
+  const old = createStore({ fetch: fakeFetch({}), resources: RES, persist: memStorage({ [k]: JSON.stringify({ asOf: now - 13 * 3600_000, data: 1 }) }), now: () => now });
+  assert.strictEqual(old.peek({ res: "kept", farm: 1 }), null);
+  const broken = createStore({ fetch: fakeFetch({}), resources: RES, persist: memStorage({ [k]: "{nope" }), now: () => now });
+  assert.strictEqual(broken.peek({ res: "kept", farm: 1 }), null);
+  const full = { getItem: () => null, setItem: () => { throw new Error("QuotaExceededError"); } };
+  const r = await createStore({ fetch: fakeFetch({ "/kept": { v: 1 } }), resources: RES, persist: full }).get({ res: "kept", farm: 1 });
+  assert.strictEqual(r.status, "ok");
+});
+
+test("persist: the big shared resources are marked, the raw recorded weeks are not", () => {
+  for (const r of ["farm", "leveling", "tickets", "treasury", "book", "flips", "worldAgg", "worldMe"]) assert.strictEqual(RESOURCES[r].persist, true, r);
+  assert.ok(!RESOURCES.ticketWeeks.persist);
+});
+
+test("persist: entries older than 12 h are removed when the store starts (other keys untouched)", () => {
+  const now = 50 * 3600_000;
+  const m = new Map([["sfl_wcache:a", JSON.stringify({ asOf: now - 13 * 3600_000, data: 1 })],
+    ["sfl_wcache:b", JSON.stringify({ asOf: now - 3600_000, data: 2 })], ["sfl_wcache:c", "{broken"], ["sfl_other", "x"]]);
+  const storage = { get length() { return m.size; }, key: (i) => [...m.keys()][i] ?? null,
+    getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  createStore({ fetch: fakeFetch({}), persist: storage, now: () => now });
+  assert.deepStrictEqual([...m.keys()].sort(), ["sfl_other", "sfl_wcache:b"]);
+});

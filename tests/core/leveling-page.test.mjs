@@ -40,7 +40,7 @@ test("the page sends the recorded weeks so salt follows the measured harvests", 
 
 test("the page loads the store with the engine and reads the farm through it", () => {
   assert.match(SRC, /import\("\/app\/store\.mjs"\)/);
-  assert.match(SRC, /window\.__store = store\.createStore\(\)/);
+  assert.match(SRC, /window\.__store = store\.createStore\(\{ persist: _persist \}\)/);
   assert.match(SRC, /await __store\.get\(\{ res: "farm", farm: FARM_ID \}, \{ force: true \}\)/);
 });
 

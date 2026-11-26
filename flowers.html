@@ -2776,7 +2776,11 @@
         frame.bindFrames(document.body, (id, action, value) => window.__widgets.handle(id, action, value));
       }).catch((e) => console.error("[widgets] did not load", e));
     Promise.all([import("/core/browser-engine.mjs"), import("/app/store.mjs")]).then(async ([engine, store]) => {
-      window.__store = store.createStore();
+      // The last good results of the shared resources survive a reload (sfl_wcache:*, never synced):
+      // the board paints them at once with their age and refreshes them in the background.
+      let _persist = null;
+      try { _persist = window.localStorage; } catch (e) { _persist = null; }
+      window.__store = store.createStore({ persist: _persist });
       await _widgetsReady;
       window.__engine = engine;
       for (const [k, v] of Object.entries(engine)) if (!(k in window)) window[k] = v;
