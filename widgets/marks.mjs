@@ -7,6 +7,7 @@
 //   🏆 Cost to reach #1 · 📈 Projections · 🔥 Resource burn rate
 import { esc, icon, fmtNum } from "./market-common.mjs";
 import { kpis, bar, bigBar, pill } from "../ui/viz.mjs";
+import { big, compact, ring as gRing, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
 
 const needLb = () => ({ marks: { res: "marks" } });
 const needAll = (farmId) => ({ marks: { res: "marks" }, farm: { res: "farm", farm: farmId },
@@ -532,4 +533,111 @@ export const marksBurn = {
     });
     return { rows, footer: "", empty: "No players this week." };
   },
+};
+
+// ── iPhone glance faces (boards and the ＋ gallery) ──
+const corner = (pct, tone) => `<div class="g-corner">${gRing(pct, { tone })}</div>`;
+const split = (head, list) => `<div class="g-split"><div>${head}</div>${gRows(list)}</div>`;
+const hero = (html) => (html ? `<div class="g-hero">${html}</div>` : "");
+const who = (r) => `#${r.rank || "?"} ${r.player_name || r.farm_id}`;
+// the first n rows, the viewer's row kept in the last place when it is further down
+const withMe = (list, n) => {
+  const top = list.slice(0, n), me = list.find((r) => r.me);
+  return me && !top.includes(me) ? [...top.slice(0, n - 1), me] : top;
+};
+const timeLeft = (days) => (days >= 1 ? `${Math.floor(days)}d ${Math.floor((days % 1) * 24)}h` : `${Math.floor(days * 24)}h`);
+
+marksSummary.sizes = ["s", "m"];
+marksSummary.size = "s";
+marksSummary.glance = ({ marks } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!marks || !Array.isArray(marks.players)) return { empty: NO_MARKS };
+  if (!marks.players.length) return { empty: "No players this week." };
+  const { me, top, daysLeft } = marksBoard(marks, ctx);
+  const pct = me && top.marks > 0 ? (me.marks / top.marks) * 100 : 0;
+  if (size === "s") return { html: me
+    ? corner(pct, me.rank === 1 ? "ok" : "accent") + big(`#${me.rank}`, { cap: `${compact(me.marks)} marks · ${Math.round(pct)} % of #1 · ${timeLeft(daysLeft)} left` })
+    : big(compact(top.marks), { cap: `#1's marks · you are not on the board · ${timeLeft(daysLeft)} left` }) };
+  return { html: gTiles([
+    me ? { label: "your rank", value: `#${me.rank}`, sub: `of ${marks.players.length}` } : { label: "players", value: String(marks.players.length) },
+    me ? { label: "your marks", value: compact(me.marks), sub: `${Math.round(pct)} % of #1` } : { label: "#1 marks", value: compact(top.marks) },
+    { label: "time left", value: timeLeft(daysLeft), sub: me && me.multiplier ? `${me.multiplier.toFixed(1)}x multiplier` : "" }]) };
+};
+
+marksSources.sizes = ["s", "m", "l"];
+marksSources.size = "m";
+marksSources.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = marksSources.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const cpm = (r) => (r.costPerMark > 0 ? `${r.costPerMark.toFixed(4)} SFL/mark` : "unpriced");
+  if (size === "s") {
+    const r = out.rows[0];
+    return { html: hero(r.iconHtml) + big(r.nextMarks.toFixed(0), { unit: "marks", cap: `${r.label} · ${cpm(r)}` }) };
+  }
+  return { html: gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.label, sub: `${cpm(r)} · ${r.hint}`,
+    value: r.nextMarks.toFixed(0), tone: r.n === 1 ? "ok" : "" }))) };
+};
+
+marksShoppingList.sizes = ["s", "m", "l"];
+marksShoppingList.size = "s";
+marksShoppingList.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = marksShoppingList.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const sum = (k) => out.rows.reduce((a, r) => a + r[k], 0), buy = sum("buyCost");
+  const head = big(compact(Math.round(sum("marks"))), { unit: "marks", cap: `${sum("dlvCount")} deliveries today · ${buy > 0 ? `${buy.toFixed(2)} SFL to buy` : "all from stock"}` });
+  if (size === "s") return { html: head };
+  const list = out.rows.slice().sort((a, b) => b.marks - a.marks).slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: r.iconHtml, name: r.label,
+    sub: r.needUnits > 0 ? `${r.dlvCount}× · buy ${fmtNum(r.needUnits)} units` : `${r.dlvCount}× · from stock`, value: `+${compact(Math.round(r.marks))}`, tone: "ok" }));
+  return { html: (size === "l" ? head : "") + gRows(list) };
+};
+
+marksLeaderboard.sizes = ["m", "l"];
+marksLeaderboard.size = "m";
+marksLeaderboard.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+  const out = marksLeaderboard.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  return { html: gRows(withMe(out.rows, size === "l" ? 7 : 3).map((r) => ({ name: who(r),
+    sub: r.delta ? `${deltaStr(r.delta)} since the last snapshot` : r.tier || "", value: compact(r.marks), tone: r.me ? "accent" : "" }))) };
+};
+
+marksCostFirst.sizes = ["s", "m"];
+marksCostFirst.size = "s";
+marksCostFirst.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = marksCostFirst.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const { me, top } = marksBoard(data.marks, ctx);
+  const gap = (top.marks || 0) - (me.marks || 0);
+  const gained = out.rows.reduce((a, r) => a + r.totalMarks, 0), buy = out.rows.reduce((a, r) => a + r.buyCost, 0);
+  const cap = gained >= gap ? `to #1 · ${buy > 0 ? `${buy.toFixed(2)} SFL to buy` : "all from stock"}` : "to #1 · not with the kitchen alone";
+  const head = big(compact(Math.ceil(gap)), { unit: "marks", cap });
+  if (size === "s") return { html: corner((gained / gap) * 100, gained >= gap ? "ok" : "bad") + head };
+  return { html: split(head, out.rows.filter((r) => r.totalDeliveries > 0).sort((a, b) => b.totalMarks - a.totalMarks).slice(0, 3)
+    .map((r) => ({ icon: r.iconHtml, name: r.item, sub: `${fmtNum(r.totalDeliveries)} deliveries`,
+      value: r.needToBuy > 0 ? `buy ${fmtNum(r.needUnits)}` : "stock", tone: r.needToBuy > 0 ? "bad" : "ok" }))) };
+};
+
+marksProjections.sizes = ["s", "m", "l"];
+marksProjections.size = "m";
+marksProjections.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = marksProjections.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const first = out.rows[0];
+  if (size === "s") {
+    const me = out.rows.find((r) => r.me);
+    return { html: me ? corner(first.projected > 0 ? (me.projected / first.projected) * 100 : 0, me.n === 1 ? "ok" : "accent") +
+      big(`#${me.n}`, { cap: `projected · ${compact(me.projected)} marks${me.n > 1 ? ` · #1 ${compact(first.projected)}` : ""}` })
+      : big(compact(first.projected), { cap: `#1 projected · ${first.player_name || first.farm_id}` }) };
+  }
+  return { html: gRows(withMe(out.rows, size === "l" ? 7 : 3).map((r) => ({ name: `#${r.n} ${r.player_name || r.farm_id}`,
+    sub: `now ${compact(r.marks)} · +${compact(r.optimal + r.petWk)} possible`, value: compact(r.projected), tone: r.me ? "accent" : "" }))) };
+};
+
+marksBurn.sizes = ["m", "l"];
+marksBurn.size = "m";
+marksBurn.glance = (data = {}, ctx = {}, opts = {}, size = "m") => {
+  const out = marksBurn.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const moving = out.rows.filter((r) => r.signals.length).sort((a, b) => b.signals.length - a.signals.length || (a.rank || 999) - (b.rank || 999));
+  if (!moving.length) return { empty: "No big moves since the last snapshot." };
+  return { html: gRows(moving.slice(0, size === "l" ? 7 : 3).map((r) => ({ name: who(r), sub: r.signals.slice(1).join(" ") || `${deltaStr(r.burnTotal)} kitchen stock`,
+    chip: { text: r.signals[0], tone: r.signals[0].startsWith("🔻") ? "bad" : r.signals[0].startsWith("🟢") ? "ok" : "warn" } }))) };
 };
