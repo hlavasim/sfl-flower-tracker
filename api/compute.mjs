@@ -1,7 +1,7 @@
 import { buildCookingSection } from "../core/sections/cooking.mjs";
 import { buildConstantsSection } from "../core/sections/constants.mjs";
 import { buildPricesSection } from "../core/sections/prices.mjs";
-import { valueDiff, diffPriceMap } from "../core/sections/diff.mjs";
+import { valueDiff, diffPriceMap, diffRatesFor } from "../core/sections/diff.mjs";
 import { buildPowerSection } from "../core/sections/power.mjs";
 import { buildRoiSection } from "../core/sections/roi.mjs";
 import { roadmapComputeEfficiency, _setRoadmapState } from "../core/engine/roadmap.mjs";
@@ -399,10 +399,14 @@ async function _handler(req, res) {
       const [nftResult, exchange] = await Promise.all([fetchNfts(), fetchExchange()]);
       const nftData = nftResult.ok ? nftResult.data : {};
       const td = buildTreasuryData(p2p, nftData, exchange, 0, { itemNames: await loadItemNames() });
+      // no rates sent (the diff-days widget): the DIFF page's own profile, derived the same way
+      if (!req.query.rates) Object.assign(settings, diffRatesFor(farm, td));
       let oilPrice = 0;
       try { oilPrice = (buildPowerSection(farm, p2p, nftData, exchange, settings).categories || {}).oilPrice || 0; } catch { oilPrice = 0; }
       const pm = diffPriceMap(buildPricesSection(farm, p2p, settings), td, oilPrice);
-      const diffRates = { ...settings, wearablePrices: pm.wearables };
+      // gems at the treasury's rate unless the caller sends its own (the DIFF page does; a widget
+      // asking for plain day totals does not, and gems would count 0)
+      const diffRates = { gemsPerSFL: td.gemsPerSFL || 0, ...settings, wearablePrices: pm.wearables };
       let input = {};
       input = _parseBody(req.body);
       const list = Array.isArray(input.snapshots) ? input.snapshots : [];

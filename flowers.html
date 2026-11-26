@@ -20199,9 +20199,54 @@
     // renderDiff's content repaint, for the price-trace cache to call on arrival.
     let _diffRerenderContent = null;
 
+    // DIFF's read-only widgets (widgets/diff.mjs): inv-repay reads _invFigures, inv-earning the
+    // insights' slopes. Owner's farm only, like SPEKULACE; the owner key stays with writeFetch.
+    let _invWLoading = null;
+    // On DIFF the page loads the ledger itself (a second load would race it): only the insights,
+    // which the page loads when their panel opens, are fetched here. Elsewhere, both.
+    function _invWEnsure() {
+      if (_invWLoading) return;
+      const onDiff = getPage() === "diff";
+      _invWLoading = (async () => {
+        if (!onDiff && !_invState) {
+          const farm = (await __store.get({ res: "farm", farm: FARM_ID })).data;
+          let td = _diffTd, tdError = _diffTdError;
+          if (!td) { try { td = await fetchTreasuryData(); } catch (e) { tdError = e.message; } }
+          await _invLoadState(farm || {}, { td, tdError });
+        }
+        if (!_insState) await _insLoadState().catch((e) => { _invWError = e.message; });
+      })().catch((e) => { _invWError = e.message; }).finally(() => { if (window._wRerender) window._wRerender(); });
+    }
+    let _invWError = null;
+    function _invWCtx() {
+      const owner = FARM_ID === "155498";
+      const inv = () => {
+        if (!owner) return { error: "The owner's farm only." };
+        if (_invState && _invState.locked) return { error: _invState.locked === 503 ? "Writes are off on the server." : "🔒 The ledger is owner-only — enter the owner key on the DIFF page." };
+        const f = _invFigures();
+        return f ? { ready: true, figures: f } : _invWError ? { error: _invWError } : { loading: "Loading the ledger…" };
+      };
+      const ins = () => {
+        if (!owner) return { error: "The owner's farm only." };
+        if (!_insState) return _invWError ? { error: _invWError } : { loading: "Loading the snapshots…" };
+        const r = _insState.rates || {};
+        const val = (p) => (p.adjustedValueSfl !== undefined ? p.adjustedValueSfl : p.valueSfl);
+        return { ready: true, r7: _insSlopeForWindow(7), r30: _insSlopeForWindow(30),
+          btcPerSfl: r.sflToUsd > 0 && r.btcUsd > 0 ? r.sflToUsd / r.btcUsd : 0, series: (_insState.points || []).map(val) };
+      };
+      return { inv, ins, ensure: owner ? _invWEnsure : null };
+    }
+    _wCtxMap["inv-repay"] = _invWCtx;
+    _wCtxMap["inv-earning"] = _invWCtx;
+
     async function renderInvestmentTracker(data, opts) {
-      const mount = document.getElementById("investment-tracker");
-      if (!mount) return;
+      if (!document.getElementById("investment-tracker")) return;
+      await _invLoadState(data, opts);
+      renderInvestmentTrackerContent();
+    }
+    // The ledger, balances, repay plan, holdings and LP board into _invState — what the page and the
+    // inv-repay widget (a pinned copy loads it itself) both read.
+    async function _invLoadState(data, opts) {
 
       /*
        * Rates and farm value come from the page's ONE section=treasury result (opts.td, fetched
@@ -20241,8 +20286,6 @@
       await invLoadRepayPlan(FARM_ID);
       await invLoadHoldings(FARM_ID);
       await invLoadLpBoard(FARM_ID);
-
-      renderInvestmentTrackerContent();
     }
 
     window._invUnlock = function () {
@@ -20253,18 +20296,10 @@
       });
     };
 
-    function renderInvestmentTrackerContent() {
-      const mount = document.getElementById("investment-tracker");
-      if (!mount || !_invState) return;
-      // Ledger refused: every figure below is derived from it, so render a lock rather than a
-      // BILANCE with COST 0 that reads as "nothing invested".
-      if (_invState.locked) {
-        mount.innerHTML = `<h2 class="v-inv-title">💰 Investment tracker</h2>
-          <div class="v-inv-box v-inv-note">${_invState.locked === 503
-            ? "🔒 Writes are turned off on the server (no WRITE_TOKEN is set)."
-            : `🔒 The ledger is visible to the owner only — <span class="v-inv-link" onclick="_invUnlock()">enter the owner key</span>`}</div>`;
-        return;
-      }
+    // Every figure of the investment tracker from _invState (null while it has not loaded): the
+    // page's panels and the inv-repay widget read the same numbers.
+    function _invFigures() {
+      if (!_invState || _invState.locked) return null;
       const { rates } = _invState;
       /*
        * cbBTC transfer history (venue "cbbtc", imported from the explorer's CSV) only DATES the BTC
@@ -20345,6 +20380,21 @@
       const planStats = (_invPlan && !errors.ledger) ? repayPlanStats(_invPlan, planTx, { peakBtc: agg.peakBtc, netDebtBtc: aggSheet.netDebtBtc }) : null;
       // 1 BTC = (btcUsd/sflToUsd) FLOWER.
       const flowerPerBtc = (sflToUsd > 0 && btcUsd > 0) ? (btcUsd / sflToUsd) : 0;
+      return { rates, transactions, cbbtcRows, errors, farmValue, agg, sflToUsd, btcUsd, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedSfl, lockedBtc, walletBucket, walletHeldFlower, chainWallet, chainEggs, chainLp, lpBtc, btcDerivs, btcBackItems, btcBackOnChain, walletLiquidBtc, aggSheet, eggsLiquidBtc, planTx, planStats, flowerPerBtc };
+    }
+    function renderInvestmentTrackerContent() {
+      const mount = document.getElementById("investment-tracker");
+      if (!mount || !_invState) return;
+      // Ledger refused: every figure below is derived from it, so render a lock rather than a
+      // BILANCE with COST 0 that reads as "nothing invested".
+      if (_invState.locked) {
+        mount.innerHTML = `<h2 class="v-inv-title">💰 Investment tracker</h2>
+          <div class="v-inv-box v-inv-note">${_invState.locked === 503
+            ? "🔒 Writes are turned off on the server (no WRITE_TOKEN is set)."
+            : `🔒 The ledger is visible to the owner only — <span class="v-inv-link" onclick="_invUnlock()">enter the owner key</span>`}</div>`;
+        return;
+      }
+      const { rates, transactions, cbbtcRows, errors, farmValue, agg, sflToUsd, btcUsd, treasuryTotalSfl, liquidValueSfl, liquidValueBtc, lockedSfl, lockedBtc, walletBucket, walletHeldFlower, chainWallet, chainEggs, chainLp, lpBtc, btcDerivs, btcBackItems, btcBackOnChain, walletLiquidBtc, aggSheet, eggsLiquidBtc, planTx, planStats, flowerPerBtc } = _invFigures();
       const fmtFlower = (v) => Math.round(v).toLocaleString("en-US") + " 🌸";
 
       mount.innerHTML = `
@@ -21275,6 +21325,15 @@
     async function renderInvestmentInsights(data) {
       const body = document.getElementById("ins-body");
       if (!body) return;
+      if (!(await _insLoadState())) {
+        body.innerHTML = `<div class="v-inv-note" style="padding:12px 0">No historical snapshots yet. Insights will fill in as the data collector gathers farm data.</div>`;
+        return;
+      }
+      renderInsightsContent();
+    }
+    // The 30 days of valued snapshots (cash-flow adjusted) into _insState; false = no snapshots yet.
+    // The page's insights and the inv-earning widget both read it.
+    async function _insLoadState() {
 
       // 1) Fetch farm history snapshots (last 30 days)
       const FARM = FARM_ID;
@@ -21290,10 +21349,7 @@
       if (!histResp.ok) throw new Error(`snapshots fetch failed: ${histResp.status}`);
       const hist = await histResp.json();
       let snaps = hist.snapshots || [];
-      if (snaps.length === 0) {
-        body.innerHTML = `<div class="v-inv-note" style="padding:12px 0">No historical snapshots yet. Insights will fill in as the data collector gathers farm data.</div>`;
-        return;
-      }
+      if (snaps.length === 0) return false;
 
       // Ensure ascending order by captured_at for downstream logic
       snaps.sort((a, b) => new Date(a.captured_at).getTime() - new Date(b.captured_at).getTime());
@@ -21351,8 +21407,7 @@
         rawSnaps: snaps,
       };
       _insLoadedFor = FARM;
-
-      renderInsightsContent();
+      return true;
     }
 
     // Sets adjustedValueSfl + wealthBtc on each point (see the Cashflow adjustment note above).
@@ -21723,7 +21778,6 @@
       let gemsPerSFL = 0;
       let sflToUsd = 0;
       let usdToCzk = 0;
-      let sflPerXP = 0;
       const warnings = [];
       const proxyUrl = (u) => `/api/proxy?url=${encodeURIComponent(u)}`;
 
@@ -21753,30 +21807,35 @@
         usdToCzk = czkRes.data?.usd?.czk || 0;
       }
 
-      // Compute SFL per XP for fish/food pricing (from best cooking recipe + boosts)
-      try {
-        const _sc = calcSkillPointCost(data.farm?.bumpkin, p2pPrices, data.farm);
-        sflPerXP = (_sc.bestRecipe && _sc.bestRecipe.boostedXP > 0)
-          ? _sc.bestRecipe.cost / _sc.bestRecipe.boostedXP : 0;
-      } catch(e) { sflPerXP = 0; }
-
       // (Oil is priced server-side now — section=diff takes the Power page's drill-cost figure —
       // so the page's own Oil derivation, which nothing read any more, is gone.)
 
-      // Detect current season for Fish Market recipes
-      const currentSeason = (data.farm?.season?.season || "").toLowerCase();
-
-      // Detect treasure sell boosts (same as treasury page: the Camel counts only when placed)
-      let treasureBoost = 1;
-      if (findCollectible(data.farm, "Treasure Map").length > 0) treasureBoost += 0.2;
-      if (findCollectible(data.farm, "Camel").length > 0) treasureBoost += 0.3;
-
-      // The all-five-rates profile the diff page prices with. Passed to
+      // The all-five-rates profile the diff page prices with (core diffRatesFor; section=diff derives the
+      // same one for a caller that sends none, the diff-days widget). Passed to
       // /api/compute?section=diff (server-side valuation — see valueDiffs/fetchData below) and
       // to the "Pricing methods" panel's PRICE_TRACES(roiRates). The per-item diff valuation
       // itself now lives in core (core/sections/diff.mjs valueDiff), not inline — one tested
       // place, priced with this same profile server-side.
-      const roiRates = { coinsPerSFL, sflPerXP, season: currentSeason, treasureBoost, gemsPerSFL };
+      const roiRates = diffRatesFor(data.farm, _diffTd);
+      if (!_diffTd) Object.assign(roiRates, { coinsPerSFL, gemsPerSFL });   // no treasury: the page's fallbacks (0)
+
+      // The read-only widgets first (pinnable: repay status, earning rate), then the tracker's editors.
+      const wMount = document.createElement("div");
+      wMount.id = "diff-widgets";
+      wMount.style.cssText = "display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-bottom:16px";
+      // diff-days reads the store (farmChanges, its page options pick the days); the other two the page's state
+      const paintW = () => {
+        if (getPage() !== "diff" || typeof __widgets === "undefined") return;
+        const m = document.getElementById("diff-widgets");
+        if (!m) return;
+        m.innerHTML = ["inv-repay", "inv-earning", "diff-days"].map((t) => {
+          const p = __widgets.peekData(t, FARM_ID, __store, __widgets.pageOpts(t));
+          return __widgets.renderPage(t, { data: p.data, ctx: _wCtx(t), fresh: p.entries.length ? __widgets.freshOf(p.entries) : null, pending: p.pending });
+        }).join("");
+      };
+      window._wRerender = () => { paintW(); if (typeof __widgets !== "undefined") __widgets.loadData("diff-days", FARM_ID, __store, __widgets.pageOpts("diff-days")).then(paintW, paintW); };
+      app.insertBefore(wMount, document.getElementById("diff-content"));
+      window._wRerender();
 
       // Render the Investment Tracker mount BEFORE the diff body so the user sees it first.
       const invMount = document.createElement("div");
@@ -21805,7 +21864,7 @@
       _diffRerenderContent = renderContent;
 
       // Kick off the load in the background — don't block diff render.
-      renderInvestmentTracker(data, { td: _diffTd, tdError: _diffTdError }).catch(err => {
+      renderInvestmentTracker(data, { td: _diffTd, tdError: _diffTdError }).then(paintW).catch(err => {
         invMount.innerHTML = `<div class="w-error">Investment tracker failed: ${escHTML(err.message)}</div>`;
       });
 

@@ -18,7 +18,7 @@ export { nftUnitPrice, pickCoinsPerSFL } from "./engine/prices.mjs";
 export { datedOnChainBtc, parseTokenTransfersCsv, repayPlanStats } from "./engine/repay-plan.mjs";
 export { calcBoostValue, cmGetSeedRestockCount, farmHasWarehouse, gameResUnitsPerDay, getRoadmapSettings, roadmapBuildClones, roadmapCatBreakdown, roadmapCatMix, roadmapCatNet, roadmapCoinsFree, roadmapEffFactor, roadmapInSeason, roadmapItemValue, roadmapMiningChain, roadmapOwnedEffects, roadmapPerPlot, roadmapPrices, roadmapProductNetEff, roadmapSkillBreakdown, roadmapSkillExtraFlow } from "./engine/roadmap.mjs";
 export { powerSkillRankVals, skillRankFactor, skillRankMag, skillRankText, skillUpgradeCost } from "./engine/skill-ranks.mjs";
-export { diffWindowRange, parseDiffRange } from "./sections/diff.mjs";
+export { diffRatesFor, diffWindowRange, parseDiffRange } from "./sections/diff.mjs";
 export { parseRoiPets } from "./sections/roi.mjs";
 export { computeFarmValue } from "./sections/treasury.mjs";
 export { _setPowerContext, _getPowerContext, _setRoadmapState } from "./engine/roadmap.mjs";

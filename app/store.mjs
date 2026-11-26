@@ -232,6 +232,21 @@ export const RESOURCES = {
       return body.data || null;
     },
   },
+  // The farm's changes per day over the last `days` (farm-diff-agg), valued by section=diff — the
+  // DIFF explorer's grouped view: [{ period, count, netSfl, items: [{ name, delta, sfl }] }].
+  farmChanges: {
+    persist: true,
+    ttl: 10 * 60_000,
+    load: async ({ farm, days = 7 }, { json }) => {
+      const agg = await json(`/api/farm-diff-agg?farm=${enc(farm)}&group=day&days=${enc(days)}`);
+      const periods = (agg && agg.periods) || [];
+      if (!periods.length) return [];
+      const body = await json(`/api/compute?farm=${enc(farm)}&section=diff`, { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ snapshots: periods.map((p) => ({ diff: p.diff || {} })) }) });
+      const valued = ((body && body.data) || {}).snapshots || [];
+      return periods.map((p, i) => ({ period: p.period, count: p.count, netSfl: (valued[i] || {}).netSfl || 0, items: (valued[i] || {}).items || [] }));
+    },
+  },
   // MY TRADES: the farm's marketplace trade ledger (buys, sells, per-item P&L).
   myTrades: {
     persist: true,

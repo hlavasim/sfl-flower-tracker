@@ -1,4 +1,27 @@
-import { nftUnitPrice } from "../engine/prices.mjs";
+import { nftUnitPrice, pickCoinsPerSFL } from "../engine/prices.mjs";
+import { calcSkillPointCost } from "../engine/power-helpers.mjs";
+import { findCollectible } from "../derive/items.mjs";
+
+// The rate profile the DIFF page values changes with, from the farm and section=treasury's td:
+// coins at the Betty rate, gems at the shop's best tier, fish / food by FLOWER per XP of the best
+// recipe, treasures with the Treasure Map / Camel sell boost, the season for the Fish Market.
+// The page and section=diff (when a caller sends no rates) both use it.
+export function diffRatesFor(farm, td) {
+  const p2p = {};
+  for (const [k, v] of Object.entries((td && td.p2pPrices) || {})) p2p[k] = parseFloat(v) || 0;
+  const coinsPerSFL = td ? pickCoinsPerSFL("betty", td.coinsPerSFL_betty, td.coinsPerSFL_api) : 0;
+  const gemsPerSFL = (td && td.gemsPerSFL) || 0;
+  let sflPerXP = 0;
+  try {
+    const sc = calcSkillPointCost(farm && farm.bumpkin, p2p, farm);
+    sflPerXP = sc.bestRecipe && sc.bestRecipe.boostedXP > 0 ? sc.bestRecipe.cost / sc.bestRecipe.boostedXP : 0;
+  } catch (e) { sflPerXP = 0; }
+  const season = ((farm && farm.season && farm.season.season) || "").toLowerCase();
+  let treasureBoost = 1;
+  if (farm && findCollectible(farm, "Treasure Map").length > 0) treasureBoost += 0.2;
+  if (farm && findCollectible(farm, "Camel").length > 0) treasureBoost += 0.3;
+  return { coinsPerSFL, sflPerXP, season, treasureBoost, gemsPerSFL };
+}
 
 // Value a precomputed farm-diff delta map into per-item SFL contributions + a net total.
 // The diff itself is produced upstream (the snapshot collector) and stored; this only VALUES
