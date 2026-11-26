@@ -211,3 +211,14 @@ test("the board applies the farm's flower beds and grow boosts (as the pages do)
   assert.match(SRC, /function _wApplyFarmFlowers\(farm\) \{\s*if \(!farm\) return;\s*FLOWER_BEDS = Math\.max\(1, Object\.keys\(\(farm\.flowers && farm\.flowers\.flowerBeds\) \|\| \{\}\)\.length\);\s*applyFlowerBoosts\(computeFlowerMultiplier\(detectFlowerBoosts\(farm\)\)\);/);
   assert.match(SRC, /_wApplyFarmFlowers\(\(\(__store\.peek\(\{ res: "farm", farm: FARM_ID \}\) \|\| \{\}\)\.data \|\| \{\}\)\.farm\);/);
 });
+
+test("a full table on a board spans its share of 12 over the columns the board shows (it was wiped to one column)", () => {
+  const grab = (name) => { const a = SRC.indexOf(`function ${name}(`); let d = 0, k = SRC.indexOf("{", a); for (; k < SRC.length; k++) { if (SRC[k] === "{") d++; else if (SRC[k] === "}" && !--d) break; } return SRC.slice(a, k + 1); };
+  const el = (vars) => ({ style: { gridColumn: "span 9", gridRowEnd: "", getPropertyValue: (k) => vars[k] || "" }, getBoundingClientRect: () => ({ height: 100 }), _wFit: true });
+  const kids = [el({ "--tw": "6" }), el({ "--tw": "12" }), el({ "--gw": "4" }), el({ "--gw": "8" })];
+  const grid = { children: kids, style: { setProperty() {} }, getBoundingClientRect: () => ({ width: 700 }) };
+  const fit = new Function("getComputedStyle", "_wFitRO", `${grab("_wFitOne")}\n${grab("_wFitBoard")}\nreturn _wFitBoard;`)(
+    () => ({ gridTemplateColumns: "1px 1px 1px 1px" }), null);
+  fit(grid, 6);   // set to 6, a tablet shows 4
+  assert.deepStrictEqual(kids.map((k) => k.style.gridColumn), ["span 2", "span 4", "", "span 4"]);
+});

@@ -16487,8 +16487,9 @@
       grid.style.setProperty("--cell", cell + "px");
       grid.style.setProperty("--fs", (Math.max(cell, 140) / 170) * 13 + "px");   // the glance looks are designed at a 170 px cell
       for (const el of grid.children) {
-        const gw = Number(el.style.getPropertyValue("--gw")) || 0;
-        el.style.gridColumn = gw > n ? `span ${n}` : "";
+        // a glance spans its --gw by CSS (capped at the columns shown); a full table its share of 12 (--tw)
+        const gw = Number(el.style.getPropertyValue("--gw")) || 0, tw = Number(el.style.getPropertyValue("--tw")) || 0;
+        el.style.gridColumn = tw ? `span ${Math.max(1, Math.min(n, Math.round((tw * n) / 12)))}` : gw > n ? `span ${n}` : "";
         _wFitOne(el);
         if (_wFitRO && !el._wFit) { el._wFit = true; _wFitRO.observe(el); }
       }

@@ -33,7 +33,7 @@ export function freshness(entry, now = Date.now()) {
 // place "page": cog + pin (pinned = how many copies are on boards). place "board": a drag handle
 // (⠿, drop onto another widget to move), cog, remove and a resize corner; w (1-12) becomes the
 // grid span, h (rows of ROW_PX, 0 = auto) the height. The settings open as a popover.
-export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false, cog = true, glance = "", variant = null, gw = 0, gh = 0, looks = false }) {
+export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, h = 0, settingsHtml = "", settingsOpen = false, cog = true, glance = "", variant = null, gw = 0, gh = 0, looks = false, tw = 0 }) {
   const badge = fresh ? `<span class="w-fresh w-fresh-${fresh.level}" title="${esc(fresh.title || fresh.text)}">${esc(fresh.text)}</span>` : "";
   const btn = (action, label, title, value = "", cls = "") =>
     `<button type="button" class="w-btn${cls}" data-action="${action}" data-value="${esc(value)}" title="${esc(title)}" aria-label="${esc(title)}">${label}</button>`;
@@ -48,8 +48,9 @@ export function renderFrame({ id, title, place, body, fresh, pinned = 0, w = 6, 
     : btn("pin", pinned ? `📌 ${pinned}` : "📌", pinned ? `pinned ${pinned}× — pin another copy` : "pin to a board"));
   const grip = board ? `<span class="w-grip" data-drag="item" title="drag and drop onto another widget">⠿</span>` : "";
   // a glance (S / M / L) is sized by its class; a full board item by its span and height
+  // tw: the table's width as a share of 12; the board turns it into a span of the columns it shows
   const style = board && !glance
-    ? ` style="grid-column:span ${Math.min(12, Math.max(1, w))}${h > 0 ? `;height:${h * ROW_PX}px` : ""}"`
+    ? ` style="grid-column:span ${Math.min(12, Math.max(1, w))}${tw ? `;--tw:${tw}` : ""}${h > 0 ? `;height:${h * ROW_PX}px` : ""}"`
     : glance && gw ? ` style="--gw:${gw};--gh:${gh}"` : "";
   const pop = settingsOpen && settingsHtml
     ? `<div class="w-pop" data-pop role="dialog" aria-label="Settings"><div class="w-pop-head"><span>Settings</span>` +
@@ -173,17 +174,18 @@ function startDrag(e, handler) {
   if (t.hasAttribute("data-resize")) {
     const grid = frame.parentElement, gs = getComputedStyle(grid);
     const gap = parseFloat(gs.columnGap) || 0;
-    let w = 0, h = 0;
+    let w = 0, h = 0, n = 0;
     move = (ev) => {
       const g = grid.getBoundingClientRect(), f = frame.getBoundingClientRect();
       // the board's own column count (2-12): the span is in its columns
       const cols = (gs.gridTemplateColumns || "").split(" ").filter(Boolean).length || 12;
       w = spanAt({ frameLeft: f.left, pointerX: ev.clientX, gridWidth: g.width, gap, cols });
+      n = cols;
       h = rowsAt({ frameTop: f.top, pointerY: ev.clientY });
       frame.style.gridColumn = `span ${w}`;
       frame.style.height = `${h * ROW_PX}px`;
     };
-    end = () => { if (w) handler(id, "resize", `${w}|${h}`); };
+    end = () => { if (w) handler(id, "resize", `${w}|${h}|${n}`); };   // n: the columns the board really shows
     frame.classList.add("w-resizing");
   } else if (t.dataset.drag === "col") {
     const row = t.closest("[data-col]"), list = row.parentElement;

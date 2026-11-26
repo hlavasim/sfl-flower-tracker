@@ -79,6 +79,11 @@ test("board controls: resize by the corner, move by dropping onto another widget
   assert.match(h.renderItem("main", h.doc().boards[0].items[0], { data: DATA }), /grid-column:span 6[^"]*height:400px/);
   h.handle(`b:main:${a.i}`, "resize", "3|10");
   assert.strictEqual(h.doc().boards[0].items[0].w, 6, "half of 6 columns = 6/12");
+  // the drag measures the columns the board shows (a tablet: 4 of the 6 set): 2 of 4 shown = 6/12
+  h.handle(`b:main:${a.i}`, "resize", "2|10|4");
+  assert.strictEqual(h.doc().boards[0].items[0].w, 6, "half of the 4 shown columns = 6/12, not 4/12");
+  // the frame carries its share of 12 so the board can span it over however many columns it shows
+  assert.match(h.renderItem("main", h.doc().boards[0].items[0], { data: DATA }), /grid-column:span 3;--tw:6;/);
   h.handle(`b:main:${c.i}`, "move-to", `b:main:${a.i}`);
   assert.deepStrictEqual(h.doc().boards[0].items.map((x) => x.i), [c.i, a.i, b.i]);
   h.handle(`b:main:${c.i}`, "move-to", `b:main:${b.i}`);

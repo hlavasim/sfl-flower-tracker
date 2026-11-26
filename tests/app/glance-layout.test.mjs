@@ -129,9 +129,9 @@ test("a board keeps its own column count (2-12, default 6); a full table spans i
   const h = createHost({ registry: { w: { ...W, glanceModel: undefined } }, storage: mem() });
   h.handle("page:w", "pin", JSON.stringify({ board: "main" }));
   h.setBoardCols("main", 12);
-  assert.match(h.renderItem("main", first(h), { data: {} }), /style="grid-column:span 6"/);
+  assert.match(h.renderItem("main", first(h), { data: {} }), /style="grid-column:span 6;--tw:6"/);
   h.setBoardCols("main", 4);
-  assert.match(h.renderItem("main", first(h), { data: {} }), /style="grid-column:span 2"/);
+  assert.match(h.renderItem("main", first(h), { data: {} }), /style="grid-column:span 2;--tw:6"/);
 });
 
 test("long countdowns read as months / years; initials skip symbols; three tiles stay one row", () => {

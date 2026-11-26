@@ -152,7 +152,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       expanded.delete(id);
       // w is the share of 12 the table was given; on a board of N columns it spans that share of N
       const cols = colsOf(boardId);
-      return renderFrame({ id, title, place: "board", w: Math.max(1, Math.round((item.w * cols) / 12)), h: item.h, body: b.html, fresh, cog: true,
+      return renderFrame({ id, title, place: "board", w: Math.max(1, Math.min(cols, Math.round((item.w * cols) / 12))), tw: item.w, h: item.h, body: b.html, fresh, cog: true,
         settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
     }
     // the glance face; open, the full widget in a sheet over the board (the ⚙ then lives in the sheet)
@@ -267,9 +267,10 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
         return save(moveItemTo(doc, f.boardId, f.item.i, t.item.i), frameId);
       }
       if (action === "resize") {
-        // the drag reports columns of this board; a table keeps its width as a share of 12
-        const [w, h] = String(value).split("|");
-        const cols = colsOf(f.boardId);
+        // the drag reports columns the board shows (n: a tablet shows fewer than the setting); a
+        // table keeps its width as a share of 12
+        const [w, h, n] = String(value).split("|");
+        const cols = Number(n) >= 1 ? Math.min(12, Number(n)) : colsOf(f.boardId);
         const w12 = Math.round((Math.min(cols, Math.max(1, Number(w) || 1)) * 12) / cols);
         return save(resizeItem(doc, f.boardId, f.item.i, { w: w12, h: h === undefined ? undefined : h }), frameId);
       }
