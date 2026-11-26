@@ -5,7 +5,7 @@
 //   ⚡ Petal Blessed: its state, and which flowers to plant before using it.
 //   📋 Grow planner: what to plant when, up to the next Petal Blessed (sleep hours marked).
 import { bar, kpis, bigBar, pill, ring } from "../ui/viz.mjs";
-import { big, ring as gRing, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
+import { countdown } from "../ui/glance-templates.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
@@ -271,73 +271,86 @@ export const growPlanner = {
   },
 };
 
-// ── iPhone glance faces ──
-// gift planner: S = planned gifts given today (ring); M / L = the planned NPCs, the ones still to give first
-flowerGifts.sizes = ["s", "m", "l"];
-flowerGifts.size = "s";
-flowerGifts.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance models; ui/glance-templates offers the looks ──
+// gift planner: planned gifts given today (ring); the planned NPCs, the ones still to give first
+flowerGifts.look = "number";
+flowerGifts.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = flowerGifts.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
   const planned = out.rows.filter((r) => r.planned);
   if (!planned.length) return { empty: "No gifts planned — pick a flower per NPC in the gift planner." };
   const given = planned.filter((r) => r.givenToday).length;
-  const head = `<div class="g-corner">${gRing((given / planned.length) * 100)}</div>` +
-    big(given, { unit: `/${planned.length}`, tone: given === planned.length ? "ok" : "", cap: "planned gifts given today" });
-  if (size === "s") return { html: head };
-  const list = planned.slice().sort((a, b) => a.givenToday - b.givenToday).slice(0, size === "m" ? 3 : 6);
-  return { html: (size === "l" ? head : "") + gRows(list.map((r) => ({ icon: icon(ctx, r.planned), name: r.name,
-    sub: r.next ? `${r.planned} · ${r.next.pointsAway ? `${r.next.pointsAway} to the reward` : "reward ready"}` : r.planned,
-    chip: r.givenToday ? { text: "given", tone: "ok" } : { text: "to give", tone: "bad" } }))) };
+  const ready = planned.filter((r) => r.next && !r.next.pointsAway).length;
+  return {
+    head: { value: given, unit: `/${planned.length}`, tone: given === planned.length ? "ok" : "", cap: "planned gifts given today",
+      ring: (given / planned.length) * 100, ringTone: given === planned.length ? "ok" : "accent" },
+    items: planned.slice().sort((a, b) => a.givenToday - b.givenToday).map((r) => ({ icon: icon(ctx, r.planned), name: r.name,
+      sub: r.next ? `${r.planned} · ${r.next.pointsAway ? `${r.next.pointsAway} to the reward` : "reward ready"}` : r.planned,
+      chip: r.givenToday ? { text: "given", tone: "ok" } : { text: "to give", tone: "bad" }, pct: Math.min(100, r.pct) })),
+    tiles: [{ label: "given", value: `${given}/${planned.length}` }, { label: "planned", value: `${planned.length}/${out.rows.length}` },
+      { label: "rewards", value: ready }],
+    foot: `${planned.length - given} still to give today`,
+  };
 };
 
-// gift cycle: S = one cycle's length (or that the beds cannot keep up); M = cycle, batches, Petal Blessed uses
-flowerGiftCycle.sizes = ["s", "m"];
-flowerGiftCycle.size = "s";
-flowerGiftCycle.glance = ({ farm } = {}, ctx = {}, opts = {}, size = "s") => {
+// gift cycle: one cycle's length (or that the beds cannot keep up); the daily demand per flower
+flowerGiftCycle.look = "number";
+flowerGiftCycle.glanceModel = ({ farm } = {}, ctx = {}) => {
   if (!farm) return { empty: "No farm data." };
   const m = modelOf(farm, ctx);
   if (!m) return { empty: NO_MODEL };
   const c = m.cycle;
   if (!c) return { empty: "No gifts planned — pick flowers in the gift planner." };
+  const items = c.needList.map((n) => ({ icon: icon(ctx, n.flower), name: n.flower, sub: `have ${n.have}${n.pend > 0 ? `+${n.pend}` : ""} · ${n.hours.toFixed(1)}h`,
+    value: `${n.qty}/day`, tone: n.have + n.pend >= n.qty ? "ok" : "warn", pct: n.qty ? Math.min(100, ((n.have + n.pend) / n.qty) * 100) : 100 }));
   const load = overload(m);
-  if (load) return { html: big("Too much", { tone: "bad", cap: load > 24 ? `the plan needs ~${Math.round(load)}h of growing a day` : "the schedule did not settle" }) };
+  if (load) {
+    return { head: { value: "Too much", tone: "bad", cap: load > 24 ? `the plan needs ~${Math.round(load)}h of growing a day` : "the schedule did not settle" },
+      items, tiles: [{ label: "grow/day", value: `${Math.round(load)}h` }, { label: "beds", value: m.beds }], foot: "plan fewer gifts or shorter chains" };
+  }
   const len = c.cycleH >= 24 ? `${(c.cycleH / 24).toFixed(1)}d` : `${c.cycleH.toFixed(1)}h`;
-  const batches = `${c.totalBatches} batch${c.totalBatches === 1 ? "" : "es"}`;
-  if (size === "s") return { html: big(len, { cap: `one cycle · ${batches}` }) };
-  return { html: big(len, { cap: "one cycle" }) + gTiles([{ label: "batches", value: c.totalBatches }, { label: "Petal Blessed", value: c.pbUsesInCycle },
-    { label: "yield", value: `×${m.yieldFactor.toFixed(2)}` }]) };
+  return {
+    head: { value: len, cap: `one cycle · ${c.totalBatches} batch${c.totalBatches === 1 ? "" : "es"}` },
+    items,
+    tiles: [{ label: "batches", value: c.totalBatches }, { label: "⚡ PB uses", value: c.pbUsesInCycle }, { label: "yield", value: `×${m.yieldFactor.toFixed(2)}` }],
+    foot: c.longestFlower ? `Petal Blessed on ${c.longestFlower}` : "",
+  };
 };
 
-// Petal Blessed: S = its state; M = the state beside the flowers to plant; L = the state over them
-petalBlessed.sizes = ["s", "m", "l"];
-petalBlessed.size = "s";
-petalBlessed.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// Petal Blessed: its state; the flowers to plant before using it, the hours each saves
+petalBlessed.look = "number";
+petalBlessed.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = petalBlessed.build(data, ctx, opts);
   if (!out.summary) return { empty: out.empty };
-  const m = modelOf(data.farm, ctx, opts), st = m.status;
-  const saved = out.rows.reduce((s, p) => s + p.seedHours, 0);
+  const st = modelOf(data.farm, ctx, opts).status;
+  const saved = out.rows.reduce((s, p) => s + p.seedHours, 0), top = Math.max(...out.rows.map((p) => p.seedHours), 1e-9);
   const state = st.status === "ready" ? "Ready" : st.status === "cooldown"
     ? (typeof ctx.countdown === "function" ? ctx.countdown(st.nextAt - (ctx.now || Date.now())) : "Cooling") : "Locked";
-  const head = big(state, { tone: st.status === "ready" ? "ok" : st.status === "cooldown" ? "info" : "",
-    cap: out.rows.length ? `${out.rows.length} to plant · saves ${hrs(ctx, saved)}` : "nothing left to grow" });
-  if (size === "s") return { html: head };
-  const list = gRows(out.rows.slice(0, size === "m" ? 3 : 6).map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${r.seedLabel} Seed + ${r.input}`, value: r.savedText })));
-  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list };
+  return {
+    head: { value: state, tone: st.status === "ready" ? "ok" : st.status === "cooldown" ? "info" : "",
+      cap: out.rows.length ? `${out.rows.length} to plant · saves ${hrs(ctx, saved)}` : "nothing left to grow" },
+    items: out.rows.map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${r.seedLabel} Seed + ${r.input}`, value: r.savedText, pct: (r.seedHours / top) * 100 })),
+    tiles: [{ label: "⚡ PB", value: state }, { label: "to plant", value: out.rows.length }, { label: "saves", value: hrs(ctx, saved) }],
+    foot: out.rows.length ? "plant these, then use instant grow" : "",
+  };
 };
 
-// grow planner: S = the next thing to do; M / L = the plantings in order
-growPlanner.sizes = ["s", "m", "l"];
-growPlanner.size = "s";
-growPlanner.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+// grow planner: the next thing to do; the plantings in order, each counting down to its time
+growPlanner.look = "next";
+growPlanner.glanceModel = (data = {}, ctx = {}, opts = {}) => {
   const out = growPlanner.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const list = out.rows.slice().sort((a, b) => a.at - b.at);
-  const when = (r) => (r.now ? "now" : r.whenText.replace(/^(Plant|⚡ PB) /, ""));
-  if (size === "s") {
-    const r = list[0];
-    return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(r.now ? "Now" : when(r), { tone: r.now ? "ok" : "",
-      cap: `${r.pb ? "⚡ Petal Blessed" : "plant"} ${r.flower}${list.length > 1 ? ` · ${list.length - 1} more` : ""}` }) };
-  }
-  return { html: gRows(list.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.flower, sub: r.pb ? "⚡ Petal Blessed" : r.finishText ? `ready ${r.finishText}` : "",
-    chip: { text: when(r), tone: r.now ? "ok" : r.pb ? "accent" : "info" } }))) };
+  const list = out.rows.slice().sort((a, b) => a.at - b.at), r0 = list[0];
+  const pb = list.find((r) => r.pb), now = ctx.now || Date.now();
+  // how long until it: a clock time ("Sat 15:08") is too wide for a glance number
+  const soon = (r) => (r.now ? "now" : countdown(r.at, now));
+  return {
+    head: { value: r0.now ? "Now" : soon(r0), tone: r0.now ? "ok" : "", hero: r0.iconHtml,
+      cap: `${r0.pb ? "⚡ Petal Blessed" : "plant"} ${r0.flower}${list.length > 1 ? ` · ${list.length - 1} more` : ""}` },
+    items: list.map((r) => ({ icon: r.iconHtml, name: r.flower, sub: r.pb ? "⚡ Petal Blessed" : r.finishText ? `ready ${r.finishText}` : "",
+      at: r.at })),
+    tiles: [{ label: "next", value: soon(r0) }, { label: "plantings", value: list.filter((r) => !r.pb).length },
+      { label: "⚡ PB", value: pb ? soon(pb) : "—" }],
+    foot: list.some((r) => r.sleepWaste) ? "💤 a harvest lands in your sleep" : "",
+  };
 };

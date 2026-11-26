@@ -5,6 +5,7 @@ import { fishingAgeNow as W } from "../../widgets/fishing-age-now.mjs";
 import { agingNow } from "../../core/engine/aging-now.mjs";
 import { computeFoodXP, detectCookingBoosts } from "../../core/engine/cooking.mjs";
 import { renderTable } from "../../ui/table.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 
 const FARM = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url), "utf8")).farm;
 const MULT = computeFoodXP("Aged Fish", { xp: 1, usesHoney: false }, "Aging Shed", detectCookingBoosts(FARM, {}));
@@ -79,22 +80,23 @@ test("the leveling plan is optional: the board paints without it and fills it in
   assert.deepStrictEqual(W.optional, ["leveling"]);
 });
 
-test("📱 glance: S = how many fish to age with a salt ring, M = beside the first three, L = the list; nothing to age is empty", () => {
-  assert.deepStrictEqual(W.sizes, ["s", "m", "l"]);
+test("📱 glance model: how many fish to age with a salt ring, the fish (a row the salt does not cover red); nothing to age is empty", () => {
+  assert.strictEqual(W.look, "number");
+  assert.strictEqual(W.glance, undefined, "the hand-written face is gone");
   const data = { farm: FARM, leveling: null }, c = { lvPlan: null, icon: (n) => `<i>${n}</i>` };
   const out = W.build(data, c);
   const t = out.totals;
-  const s = W.glance(data, c, {}, "s").html;
-  assert.match(s, new RegExp(`^<div class="g-corner"><svg class="g-ring g-${t.saltHeld >= t.salt ? "ok" : "warn"}"`));
-  assert.match(s, new RegExp(`<div class="g-big">${t.n}<small> fish</small></div><div class="g-cap">[^<]+ XP · [^<]+ salt</div>$`));
-  const m = W.glance(data, c, {}, "m").html;
-  assert.match(m, /^<div class="g-split"><div><div class="g-big">/);
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, Math.min(3, out.rows.length));
-  assert.match(m, new RegExp(`<i>${out.rows[0].name}</i></span><div class="g-n">${out.rows[0].name}<div>`));
-  assert.strictEqual((W.glance(data, c, {}, "l").html.match(/class="g-row"/g) || []).length, Math.min(7, out.rows.length));
+  const m = W.glanceModel(data, c);
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.ringTone], [String(t.n), " fish", t.saltHeld >= t.salt ? "ok" : "warn"]);
+  assert.match(m.head.cap, /^[^<]+ XP · [^<]+ salt$/);
+  assert.strictEqual(m.items.length, out.rows.length);
+  assert.deepStrictEqual([m.items[0].icon, m.items[0].name, m.items[0].value], [`<i>${out.rows[0].name}</i>`, out.rows[0].name, `×${out.rows[0].age}`]);
+  assert.match(renderLook(m, "number").html, new RegExp(`<div class="gx-num">${t.n}<small> fish</small></div><div class="gx-cap">[^<]+ XP · [^<]+ salt</div>`));
+  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, Math.min(8, out.rows.length));
+  assert.ok(looksFor(m).length >= 3);
   // with one salt the rows past the first are not covered: red
-  const poor = { farm: { ...FARM, inventory: { ...FARM.inventory, Salt: "1" } }, leveling: null };
-  assert.match(W.glance(poor, c, {}, "s").html, /<svg class="g-ring g-warn"/);
-  assert.match(W.glance(poor, c, {}, "m").html, /<span class="g-v g-bad">×/);
-  assert.match(W.glance({ farm: { inventory: {} }, leveling: null }, { lvPlan: null }, {}, "s").empty, /Nothing to age/);
+  const poor = W.glanceModel({ farm: { ...FARM, inventory: { ...FARM.inventory, Salt: "1" } }, leveling: null }, c);
+  assert.strictEqual(poor.head.ringTone, "warn");
+  assert.ok(poor.items.some((i) => i.tone === "bad"));
+  assert.match(W.glanceModel({ farm: { inventory: {} }, leveling: null }, { lvPlan: null }).empty, /Nothing to age/);
 });

@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { decSummary, decColours, decGrow } from "../../widgets/decorations.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 
 // DECORATIONS: the plan is computed by the page (_decCompute, the game's expansion geometry and the
 // chosen layout); the widgets lay out its numbers. A small hand-made plan result stands in for it.
@@ -79,30 +80,44 @@ test("page wiring: the page renders the three widgets and registers their contex
   assert.match(src, /_wPageHead\("🌸 Decorations"/);
 });
 
-test("📱 glances: summary S = still to grow with a ring, M = tiles; colours S = even or not with a stacked bar", () => {
-  assert.deepStrictEqual([decSummary.sizes, decColours.sizes, decGrow.sizes], [["s", "m"], ["s"], ["s", "m", "l"]]);
-  const s = decSummary.glance({ farm }, ctx, {}, "s").html;
-  assert.match(s, /^<div class="g-corner"><svg class="g-ring g-accent"/);
-  assert.match(s, /<div class="g-big">7<\/div><div class="g-cap">still to grow · 12 of 30 planted<\/div>$/);
-  assert.match(decSummary.glance({ farm }, ctx, {}, "m").html,
-    /<div class="g-tiles"><div><span>planted<\/span><b>12<\/b><small>of 30<\/small><\/div><div><span>to grow<\/span><b>7<\/b>/);
-  assert.match(decSummary.glance({ farm }, { ...ctx, plan: () => ({ ...PLAN, totalMissing: 0 }) }, {}, "s").html, /g-big g-ok">✓<\/div><div class="g-cap">all in hand/);
-  assert.match(decSummary.glance({}, ctx, {}, "s").empty, /farm/i);
-  const c = decColours.glance({ farm }, ctx, {}, "s").html;
-  assert.match(c, /^<div class="g-big g-ok">Even<\/div><div class="g-cap">30 flowers, five colours<\/div><div class="g-stack">/);
-  assert.strictEqual((c.match(/<i style="width:20.0%/g) || []).length, 5);
-  assert.match(decColours.glance({ farm }, { ...ctx, plan: () => ({ ...PLAN, byColour: { ...PLAN.byColour, Red: 5 } }) }, {}, "s").html, /g-big g-bad">Uneven/);
-  assert.match(decColours.glance({ farm }, { icon }, {}, "s").empty, /computed by the DECORATIONS page/);
+test("📱 glance models: each has a natural look and no hand-written face", () => {
+  assert.deepStrictEqual([decSummary.look, decColours.look, decGrow.look], ["number", "number", "number-list-2"]);
+  for (const w of [decSummary, decColours, decGrow]) {
+    assert.ok(TEMPLATE_IDS.includes(w.look), w.type);
+    assert.strictEqual(w.glance, undefined, w.type);
+    assert.strictEqual(w.sizes, undefined, w.type);
+  }
 });
 
-test("📱 glances: what to grow S = the flower most to grow, M = the unfinished flowers, most missing first; none in scope is empty", () => {
-  const s = decGrow.glance({ farm }, ctx, {}, "s").html;
-  assert.strictEqual(s, `<div class="g-hero"><img data-i="Red Pansy"></div><div class="g-big g-bad">5</div><div class="g-cap">Red Pansy to grow · 2 flowers left</div>`);
-  const m = decGrow.glance({ farm }, ctx, {}, "m").html;
-  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)</g)].map((x) => x[1]), ["Red Pansy", "White Lotus"]);
-  assert.match(m, /<div class="g-n">Red Pansy<div>2 of 10 planted<\/div><\/div><span class="g-v g-bad">−5<\/span>/);
+test("📱 glance models: summary = still to grow with a ring, the flowers, the plan's tiles; colours = even or not, the five colours", () => {
+  const s = decSummary.glanceModel({ farm }, ctx, {});
+  assert.deepStrictEqual([s.head.value, s.head.cap, s.head.ring, s.head.ringTone], ["7", "still to grow · 12 of 30 planted", 40, "accent"]);
+  assert.match(renderLook(s, "number").html, /<div class="gx-corner"><svg class="gx-ring g-accent".*<div class="gx-num">7<\/div><div class="gx-cap">still to grow · 12 of 30 planted<\/div>/);
+  assert.deepStrictEqual(s.items.map((i) => i.name), ["Red Pansy", "White Lotus", "Blue Daffodil"]);
+  assert.match(renderLook(s, "tiles-t").html, /<div class="gx-tiles" style="--c:2"><div><span>planted<\/span><b>12\/30<\/b><\/div><div><span>to grow<\/span><b>7<\/b>/);
+  assert.ok(looksFor(s).length >= 3);
+  const all = decSummary.glanceModel({ farm }, { ...ctx, plan: () => ({ ...PLAN, totalMissing: 0 }) }, {});
+  assert.deepStrictEqual([all.head.value, all.head.tone], ["✓", "ok"]);
+  assert.match(all.head.cap, /^all in hand/);
+  assert.match(decSummary.glanceModel({}, ctx, {}).empty, /farm/i);
+  const c = decColours.glanceModel({ farm }, ctx, {});
+  assert.deepStrictEqual([c.head.value, c.head.tone, c.head.cap], ["Even", "ok", "30 flowers, five colours"]);
+  assert.deepStrictEqual(c.items.map((i) => [i.name, i.value, i.pct]), [["Red", "6", 100], ["Yellow", "6", 100], ["Purple", "6", 100], ["Blue", "6", 100], ["White", "6", 100]]);
+  assert.ok(looksFor(c).length >= 3);
+  assert.strictEqual(decColours.glanceModel({ farm }, { ...ctx, plan: () => ({ ...PLAN, byColour: { ...PLAN.byColour, Red: 5 } }) }, {}).head.value, "Uneven");
+  assert.match(decColours.glanceModel({ farm }, { icon }, {}).empty, /computed by the DECORATIONS page/);
+});
+
+test("📱 glance models: what to grow = the flower most to grow, the unfinished flowers most missing first, then the done; none in scope is empty", () => {
+  const g = decGrow.glanceModel({ farm }, ctx, {});
+  assert.deepStrictEqual(g.head, { value: "5", tone: "bad", hero: `<img data-i="Red Pansy">`, cap: "Red Pansy to grow · 2 flowers left" });
+  assert.deepStrictEqual(g.items.map((i) => i.name), ["Red Pansy", "White Lotus", "Blue Daffodil"]);
+  assert.deepStrictEqual(g.items[0], { icon: `<img data-i="Red Pansy">`, name: "Red Pansy", sub: "2 of 10 planted", pct: 20, value: "−5", tone: "bad" });
+  assert.deepStrictEqual(g.items[2].chip, { text: "done", tone: "ok" });
+  assert.match(renderLook(g, "number-list-2").html, /<div class="gx-n">Red Pansy<div class="gx-sub-tag g-bad">−5<\/div><\/div>/);
+  assert.ok(looksFor(g).length >= 3);
   const bag = { ...PLAN, rows: [{ ...PLAN.rows[2], missing: 0 }] };
-  assert.match(decGrow.glance({ farm }, { ...ctx, plan: () => bag }, {}, "m").html, /<span class="g-chip g-info">in bag<\/span>/);
-  assert.match(decGrow.glance({ farm }, { ...ctx, plan: () => ({ ...PLAN, rows: [PLAN.rows[1]] }) }, {}, "l").html, /all 1 flower planted/);
-  assert.match(decGrow.glance({ farm }, { ...ctx, plan: () => ({ ...PLAN, rows: [] }) }, {}, "s").empty, /no flowers in scope/);
+  assert.deepStrictEqual(decGrow.glanceModel({ farm }, { ...ctx, plan: () => bag }, {}).items[0].chip, { text: "in bag", tone: "info" });
+  assert.match(decGrow.glanceModel({ farm }, { ...ctx, plan: () => ({ ...PLAN, rows: [PLAN.rows[1]] }) }, {}).head.cap, /all 1 flower planted/);
+  assert.match(decGrow.glanceModel({ farm }, { ...ctx, plan: () => ({ ...PLAN, rows: [] }) }, {}).empty, /no flowers in scope/);
 });

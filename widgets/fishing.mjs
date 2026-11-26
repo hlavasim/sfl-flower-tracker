@@ -5,7 +5,7 @@
 // Every item name carries its icon (ctx.icon).
 import { kpis, bar, bigBar, pill } from "../ui/viz.mjs";
 import { sflIcon } from "../core/engine/power-formula.mjs";
-import { big, compact, ring as gRing, rows as gRows, tiles as gTiles } from "../ui/glance.mjs";
+import { compact } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const fmt = (n, d) => (+n).toLocaleString("en-US", { maximumFractionDigits: d === undefined ? 0 : d });
@@ -321,124 +321,157 @@ export const fishingTreasure = {
 
 export const FISHING_WIDGETS = [fishingToday, fishingBait, fishingSafeAge, fishingMarvels, fishingOrder, fishingCost, fishingPerFish, fishingGuaranteed, fishingTreasure];
 
-// ── iPhone glance faces (the same model as the full widget) ──
-const glance = (fn) => (data, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance models (the same model as the full widget); ui/glance-templates
+// offers the looks ──
+const model = (fn) => (data, ctx = {}, opts = {}) => {
   const { m, empty } = modelOf(ctx, opts);
-  return m ? fn(m, ctx, opts, size) : { empty };
+  return m ? fn(m, ctx, opts) : { empty };
 };
-const sized = (w, sizes, size) => { w.sizes = sizes; w.size = size; };
-const split = (head, list) => `<div class="g-split"><div>${head}</div>${list}</div>`;
 const FL = " 🌸";
+const share = (v, top) => (top > 0 ? Math.min(100, Math.max(0, (v / top) * 100)) : 0);
 
-// today: S = the worm to cast; M = the three worms beside it; L = + what to make at the Fish Market now
-sized(fishingToday, ["s", "m", "l"], "s");
-fishingToday.glance = glance((m, ctx, opts, size) => {
-  const t = m.today, val = (s) => s[t.wKey];
-  const head = big(compact(val(t.bestW)), { unit: " XP/🌸", cap: `cast ${t.bestW.worm} · ${m.season}` });
-  if (size === "s") return { html: `<div class="g-hero">${ic(ctx, t.bestW.worm)}</div>` + head };
-  const worms = gRows(t.wsNow.map((s) => ({ icon: ic(ctx, s.worm), name: s.worm, value: compact(val(s)), tone: s === t.bestW ? "ok" : "" })));
-  if (size === "m") return { html: split(head, worms) };
-  const fm = t.fmNow.slice(0, 3).map((b) => ({ icon: ic(ctx, b.bait), name: `${b.bait} → ${b.fish}`, sub: b.canMake != null ? `you can make ${fmt(b.canMake)}` : "",
-    value: `~${(b.perDay * 4).toFixed(1)}/day` }));
-  return { html: `<div class="g-hero">${ic(ctx, t.bestW.worm)}</div>` + head + worms + (fm.length ? gRows(fm) : "") };
+// today: the worm to cast this season (its XP per FLOWER); the three worms; what the Fish Market makes now
+fishingToday.look = "number";
+fishingToday.glanceModel = model((m, ctx) => {
+  const t = m.today, val = (s) => s[t.wKey], top = Math.max(...t.wsNow.map(val), 1e-9);
+  const fm = t.fmNow[0];
+  return {
+    head: { value: compact(val(t.bestW)), unit: " XP/🌸", cap: `cast ${t.bestW.worm} · ${m.season}`, hero: ic(ctx, t.bestW.worm) },
+    items: t.wsNow.map((s) => ({ icon: ic(ctx, s.worm), name: s.worm, sub: `${s.cast.toFixed(3)}${FL} a cast`, value: compact(val(s)),
+      tone: s === t.bestW ? "ok" : "", pct: share(val(s), top) })),
+    tiles: [{ label: "cast", value: t.bestW.worm }, { label: "XP/🌸", value: compact(val(t.bestW)) },
+      { label: "season", value: m.season }, { label: "fish/cast", value: t.fpc.toFixed(2) }],
+    foot: fm ? `Fish Market: ${fm.bait} → ${fm.fish} ~${(fm.perDay * 4).toFixed(1)}/day` : "",
+  };
 });
 
-// bait: S = the cheapest Fish Market bait this season; M / L = every bait's cost and how many you can make
-sized(fishingBait, ["s", "m", "l"], "m");
-fishingBait.glance = glance((m, ctx, opts, size) => {
+// bait: the cheapest Fish Market bait this season; every bait's cost and how many you can make
+fishingBait.look = "number-list-2";
+fishingBait.glanceModel = model((m, ctx) => {
   const list = m.baits.filter((b) => b.complete).sort((a, b) => a.cost - b.cost);
   if (!list.length) return { empty: "No bait could be priced." };
   const can = (b) => (b.bySeason[m.season] ? b.bySeason[m.season].canMake : 0);
-  if (size === "s") {
-    const b = list[0];
-    return { html: `<div class="g-hero">${ic(ctx, b.bait)}</div>` + big(approx(b, b.cost), { unit: FL, cap: `${b.bait} · can make ${fmt(can(b))}` }) };
-  }
-  return { html: gRows(list.slice(0, size === "m" ? 3 : 7).map((b) => ({ icon: ic(ctx, b.bait), name: b.bait, sub: `can make ${fmt(can(b))} · ${b.hours}h`,
-    value: `${approx(b, b.cost)}${FL}`, tone: b === list[0] ? "ok" : "" }))) };
+  const b0 = list[0], top = Math.max(...list.map((b) => b.cost), 1e-9);
+  return {
+    head: { value: approx(b0, b0.cost), unit: FL, cap: `${b0.bait} · can make ${fmt(can(b0))}`, hero: ic(ctx, b0.bait) },
+    items: list.map((b) => ({ icon: ic(ctx, b.bait), name: b.bait, sub: `can make ${fmt(can(b))} · ${b.hours}h`, value: `${approx(b, b.cost)}${FL}`,
+      tone: b === b0 ? "ok" : "", pct: share(b.cost, top) })),
+    tiles: [{ label: "cheapest", value: `${approx(b0, b0.cost)}${FL}` }, { label: "can make", value: fmt(can(b0)) },
+      { label: "season", value: m.season }],
+    foot: `+ rod = ${approx(b0, b0.cost + m.rodP)}${FL} per fish`,
+  };
 });
 
-// safe to age: S = the free fish (ring: salt held against their need); M = fish / XP / salt; L = the fish
-sized(fishingSafeAge, ["s", "m", "l"], "s");
-fishingSafeAge.glance = glance((m, ctx, opts, size) => {
+// safe to age: the free fish (ring: the salt held against their need); the held ones by the XP they wait with
+fishingSafeAge.look = "number";
+fishingSafeAge.glanceModel = model((m, ctx) => {
   const a = m.aging, cover = a.tot.salt > 0 ? (a.saltHeld / a.tot.salt) * 100 : 100;
-  if (size === "m") return { html: gTiles([{ label: "free to age", value: fmt(a.tot.fish), sub: `${a.free.length} species` },
-    { label: "aged XP", value: compact(a.tot.xp) }, { label: "salt", value: fmt(a.tot.salt), sub: `hold ${fmt(a.saltHeld)}` }]) };
-  const head = `<div class="g-corner">${gRing(cover, { tone: cover >= 100 ? "ok" : "warn" })}</div>` +
-    big(fmt(a.tot.fish), { unit: " fish", cap: `free to age · ${compact(a.tot.xp)} XP` });
-  if (size === "s") return { html: head };
-  const held = a.free.filter((r) => r.qty > 0).sort((x, y) => y.xpWait - x.xpWait).slice(0, 6);
-  return { html: head + gRows(held.map((r) => ({ icon: ic(ctx, r.iconName), name: r.name, sub: `${fmt(r.qty)} held · ${r.hours.toFixed(1)}h`, value: compact(r.xpWait) }))) };
+  const held = a.free.filter((r) => r.qty > 0).sort((x, y) => y.xpWait - x.xpWait);
+  const top = Math.max(...held.map((r) => r.xpWait), 1e-9);
+  return {
+    head: { value: fmt(a.tot.fish), unit: " fish", cap: `free to age · ${compact(a.tot.xp)} XP`, ring: Math.min(100, cover), ringTone: cover >= 100 ? "ok" : "warn" },
+    items: held.map((r) => ({ icon: ic(ctx, r.iconName), name: r.name, sub: `${fmt(r.qty)} held · ${r.hours.toFixed(1)}h`, value: compact(r.xpWait), pct: share(r.xpWait, top) })),
+    tiles: [{ label: "to age", value: fmt(a.tot.fish) }, { label: "aged XP", value: compact(a.tot.xp) },
+      { label: "salt", value: fmt(a.tot.salt) }, { label: "rack", value: `${a.busy}/${a.slots}` }],
+    foot: `salt ${fmt(a.saltHeld)} of ${fmt(a.tot.salt)} · clear in ${a.clearText}`,
+  };
 });
 
-// Marvels: S = how many maps are left and their cheapest total; M / L = each map by its cheapest route
-sized(fishingMarvels, ["s", "m", "l"], "m");
-fishingMarvels.glance = glance((m, ctx, opts, size) => {
-  const v = m.marvels, left = v.cards.filter((c) => !c.owned);
-  if (!left.length) return { html: big("✓", { tone: "ok", cap: "every Marine Marvel caught" }) };
-  if (size === "s") return { html: big(left.length, { unit: `/${v.cards.length}`, cap: `maps left · ${compact(v.planTotal)}${FL} cheapest` }) };
+// Marvels: how many maps are left (ring: caught) and their cheapest total; each map by its cheapest route
+fishingMarvels.look = "number-list-2";
+fishingMarvels.glanceModel = model((m, ctx) => {
+  const v = m.marvels, left = v.cards.filter((c) => !c.owned), owned = v.cards.filter((c) => c.owned);
   const best = (c) => { const e = c.evaluated[0]; const r = e && (e.routes.find((x) => x.isBest) || e.routes[0]); return r ? { e, r } : null; };
   const list = left.map((c) => ({ c, b: best(c) })).sort((x, y) => (x.b ? x.b.r.total : Infinity) - (y.b ? y.b.r.total : Infinity));
-  return { html: gRows(list.slice(0, size === "m" ? 3 : 7).map(({ c, b }) => ({ icon: ic(ctx, c.marvel), name: c.marvel,
-    sub: `${c.pieces} to go${b ? ` · via ${b.e.fish}` : ""}`, value: b ? `${b.r.est ? "~" : ""}${compact(b.r.total)}${FL}` : "no route" }))) };
+  const items = [...list.map(({ c, b }) => ({ icon: ic(ctx, c.marvel), name: c.marvel, sub: b ? `via ${b.e.fish}` : `${c.pieces} to go`,
+    value: b ? `${b.r.est ? "~" : ""}${compact(b.r.total)}${FL}` : "no route", pct: (c.held / 9) * 100 })),
+    ...owned.map((c) => ({ icon: ic(ctx, c.marvel), name: c.marvel, sub: "caught", chip: { text: "caught", tone: "ok" }, pct: 100 }))];
+  const caught = v.cards.length ? (owned.length / v.cards.length) * 100 : 0;
+  const head = left.length
+    ? { value: left.length, unit: `/${v.cards.length}`, cap: `maps left · ${compact(v.planTotal)}${FL} cheapest`, ring: caught, ringTone: "accent" }
+    : { value: "✓", tone: "ok", cap: "every Marine Marvel caught", ring: 100 };
+  return { head, items,
+    tiles: [{ label: "maps left", value: `${left.length}/${v.cards.length}` }, { label: "cheapest", value: `${compact(v.planTotal)}${FL}` },
+      { label: "drop rate", value: `${v.mult}×` }],
+    foot: `${v.chapter} chapter + permanent Marvels` };
 });
 
-// order: S = what the ticked routes cost; M = marvels / FLOWER / casts; L = + the shopping list
-sized(fishingOrder, ["s", "m", "l"], "s");
-fishingOrder.glance = glance((m, ctx, opts, size) => {
+// order: what the ticked routes cost; the shopping list, how much of each you already have
+fishingOrder.look = "number";
+fishingOrder.glanceModel = model((m, ctx) => {
   const o = m.order, a = m.marvels.activePerDay;
   if (!o.chosen.length) return { empty: "Nothing ticked yet — tick a route in the Marvel planner." };
-  const head = big(compact(o.flower), { unit: FL, cap: `${o.chosen.length} marvel${o.chosen.length === 1 ? "" : "s"} · ${fmt(Math.ceil(o.casts))} casts` });
-  if (size === "s") return { html: head };
-  if (size === "m") return { html: gTiles([{ label: "marvels", value: o.chosen.length }, { label: "FLOWER", value: compact(o.flower) },
-    { label: "casts", value: fmt(Math.ceil(o.casts)), sub: a > 0 ? `${fmt(Math.ceil(o.casts / a))} days` : "" }]) };
-  return { html: head + gRows(o.rows.slice(0, 6).map((r) => ({ icon: ic(ctx, r.name), name: r.name, sub: r.have > 0 ? `have ${fmt(r.have)}` : "", value: fmt(Math.ceil(r.qty)) }))) };
+  return {
+    head: { value: compact(o.flower), unit: FL, cap: `${o.chosen.length} marvel${o.chosen.length === 1 ? "" : "s"} · ${fmt(Math.ceil(o.casts))} casts` },
+    items: o.rows.map((r) => ({ icon: ic(ctx, r.name), name: r.name, sub: r.have > 0 ? `have ${fmt(r.have)}` : "", value: fmt(Math.ceil(r.qty)),
+      pct: r.qty > 0 ? Math.min(100, (r.have / r.qty) * 100) : 100 })),
+    tiles: [{ label: "marvels", value: o.chosen.length }, { label: "FLOWER", value: compact(o.flower) },
+      { label: "casts", value: fmt(Math.ceil(o.casts)) }, ...(a > 0 ? [{ label: "days", value: fmt(Math.ceil(o.casts / a)) }] : []),
+      ...(o.craftHours > 0 ? [{ label: "crafting", value: `${fmt(Math.ceil(o.craftHours))}h` }] : [])],
+    foot: o.chosen.map((c) => c.marvel).join(", "),
+  };
 });
 
-// cost: S = what a cast costs; M = rods / fish / fish per cast
-sized(fishingCost, ["s", "m"], "s");
-fishingCost.glance = glance((m, ctx, opts, size) => {
+// cost: what a cast costs; the rods and each worm spent (share of the rods)
+fishingCost.look = "number";
+fishingCost.glanceModel = model((m, ctx) => {
   const d = m.d;
-  if (size === "m") return { html: gTiles([{ label: "rods", value: compact(d.rods) }, { label: "fish", value: compact(d.fishTotal) },
-    { label: "per cast", value: m.fishPerCast.toFixed(2), sub: "fish" }]) };
-  return { html: m.costPerCast > 0 ? big(m.costPerCast.toFixed(3), { unit: FL, cap: `a cast · over ${fmt(d.rods)} rods` })
-    : big("—", { cap: "cost per cast · price feed down" }) };
+  const spent = [["Rod", d.rods], ...Object.entries(d.bait || {}).sort((x, y) => y[1] - x[1])];
+  return {
+    head: m.costPerCast > 0 ? { value: m.costPerCast.toFixed(3), unit: FL, cap: `a cast · over ${fmt(d.rods)} rods` } : { value: "—", cap: "cost per cast · price feed down" },
+    items: spent.map(([n, q]) => ({ icon: ic(ctx, n), name: n, sub: n === "Rod" ? "rods spent" : "bait used", value: compact(q), pct: share(q, d.rods) })),
+    tiles: [{ label: "rods", value: compact(d.rods) }, { label: "fish", value: compact(d.fishTotal) }, { label: "per cast", value: m.fishPerCast.toFixed(2) },
+      { label: "days", value: m.days.toFixed(0) }],
+    foot: `${d.diffs} diffs · ${compact(d.fishTotal)} fish landed`,
+  };
 });
 
-// per fish: S = the fish that pays the most aged XP per FLOWER; M / L = the best ones
-sized(fishingPerFish, ["s", "m", "l"], "m");
-fishingPerFish.glance = (data, ctx = {}, opts = {}, size = "s") => {
+// per fish: the fish that pays the most aged XP per FLOWER; the species, best first
+fishingPerFish.look = "number-list-2";
+fishingPerFish.glanceModel = (data, ctx = {}, opts = {}) => {
   const out = fishingPerFish.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  const list = out.rows.slice().sort((a, b) => b.xpPerSfl - a.xpPerSfl);
-  if (size === "s") {
-    const r = list[0];
-    return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(compact(r.xpPerSfl), { unit: " XP/🌸", cap: `${r.name} · aged` }) };
-  }
-  return { html: gRows(list.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${fmt(r.qty)} caught · ${r.cost.toFixed(2)} each`,
-    value: r.xpPerSfl > 0 ? compact(r.xpPerSfl) : "—" }))) };
+  const list = out.rows.slice().sort((a, b) => b.xpPerSfl - a.xpPerSfl), r0 = list[0];
+  const most = out.rows.slice().sort((a, b) => b.qty - a.qty)[0];
+  return {
+    head: { value: compact(r0.xpPerSfl), unit: " XP/🌸", cap: `${r0.name} · aged`, hero: r0.iconHtml },
+    items: list.map((r) => ({ icon: r.iconHtml, name: r.name, sub: `${fmt(r.qty)} caught · ${r.cost.toFixed(2)} each`, value: r.xpPerSfl > 0 ? compact(r.xpPerSfl) : "—", pct: r.rel })),
+    tiles: [{ label: "best", value: compact(r0.xpPerSfl) }, { label: "caught", value: fmt(list.reduce((s, r) => s + r.qty, 0)) },
+      { label: "species", value: list.length }],
+    foot: "aged XP per FLOWER, salt included",
+  };
 };
 
-// guaranteed: S = the best worm + chum pair; M / L = the pairs, aged XP per FLOWER
-sized(fishingGuaranteed, ["s", "m", "l"], "m");
-fishingGuaranteed.glance = (data, ctx = {}, opts = {}, size = "s") => {
+// guaranteed: the best worm + chum pair; the pairs, aged XP per FLOWER and their cost against fishing at random
+fishingGuaranteed.look = "number-list-2";
+fishingGuaranteed.glanceModel = (data, ctx = {}, opts = {}) => {
   const out = fishingGuaranteed.build(data, ctx, opts);
   if (!out.rows.length) return { empty: out.empty };
-  if (size === "s") {
-    const g = out.rows[0];
-    return { html: `<div class="g-hero">${ic(ctx, g.fish)}</div>` + big(compact(g.xpPerSfl), { unit: " XP/🌸", cap: `${g.fish} · ${g.bait} + ${g.chum}` }) };
-  }
-  return { html: gRows(out.rows.slice(0, size === "m" ? 3 : 7).map((g) => ({ icon: ic(ctx, g.fish), name: g.fish, sub: `${g.bait} + ${g.qty}× ${g.chum}`,
-    ...(g.vsRandom == null ? { value: compact(g.xpPerSfl) } : { chip: { text: `${g.vsRandom >= 0 ? "+" : "−"}${Math.abs(g.vsRandom).toFixed(0)}% vs random`, tone: g.vsRandom <= 0 ? "ok" : "bad" } }) }))) };
+  const g0 = out.rows[0], top = Math.max(...out.rows.map((g) => g.xpPerSfl), 1e-9);
+  const cheaper = out.rows.filter((g) => g.vsRandom != null && g.vsRandom <= 0).length;
+  return {
+    head: { value: compact(g0.xpPerSfl), unit: " XP/🌸", cap: `${g0.fish} · ${g0.bait} + ${g0.chum}`, hero: ic(ctx, g0.fish) },
+    items: out.rows.map((g) => ({ icon: ic(ctx, g.fish), name: g.fish, sub: `${g.qty}× ${g.chum}`, pct: share(g.xpPerSfl, top),
+      ...(g.vsRandom == null ? { value: compact(g.xpPerSfl) }
+        : { chip: { text: `${g.vsRandom >= 0 ? "+" : "−"}${Math.abs(g.vsRandom).toFixed(0)}%`, tone: g.vsRandom <= 0 ? "ok" : "bad" } }) })),
+    tiles: [{ label: "best", value: compact(g0.xpPerSfl) }, { label: "pairs", value: out.rows.length },
+      { label: "vs random", value: cheaper }],
+    foot: "negative % = cheaper than fishing for it at random",
+  };
 };
 
-// treasure: S = how much of a cast's cost comes back; M = beside it, what was found
-sized(fishingTreasure, ["s", "m"], "s");
-fishingTreasure.glance = glance((m, ctx, opts, size) => {
+// treasure: how much of a cast's cost comes back; what was found
+fishingTreasure.look = "number";
+fishingTreasure.glanceModel = model((m, ctx) => {
   const { tr, trVal } = m.treasure;
   if (!(tr.total > 0)) return { empty: "No clean treasure sample yet." };
-  const back = trVal / tr.rods;
-  const head = m.costPerCast > 0 ? big(((back / m.costPerCast) * 100).toFixed(0), { unit: "%", cap: `of a cast's cost comes back · ${back.toFixed(4)}${FL}` })
-    : big(back.toFixed(4), { unit: FL, cap: "back per cast" });
-  if (size === "s") return { html: head };
-  return { html: split(head, gRows(Object.entries(tr.items).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, q]) => ({ icon: ic(ctx, k), name: k, value: fmt(q) })))) };
+  const back = trVal / tr.rods, found = Object.entries(tr.items).sort((a, b) => b[1] - a[1]), top = found.length ? found[0][1] : 1;
+  return {
+    head: m.costPerCast > 0 ? { value: ((back / m.costPerCast) * 100).toFixed(0), unit: "%", cap: `of a cast's cost comes back · ${back.toFixed(4)}${FL}` }
+      : { value: back.toFixed(4), unit: FL, cap: "back per cast" },
+    items: found.map(([k, q]) => ({ icon: ic(ctx, k), name: k, sub: `${(q / tr.rods).toFixed(3)} per rod`, value: fmt(q), pct: share(q, top) })),
+    tiles: [{ label: "worth", value: `${trVal.toFixed(2)}${FL}` }, { label: "per cast", value: back.toFixed(4) },
+      ...(m.costPerCast > 0 ? [{ label: "of a cast", value: `${((back / m.costPerCast) * 100).toFixed(0)}%` }] : [])],
+    foot: `counted over ${tr.diffs} diffs with no shovel`,
+  };
 });

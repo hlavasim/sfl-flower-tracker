@@ -5,6 +5,7 @@ import { flowersNeeds, flowerBeds } from "../../widgets/flowers.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable, tableSettingsPanel, applyTableAction } from "../../ui/table.mjs";
 import { FLOWER_RECIPES } from "../../core/data/recipes.mjs";
+import { renderLook, looksFor, TEMPLATE_IDS } from "../../ui/glance-templates.mjs";
 
 // FLOWERS as widgets: what each flower still needs (core/engine/flower-plan.mjs) and the beds.
 
@@ -89,14 +90,40 @@ test("needs: what a flower grows from and the flowers that use it carry their ic
   assert.match(html, /used in <i>Yellow Cosmos<\/i>Yellow Cosmos ×/);
 });
 
-test("📱 glances: flowers S = complete / total with a ring, M = the most-missing; beds S = ready count, M = the beds", () => {
+test("📱 glance models: flowers = complete / total with a ring, the most missing first then the done ones; no hand-written face", () => {
   const farm = { inventory: { ...all(2), "Red Pansy": "0" } };
-  const s = flowersNeeds.glance({ farm }, CTX, {}, "s").html;
-  assert.match(s, /<svg class="g-ring/);
-  assert.match(s, /<div class="g-big">\d+<small>\/\d+<\/small><\/div>/);
-  const m = flowersNeeds.glance({ farm }, CTX, {}, "m").html;
-  assert.match(m, /<div class="g-n">Red Pansy<div>0 \/ 2<\/div><\/div><span class="g-v g-bad">−2<\/span>/);
-  const done = flowersNeeds.glance({ farm: { inventory: all(9) } }, CTX, {}, "s").html;
-  assert.match(done, /all at target ✓/);
-  assert.deepStrictEqual(flowerBeds.glance({ farm: {} }, CTX, {}, "s").empty, "No flower beds on the farm.");
+  const m = flowersNeeds.glanceModel({ farm }, CTX, {});
+  assert.strictEqual(flowersNeeds.look, "number");
+  assert.strictEqual(flowersNeeds.glance, undefined);
+  assert.match(String(m.head.value), /^\d+$/);
+  assert.match(m.head.unit, /^\/\d+$/);
+  assert.strictEqual(typeof m.head.ring, "number");
+  assert.strictEqual(m.items.length, Object.keys(FLOWER_RECIPES).length);
+  assert.deepStrictEqual(m.items[0], { icon: "<i>Red Pansy</i>", name: "Red Pansy", sub: "0 / 2", value: "−2", tone: "bad", pct: 0 });
+  assert.match(renderLook(m, "number").html, /<div class="gx-corner"><svg class="gx-ring g-accent"/);
+  assert.match(renderLook(m, "list-4").html, /<div class="gx-n">Red Pansy<div>0 \/ 2<\/div><\/div><span class="gx-chip g-bad">−2<\/span>/);
+  assert.ok(looksFor(m).length >= 3);
+  const done = flowersNeeds.glanceModel({ farm: { inventory: all(9) } }, CTX, {});
+  assert.deepStrictEqual([done.head.cap, done.head.tone, done.items[0].chip], ["all at target ✓", "ok", { text: "✓", tone: "ok" }]);
+  assert.strictEqual(flowersNeeds.glanceModel({}, CTX, {}).empty, "No farm data.");
+});
+
+test("📱 glance models: beds = how many are ready (ring: beds in use), each bed counting down live, empty ones last", () => {
+  const farm = { inventory: {}, flowers: { flowerBeds: { b2: {}, b1: { flower: { name: "Yellow Pansy", plantedAt: NOW - 86400 * 1000 - 1 } },
+    b3: { flower: { name: "Red Pansy", plantedAt: NOW - 3_600_000 } } } } };
+  const out = flowerBeds.build({ farm }, CTX, {});
+  const m = flowerBeds.glanceModel({ farm }, CTX, {});
+  assert.strictEqual(flowerBeds.look, "icons-1");
+  assert.strictEqual(flowerBeds.glance, undefined);
+  assert.deepStrictEqual([m.head.value, m.head.unit, m.head.cap, Math.round(m.head.ring)], [1, "/3", "beds ready", 67]);
+  assert.deepStrictEqual(m.items.map((i) => i.name), ["Yellow Pansy", "Red Pansy", "empty"]);
+  const red = out.rows.find((r) => r.name === "Red Pansy");
+  assert.deepStrictEqual([m.items[1].at, m.items[1].chip], [red.readyAt, undefined], "a live countdown, not a pre-formatted chip");
+  assert.strictEqual(m.items[2].value, "—");
+  const icons = renderLook(m, "icons-1", { now: NOW }).html;
+  assert.match(icons, /<small class="gx-tag g-ok"><span class="g-at" data-at="\d+">Ready<\/span><\/small>/);
+  assert.match(icons, /<small class="gx-tag g-info"><span class="g-at" data-at="\d+">23h 0m<\/span><\/small>/);
+  assert.ok(looksFor(m).includes("icons-1"));
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(flowerBeds.glanceModel({ farm: {} }, CTX, {}).empty, "No flower beds on the farm.");
 });
