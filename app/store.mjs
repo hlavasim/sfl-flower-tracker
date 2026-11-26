@@ -200,6 +200,34 @@ export const RESOURCES = {
       return body.data || null;
     },
   },
+  // A compute section valued on the farm's MEASURED harvests, as POWER (section=power), NODES
+  // (section=ascension) and SHRINES (section=eff) ask for it: the last 7 days of farm-history
+  // (only the _h.* diff slices) POSTed as snapshots; with weeks, the recorded ticket weeks too and
+  // a plain GET when there is nothing to send (POWER's rule). q: extra query params.
+  computeHist: {
+    persist: true,
+    ttl: 5 * 60_000,
+    load: async ({ farm, section, q = {}, weeks = false }, { json, get }) => {
+      if (!section) throw new Error("computeHist: no section");
+      const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+      let snapshots = [];
+      try {
+        const h = await json(`/api/farm-history?farm=${enc(farm)}&from=${day(Date.now() - 7 * 86400000)}&to=${day(Date.now() + 86400000)}&limit=2000`);
+        snapshots = (h.snapshots || []).map((sn) => ({ captured_at: sn.captured_at,
+          diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));
+      } catch { snapshots = []; }
+      const w = weeks ? (await get({ res: "ticketWeeks", farm })).data || [] : [];
+      const extra = Object.keys(q).sort().map((k) => `&${enc(k)}=${enc(q[k])}`).join("");
+      const url = `/api/compute?farm=${enc(farm)}&section=${enc(section)}${extra}`;
+      const post = weeks ? snapshots.length > 0 || w.length > 0 : true;
+      const body = post
+        ? await json(url, { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify(weeks ? { snapshots, weeks: w } : { snapshots }) })
+        : await json(url);
+      const d = body.data;
+      return d && typeof d === "object" && !Array.isArray(d) ? { ...d, pricesOk: body.pricesOk !== false } : d;
+    },
+  },
   // The LEVELING plan inputs; POSTs the recorded weeks when there are any, as the pages always did.
   leveling: {
     persist: true,

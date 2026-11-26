@@ -709,40 +709,40 @@ export const SIDE_MODELS = {
  */
 const NO_VALUE = [
   [["Grain Grinder", "Skill Shrimpy", "Drive-Through Deli", "Juicy Boost", "Buzzworthy Treats", "Swiss Whiskers", "Hungry Hare", "Fishy Feast"],
-    "XP jen z určitého jídla — co jíš, se z historie farmy nedá vyčíst (hra přestala ukládat bumpkin.activity)"],
+    "XP from certain food only — what you eat cannot be read from the farm history (the game stopped saving bumpkin.activity)"],
   [["Fast Feasts", "Frosted Cakes", "Turbo Fry", "Swift Sizzle", "Fry Frenzy", "Luna's Hat", "Instant Gratification", "Double Nom", "Fiery Jackpot", "Maneki Neko", "Nom Nom"],
-    "vaření — kolik a co vaříš, se z historie farmy nedá vyčíst"],
+    "cooking — what and how much you cook cannot be read from the farm history"],
   [["Betty's Friend", "Coin Swindler", "Fruity Profit", "Forge-Ward Profits", "Fishy Fortune", "Bountiful Bounties", "Victoria's Secretary", "Chef Apron", "Goblin Crown"],
-    "coiny z dodávek a prodejů — odměny jednotlivých dodávek historie neukládá"],
-  [["More Axes", "More Picks", "Crime Fruit"], "jen větší zásoba nástrojů / semínek — výnos nemění, ušetří restock"],
-  [["Insta-Chop", "Tap Prospector"], "jen pohodlí (jeden klik místo několika) — výnos nemění"],
+    "coins from deliveries and sales — the history does not keep each delivery's reward"],
+  [["More Axes", "More Picks", "Crime Fruit"], "only a bigger tool / seed stock — does not change the yield, saves restocks"],
+  [["Insta-Chop", "Tap Prospector"], "convenience only (one click instead of several) — does not change the yield"],
   [["Reel Deal", "Ancient Rod", "Shrimp Onesie", "Royal Crab Pot", "Speed Trap", "Crab House", "Pistol Shrimp", "Crab Trap", "Ancient Shovel", "Camel", "Navigation Table"],
-    "rybaření, pasti a kopání — tracker tyhle činnosti zatím neoceňuje"],
-  [["Oaken", "Squirrel Onesie", "Mushroom House", "Mushroom Hat"], "žaludy / divoké houby — sběr tracker neměří"],
+    "fishing, traps and digging — the tracker does not value these activities yet"],
+  [["Oaken", "Squirrel Onesie", "Mushroom House", "Mushroom Hat"], "acorns / wild mushrooms — the tracker does not measure collecting them"],
   [["Turd Topper", "Soil Krabby", "Knowledge Crab", "Feathery Business", "Composting Bonanza", "Composting Revamp", "Composting Overhaul"],
-    "compost — denní hodnotu má jen část compost skillů (u ostatních záleží, jak často boostuješ)"],
-  [["Kale Mix", "Alternate Medicine", "Barn Blueprint", "Oil Rig"], "mění recept nebo kapacitu zvířat — zatím neoceněno"],
-  [["Straw House"], "compost — denní hodnotu má jen část compost skillů (u ostatních záleží, jak často boostuješ)"],
-  [["Tool Hoarder"], "jen větší zásoba lopat a vrtáků — výnos nemění, ušetří restock"],
-  [["Cyclops Bloom", "Pot of Luck"], "rychlejší Fish Market / poklady v poušti — tracker tyhle činnosti zatím neoceňuje"],
-  [["Rooster", "Carrot Sword"], "šance na mutanta — náhodný drop bez tržní ceny"],
-  [["Bee Collective", "Hornet Mask"], "šance na roj včel — jak často roj přijde, rozhoduje server"],
-  [["Loyal Macaw", "Pear Turbocharge", "Gnome"], "zdvojí efekt jiného předmětu — zatím neoceněno"],
-  [["Golden Sunflower"], "šance na zlato při sklizni slunečnic — zatím neoceněno"],
+    "compost — only some compost skills have a daily value (the rest depend on how often you boost)"],
+  [["Kale Mix", "Alternate Medicine", "Barn Blueprint", "Oil Rig"], "changes a recipe or the animal capacity — not valued yet"],
+  [["Straw House"], "compost — only some compost skills have a daily value (the rest depend on how often you boost)"],
+  [["Tool Hoarder"], "only a bigger shovel and drill stock — does not change the yield, saves restocks"],
+  [["Cyclops Bloom", "Pot of Luck"], "a faster Fish Market / desert treasures — the tracker does not value these activities yet"],
+  [["Rooster", "Carrot Sword"], "a chance of a mutant — a random drop with no market price"],
+  [["Bee Collective", "Hornet Mask"], "a chance of a bee swarm — the server decides how often one comes"],
+  [["Loyal Macaw", "Pear Turbocharge", "Gnome"], "doubles another item's effect — not valued yet"],
+  [["Golden Sunflower"], "a chance of gold when harvesting sunflowers — not valued yet"],
   [["Stick House", "Brick House", "Hercules Beetle Hat", "Duende Monument", "Spooky Bed"],
-    "levnější / rychlejší expanze nebo farmhand navíc — jednorázový efekt, žádný denní výnos"],
+    "cheaper / faster expansions or an extra farmhand — a one-off effect, no daily yield"],
   [["Grinx's Hammer", "Ascension Monument", "Architect Ruler", "Sol & Luna", "Dino Egg Trophy", "Genie Lamp", "Christmas Tree", "Lunar Temple", "Blossom Bonding"],
-    "jednorázový nebo nepeněžní efekt — žádný denní výnos"],
+    "a one-off or non-monetary effect — no daily yield"],
 ];
 const NO_VALUE_BY_NAME = Object.fromEntries(NO_VALUE.flatMap(([names, why]) => names.map((n) => [n, why])));
 export function noValueReason(name, cats) {
   if (NO_VALUE_BY_NAME[name]) return NO_VALUE_BY_NAME[name];
   const c = cats || [];
-  if (c.includes("pets")) return "mazlíčci — XP a energie mazlíčků nejsou FLOWER";
-  if (c.includes("protection")) return "ochrana před sezónní katastrofou — škodu, které zabrání, nelze odhadnout";
-  if (c.includes("cooking")) return "vaření — kolik a co vaříš, se z historie farmy nedá vyčíst";
-  if (c.includes("coins")) return "coiny — ROADMAP je bere jako zdarma, když jich máš dost";
-  return "efekt, který tracker zatím neumí ocenit";
+  if (c.includes("pets")) return "pets — pet XP and energy are not FLOWER";
+  if (c.includes("protection")) return "protection from a seasonal disaster — the damage it prevents cannot be estimated";
+  if (c.includes("cooking")) return "cooking — what and how much you cook cannot be read from the farm history";
+  if (c.includes("coins")) return "coins — ROADMAP treats them as free when you have enough";
+  return "an effect the tracker cannot value yet";
 }
 
 /** The categories the side models add, for POWER_CATEGORIES and the page. */

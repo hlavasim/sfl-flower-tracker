@@ -207,3 +207,20 @@ test("compute retries a flaky upstream twice before it reports the error", async
   const r = await s.get({ res: "compute", farm: "7", section: "cooking" });
   assert.deepStrictEqual([r.status, r.data.v, n], ["ok", 1, 3]);
 });
+
+test("computeHist: POSTs the 7-day _h.* history (with weeks the ticket weeks too); POWER's GET when there is nothing", async () => {
+  const hist = { snapshots: [{ captured_at: "t1", diff: { "_h.crops": 3, "inventory.Wood": 1 } }] };
+  const f = fakeFetch({ "/api/farm-history?farm=": hist, "type=ticket-weeks": { weeks: [{ w: 1 }] },
+    "/api/compute": (url, init) => ({ data: { url, method: init.method || "GET", body: init.body ? JSON.parse(init.body) : null }, pricesOk: false }) });
+  const s = createStore({ fetch: f });
+  const a = await s.get({ res: "computeHist", farm: "7", section: "eff" });
+  assert.strictEqual(a.data.method, "POST");
+  assert.deepStrictEqual(a.data.body, { snapshots: [{ captured_at: "t1", diff: { "_h.crops": 3 } }] });
+  assert.strictEqual(a.data.pricesOk, false);
+  const p = await s.get({ res: "computeHist", farm: "7", section: "power", q: { products: "{}" }, weeks: true });
+  assert.match(p.data.url, /section=power&products=%7B%7D$/);
+  assert.deepStrictEqual(p.data.body.weeks, [{ w: 1 }]);
+  const g = createStore({ fetch: fakeFetch({ "/api/farm-history": { snapshots: [] }, "type=ticket-weeks": { weeks: [] },
+    "/api/compute": (url, init) => ({ data: { method: init.method || "GET" } }) }) });
+  assert.strictEqual((await g.get({ res: "computeHist", farm: "7", section: "power", weeks: true })).data.method, "GET");
+});

@@ -36,6 +36,11 @@ import { treasuryCategories, treasuryItems } from "./treasury.mjs";
 import { salesSummary, salesListings, salesSellable, salesOffers, salesSold, salesWeekly } from "./sales.mjs";
 import { myTradesSummary, myTradesItems, myTradesRecent } from "./my-trades.mjs";
 import { marksSummary, marksSources, marksShoppingList, marksLeaderboard, marksCostFirst, marksProjections, marksBurn } from "./marks.mjs";
+// POWER, NODES, ROI, SHRINES
+import { POWER_WIDGETS } from "./power.mjs";
+import { NODES_WIDGETS } from "./nodes.mjs";
+import { ROI_WIDGETS } from "./roi.mjs";
+import { SHRINES_WIDGETS } from "./shrines.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -105,4 +110,6 @@ export const WIDGETS = {
   [marksProjections.type]: marksProjections,
   [marksBurn.type]: marksBurn,
   [flipSummary.type]: flipSummary,
+  // POWER, NODES, ROI, SHRINES
+  ...Object.fromEntries([...POWER_WIDGETS, ...NODES_WIDGETS, ...ROI_WIDGETS, ...SHRINES_WIDGETS].map((w) => [w.type, w])),
 };

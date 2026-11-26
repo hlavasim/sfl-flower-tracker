@@ -228,7 +228,7 @@ export function compostSkillValues(farm, p2pPrices, season, opts = {}) {
         unpriced: !!fv.unpriced, approximate: !!fv.approximate,
         // The condition, stated: this is only real if the composter runs, and running it is
         // itself a loss here.
-        conditional: `pouze když ${composter} běží (ten teď nese ${v.netPerDay.toFixed(3)} FLOWER/den)`,
+        conditional: `only while ${composter} runs (it now makes ${v.netPerDay.toFixed(3)} FLOWER/day)`,
         composterNetPerDay: v.netPerDay,
       });
     } else if (def.allComposters) {
@@ -249,9 +249,9 @@ export function compostSkillValues(farm, p2pPrices, season, opts = {}) {
       rows.push(best
         ? { skill, has, composter: best.composter, item: best.item, qty: def.allComposters, value: best.value,
             perBatch: best.value / (verdicts[best.composter].batchesPerDay || 1),
-            conditional: `platí na kterýkoliv composter — počítáno pro ${best.composter} (nejlepší, net ${best.netPerDay.toFixed(3)} FLOWER/den); nesčítá se přes všechny, batch běží po jednom`,
+            conditional: `applies to any composter — counted for ${best.composter} (the best, net ${best.netPerDay.toFixed(3)} FLOWER/day); not summed over all, one batch runs at a time`,
             composterNetPerDay: best.netPerDay }
-        : { skill, has, value: null, unpriced: true, note: "žádné ocenitelné hnojivo, ke kterému přidat" });
+        : { skill, has, value: null, unpriced: true, note: "no priceable fertiliser to add it to" });
     } else if (def.timeMult) {
       /*
        * Faster batches scale the composter's whole net, including a negative one. A speed skill on
@@ -265,7 +265,7 @@ export function compostSkillValues(farm, p2pPrices, season, opts = {}) {
       for (const v of Object.values(verdicts)) parts.push({ composter: v.name, delta: owned ? v.netPerDay * (1 - def.timeMult) : v.netPerDay * (1 / def.timeMult - 1) });
       const total = parts.reduce((s, x) => s + x.delta, 0);
       rows.push({ skill, has: owned, value: total, parts,
-        conditional: "pouze u composterů, které skutečně necháváš běžet",
+        conditional: "only for the composters you actually keep running",
         harmful: total < 0 });
     }
   }
@@ -287,7 +287,7 @@ export function compostSkillValues(farm, p2pPrices, season, opts = {}) {
       perActivation: fv && plots > 1 ? fv.value * (plots - 1) : 0,
       value: null, perDay: false,
       unpriced: !(fv && fv.value > 0),
-      conditional: `na jedno použití, ${plots} ${cat} plotů · potřebuje Sprout/Blend zásobu (máš ${held})`,
+      conditional: `per use, ${plots} ${cat} plots · needs a Sprout/Blend stock (you have ${held})`,
     });
   }
   return rows;

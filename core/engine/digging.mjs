@@ -127,7 +127,7 @@ export function diggingVerdict(farm, p2pPrices, exchangeRates, opts = {}) {
     // No sample means no answer. Saying 0 would read as "digging is worthless".
     measured: digs > 0,
     coinAssumption: cps > 0
-      ? `coiny přepočítány na FLOWER kurzem ${Math.round(cps)} c/FLOWER — předpoklad, ne trh; podle pravidla téhle appky jsou coiny nad 10k zdarma, a pak je hodnota pokladů v FLOWER blízko nule`
-      : "coiny nelze přepočítat — chybí kurz",
+      ? `coins converted to FLOWER at ${Math.round(cps)} c/FLOWER — an assumption, not the market; by this app's rule coins above 10k are free, and then the treasures are worth close to zero FLOWER`
+      : "coins cannot be converted — no rate",
   };
 }

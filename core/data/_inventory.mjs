@@ -274,10 +274,6 @@ export const TABLE_INVENTORY = [
     "lines": 2
   },
   {
-    "name": "ICON",
-    "lines": 2
-  },
-  {
     "name": "ITEM_IMAGE_MAP",
     "lines": 1220
   },
@@ -356,14 +352,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "PRODUCT_TO_CATEGORY",
     "lines": 2
-  },
-  {
-    "name": "QUAL_DESC",
-    "lines": 6
-  },
-  {
-    "name": "QUAL_ORDER",
-    "lines": 7
   },
   {
     "name": "RECIPE_INGREDIENTS",

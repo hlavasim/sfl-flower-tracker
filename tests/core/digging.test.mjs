@@ -47,7 +47,7 @@ test("coin income and market income are kept apart, because coins are the app's 
   const cps = pd.exchangeRates.coinsPerSFL;
   assert.ok(cps > 0);
   assert.ok(Math.abs(v.coinsAsSfl - v.coins / cps) < 1e-9, "the coin haul converts at the served rate");
-  assert.ok(/p\u0159edpoklad/.test(v.coinAssumption), "and says it is an assumption");
+  assert.ok(/an assumption, not the market/.test(v.coinAssumption), "and says it is an assumption");
 
   assert.ok(v.perDig, "a per-hole figure, since that is the unit you spend a shovel in");
   assert.ok(Math.abs(v.perDig.netMarketOnly - (v.flowerSfl - v.costSfl) / v.digs) < 1e-9);
