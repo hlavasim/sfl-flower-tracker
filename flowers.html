@@ -2703,6 +2703,8 @@
     .w-pie-wrap { display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap; padding: 4px 0; }
     .w-pie { width: 90px; height: 90px; border-radius: 50%; flex: none; }
     .w-pie-legend { line-height: 1.8; }
+    .w-hbar { width: 120px; height: 8px; background: #111; }
+    .w-hbar > span { display: block; height: 100%; background: var(--sunpetal); }
     .w-swatch { display: inline-block; width: 8px; height: 8px; margin-right: 5px; vertical-align: middle; }
     .w-table .dash-detail { color: var(--text-dim); font-size: 0.9em; }
     .w-filter { margin-bottom: 6px; } .w-filter-h { color: var(--sunpetal); margin-bottom: 2px; }
@@ -22329,7 +22331,7 @@
       // x-axis-labeled with the island name, so no separate color legend (that
       // would just repeat the label the bar already carries).
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND</div>
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY ISLAND ${_wPinBtn("world-islands", "Hráči podle ostrova")}</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">of ${_fmtNum(_worldData.islandRows.reduce((a, r) => a + r.n, 0))} farms in the current scope</div>
         ${_barChart(_worldData.islandRows, { colorFor: (r) => islandColors[r.key] || LEVEL_BAR_COLOR, label: (r) => r.key, rowHeight: 28, highlight: (r) => me && me.island_type === r.key,
           rankTag: me ? _youTag(_rankIn(_worldData.islandRows, me.island_type,
@@ -22340,7 +22342,7 @@
       // ascension bands keep stacking, so this runs one row per level from 1 up to
       // whatever the crawl has found so far. Long list -> scroll, not truncation.
       html += `<div class="pixel-panel" style="padding:12px 14px;margin-bottom:12px">
-        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS</div>
+        <div class="pixel-font" style="font-size:0.625rem;color:var(--sunpetal);letter-spacing:0.5px">PLAYERS BY SKILL POINTS ${_wPinBtn("world-skill-points", "Hráči podle skill pointů")}</div>
         <div class="pixel-font" style="font-size:0.5rem;color:var(--text-dim);margin:4px 0 4px">Skill points earned from XP <b>as it stands now</b> — food still sitting uneaten does not count. This is the game's getTotalBumpkinLevel (1 point per level, ascension bands included), so post-ascension reads 150 + 50 per completed band + the level within it. <b>Caveat above 200:</b> the game caps pre-ascension skill points there, so higher values are this curve (x1.03 XP per level) extrapolated — they keep extreme farms distinguishable but are not points the game grants.</div>
         ${_barChart(_worldData.levelRows, { colorFor: () => LEVEL_BAR_COLOR, label: (r) => `${r.key} sp`, rowHeight: 14, labelWidth: 46, maxHeight: 420, highlight: (r) => me && me.total_level === r.key,
           rankTag: me ? _youTag(_rankIn(_worldData.levelRows, me.total_level, (r) => r.key > me.total_level)) : null })}

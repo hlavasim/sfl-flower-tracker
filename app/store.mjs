@@ -43,6 +43,16 @@ export const RESOURCES = {
       return body.data || null;
     },
   },
+  // WORLD: one cached aggregate (the charts' buckets) and the viewer's own row. The data is a daily dump.
+  worldAgg: {
+    ttl: 30 * 60_000,
+    load: async ({ group, limit }, { json }) =>
+      (await json(`/api/farm-history?type=world&mode=agg&group=${enc(group)}${limit ? `&limit=${enc(limit)}` : ""}`)).rows || [],
+  },
+  worldMe: {
+    ttl: 30 * 60_000,
+    load: ({ farm }, { json }) => json(`/api/farm-history?type=world&mode=farm&farm=${enc(farm)}`),
+  },
   // Boosted-NFT flips from the stored orderbook (farm-independent).
   flips: {
     ttl: 10 * 60_000,

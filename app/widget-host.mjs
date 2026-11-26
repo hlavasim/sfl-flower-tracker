@@ -41,7 +41,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
         return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`, settingsHtml: "" };
       }
       const out = widget.build(data || {}, ctx || {});
-      const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass };
+      const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
       return {
         html: out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
           : `<div class="w-empty-msg">${esc(out.empty || "Nic k zobrazení.")}</div>`,

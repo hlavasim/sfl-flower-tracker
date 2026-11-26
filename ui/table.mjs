@@ -26,7 +26,7 @@ function compare(a, b) {
 
 // Sort (raw values, blanks last either way), then the row selection. Returns the rows to show and
 // the picked keys that matched no row, so a pick that disappeared is visible instead of silent.
-export function applyRows(columns, rows, settings = {}, rowKey = (r) => r.key) {
+export function applyRows(columns, rows, settings = {}, rowKey = (r) => r.key, keepRow = null) {
   let out = rows.slice();
   // filters: { columnKey: [values switched off] } on columns marked filter
   for (const c of columns.filter((x) => x.filter)) {
@@ -44,10 +44,12 @@ export function applyRows(columns, rows, settings = {}, rowKey = (r) => r.key) {
     }).map((x) => x.r);
   }
   const sel = settings.rows || {};
-  let missing = [], hidden = 0;
+  let missing = [], hidden = 0, kept = [];
   if (sel.mode === "top") {
     const n = Math.max(1, sel.top || 5);
-    hidden = Math.max(0, out.length - n);
+    // rows the widget wants seen anyway (the viewer's own) stay, below the cut
+    kept = keepRow ? out.slice(n).filter(keepRow) : [];
+    hidden = Math.max(0, out.length - n - kept.length);
     out = out.slice(0, n);
   }
   else if (sel.mode === "picked") {
@@ -56,15 +58,15 @@ export function applyRows(columns, rows, settings = {}, rowKey = (r) => r.key) {
     out = out.filter((r) => want.has(String(rowKey(r))));
     missing = (sel.picked || []).filter((k) => !have.has(String(k)));
   }
-  return { rows: out, missing, hidden };
+  return { rows: out, missing, hidden, kept };
 }
 
 // column extras: title (header tooltip), labelHtml (trusted header HTML instead of label),
 // cumulative (the cell gets the running sum of get() in the order shown).
-// opts.rowClass(row) → class names for the row.
-export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.key, empty = "Žádné řádky.", rowClass } = {}) {
+// opts.rowClass(row) → class names for the row; opts.keepRow(row) → shown even past "top N".
+export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.key, empty = "Žádné řádky.", rowClass, keepRow } = {}) {
   const cols = visibleColumns(columns, settings);
-  const { rows: shown, missing, hidden } = applyRows(columns, rows, settings, rowKey);
+  const { rows: shown, missing, hidden, kept } = applyRows(columns, rows, settings, rowKey, keepRow);
   const sort = settings.sort || {};
   const size = settings.textSize ? Math.min(TEXT_MAX, Math.max(TEXT_MIN, settings.textSize)) : 0;
   const cls = "w-table" + (settings.density === "compact" ? " w-compact" : "");
@@ -76,7 +78,7 @@ export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.ke
     return `<th data-action="sort" data-value="${esc(c.key)}" data-sort="${esc(c.key)}"${aria}${tip}${align(c)}>${c.labelHtml || esc(c.label)}${mark}</th>`;
   }).join("");
   const sums = new Map(cols.filter((c) => c.cumulative).map((c) => [c.key, 0]));
-  const body = shown.map((r) => {
+  const rowHtml = (r) => {
     const cls = rowClass ? rowClass(r) : "";
     return `<tr data-row="${esc(rowKey(r))}"${cls ? ` class="${esc(cls)}"` : ""}>` + cols.map((c) => {
       let v = valueOf(c, r);
@@ -84,7 +86,9 @@ export function renderTable(columns, rows, settings = {}, { rowKey = (r) => r.ke
       const cell = c.fmt ? c.fmt(v, r) : isBlank(v) ? "" : esc(v);
       return `<td${align(c)}>${cell}</td>`;
     }).join("") + "</tr>";
-  }).join("");
+  };
+  const gap = kept.length ? `<tr class="w-gap"><td colspan="${cols.length || 1}">…</td></tr>` + kept.map(rowHtml).join("") : "";
+  const body = shown.map(rowHtml).join("") + gap;
   const more = hidden ? `<tr><td colspan="${cols.length || 1}" class="w-more">… a dalších ${hidden}</td></tr>` : "";
   const none = shown.length ? more : `<tr><td colspan="${cols.length || 1}" class="w-empty">${esc(empty)}</td></tr>`;
   const miss = missing.length ? `<div class="w-missing">Vybrané, ale teď bez řádku: ${missing.map(esc).join(", ")}</div>` : "";

@@ -105,6 +105,15 @@ test("filters: a column marked filter hides the values switched off; the panel g
   assert.doesNotMatch(tableSettingsPanel(COLS, {}, { rows: ROWS, rowKey: key }), /data-value="filter"/);
 });
 
+test("top N keeps a row the widget marks (keepRow) visible below a '…' line", () => {
+  const html = renderTable(COLS, ROWS, { rows: { mode: "top", top: 1 } }, { rowKey: key, keepRow: (r) => r.name === "Eel" });
+  assert.deepStrictEqual([...html.matchAll(/data-row="([^"]+)"/g)].map((m) => m[1]), ["Tuna", "Eel"]);
+  assert.match(html, /class="w-gap"/);
+  assert.match(html, /a dalších 1/);
+  const inside = renderTable(COLS, ROWS, { rows: { mode: "top", top: 3 } }, { rowKey: key, keepRow: (r) => r.name === "Eel" });
+  assert.doesNotMatch(inside, /w-gap/);
+});
+
 test("render: an empty result says so", () => {
   assert.match(renderTable(COLS, [], {}, { rowKey: key, empty: "Nic." }), /Nic\./);
 });
