@@ -69,6 +69,24 @@ test("no farm / no leveling inputs: an explanation, not a throw", () => {
   assert.match(W.build({ farm, leveling: null }).empty, /did not load/);
 });
 
+test("📱 glance: S = total days to the target ascension; M / L = the next ascensions, the target marked", () => {
+  assert.deepStrictEqual(W.sizes, ["s", "m", "l"]);
+  const ctx = { savedLeveling: { target: { ascension: 5, level: 50 } } };
+  const rows = W.build({ farm, leveling, book: null }, ctx).rows;
+  const t = rows.find((r) => r.target);
+  const s = W.glance({ farm, leveling, book: null }, ctx, {}, "s").html;
+  assert.match(s, new RegExp(`^<div class="g-big">${Math.round(t.cumDays).toLocaleString("en-US")}<small> days</small></div><div class="g-cap">to the end of A5`));
+  assert.match(s, /FLOWER in total<\/div>$/);
+  const m = W.glance({ farm, leveling, book: null }, ctx, {}, "m").html;
+  assert.match(m, /^<div class="g-split">/);
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, Math.min(3, rows.length));
+  const l = W.glance({ farm, leveling, book: null }, ctx, {}, "l").html;
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, Math.min(7, rows.length));
+  assert.match(l, /<div class="g-n">▶ A5<div>[^<]*<\/div><\/div><span class="g-v g-accent">[\d,]+ d · /);
+  assert.deepStrictEqual(W.glance({ farm: null }, {}, {}, "s"), { empty: "No farm data." });
+  assert.match(W.glance({ farm, leveling: null }, {}, {}, "m").empty, /did not load/);
+});
+
 test("renders: target row marked, a partly done band says where it starts", () => {
   const out = W.build({ farm, leveling, book: null }, { savedLeveling: { target: { ascension: 5, level: 50 } } });
   const html = renderTable(W.columns, out.rows, W.defaults, { rowKey: W.rowKey });

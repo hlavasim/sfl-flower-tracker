@@ -54,7 +54,8 @@ test("host: a view widget renders its html, with a cog; the page's pin still wor
   assert.match(html, /data-action="refresh"/);
   h.handle("page:bumpkin-level", "pin", "");
   const [item] = h.doc().boards[0].items;
-  assert.match(h.renderItem("main", item, { data: { farm: FARM } }), /LVL \d+/);
+  // pinned on a board it shows its glance face
+  assert.match(h.renderItem("main", item, { data: { farm: FARM } }), /class="g-big">L\d+</);
 });
 
 // ── Weather protection ──
@@ -102,4 +103,60 @@ test("beehives: full first, then by time; idle and empty hives say so; a swarm i
 test("beehives: no hives → an explanation", () => {
   assert.match(beehives.build({ farm: FARM }, { ...HCTX, hives: () => [] }).empty, /beehive/);
   assert.match(beehives.build({ farm: null }, HCTX).empty, /No farm data/);
+});
+
+// ── 📱 glance faces ──
+test("📱 glance, bumpkin level: S = L<level> with a meter and the way to the next level; M = the XP numbers beside it", () => {
+  const lvl = getTotalBumpkinLevel(XP, 0);
+  assert.deepStrictEqual(bumpkinLevel.sizes, ["s", "m"]);
+  const s = bumpkinLevel.glance({ farm: FARM }, {}, {}, "s").html;
+  assert.match(s, new RegExp(`^<div class="g-big">L${lvl}</div><div class="g-meter"><i class="g-accent" style="width:\\d+%"></i></div><div class="g-cap">\\d+ % to L${lvl + 1}</div>$`));
+  assert.doesNotMatch(s, /LVL|w-tile/, "the glance, not the old yellow tile");
+  const m = bumpkinLevel.glance({ farm: FARM }, {}, {}, "m").html;
+  assert.match(m, /^<div class="g-split">/);
+  assert.match(m, new RegExp(`<div class="g-n">to L${lvl + 1}</div><span class="g-v">[\\d.]+[kM]?</span>`));
+  assert.match(m, /<div class="g-n">to L200<\/div>/);
+  // ascended: the band being filled and what the XP is worth
+  const asc = { ...FARM, island: { ...FARM.island, ascensionLevel: 1 } };
+  assert.match(bumpkinLevel.glance({ farm: asc }, {}, {}, "s").html, /<div class="g-cap">A2 L\d+\/50 · \d+ %<\/div>/);
+  assert.match(bumpkinLevel.glance({ farm: asc }, {}, {}, "m").html, /<div class="g-n">XP worth<\/div><span class="g-v">L\d+<\/span>/);
+  assert.deepStrictEqual(bumpkinLevel.glance({ farm: null }, {}, {}, "s"), { empty: "No farm data." });
+  assert.match(bumpkinLevel.glance({ farm: {} }, {}, {}, "m").empty, /Bumpkin/);
+  // the view keeps its tile
+  assert.match(bumpkinLevel.view({ farm: FARM }).html, /^<div class="w-tile"><div class="w-tile-big">LVL \d+<\/div>/);
+});
+
+test("📱 glance, weather: S = items protecting now with a ring and what is uncovered; L = every item with a state chip", () => {
+  assert.deepStrictEqual(weatherProtection.sizes, ["s", "l"]);
+  const s = weatherProtection.glance({ farm: FARM }, WCTX, {}, "s").html;
+  assert.match(s, /class="g-ring g-bad"/);
+  assert.match(s, /<div class="g-big g-bad">2<small>\/4<\/small><\/div><div class="g-cap">uncovered: tsunami, insect plague<\/div>/);
+  const l = weatherProtection.glance({ farm: FARM }, WCTX, {}, "l").html;
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 4);
+  assert.match(l, /<div class="g-n">Mangrove<div>tsunami<\/div><\/div><span class="g-chip g-bad">used up<\/span>/);
+  assert.match(l, /<div class="g-n">Thermal Stone<div>great freeze<\/div><\/div><span class="g-chip g-warn">partly used<\/span>/);
+  const all = weatherProtection.glance({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, state: "ok" })) }, {}, "s").html;
+  assert.match(all, /<div class="g-big g-ok">4<small>\/4<\/small><\/div><div class="g-cap">all protected<\/div>/);
+  assert.match(weatherProtection.glance({ farm: FARM }, { weatherRows: () => [] }, {}, "s").empty, /No weather items/);
+  assert.match(weatherProtection.glance({ farm: null }, WCTX, {}, "s").empty, /No farm data/);
+});
+
+test("📱 glance, beehives: S = full hives with a ring and the swarm; M / L = the hives, full first, with a READY / countdown chip", () => {
+  assert.deepStrictEqual(beehives.sizes, ["s", "m", "l"]);
+  const s = beehives.glance({ farm: FARM }, HCTX, {}, "s").html;
+  assert.match(s, /^<div class="g-corner"><svg class="g-ring g-warn"/);
+  assert.match(s, /<div class="g-big g-ok">1<small>\/4<\/small><\/div><div class="g-cap">hives full · 🐝 swarm<\/div>/);
+  const m = beehives.glance({ farm: FARM }, HCTX, {}, "m").html;
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.match(m, /^<div class="g-rows"><div class="g-row"><span class="g-ic">🍯<\/span><div class="g-n">Hive #111<div>100 % · 🐝 swarm<\/div><\/div><span class="g-chip g-ok">READY<\/span>/);
+  assert.match(m, /Hive #222<div>40 %<\/div><\/div><span class="g-chip g-info">120m<\/span>/);
+  const l = beehives.glance({ farm: FARM }, HCTX, {}, "l").html;
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 4);
+  assert.match(l, /Hive #444<\/div><span class="g-v">empty<\/span>/);
+  assert.match(l, /1 full · 1 filling · 🐝 swarm/);
+  // nothing full yet: the next one's countdown
+  const later = beehives.glance({ farm: FARM }, { ...HCTX, hives: () => HCTX.hives().slice(1) }, {}, "s").html;
+  assert.match(later, /<div class="g-big">0<small>\/3<\/small><\/div><div class="g-cap">next in 120m<\/div>/);
+  assert.match(beehives.glance({ farm: FARM }, { ...HCTX, hives: () => [] }, {}, "s").empty, /No beehives/);
+  assert.match(beehives.glance({ farm: null }, HCTX, {}, "m").empty, /No farm data/);
 });

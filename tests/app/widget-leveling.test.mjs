@@ -88,3 +88,37 @@ test("matrix: Σ ticked, a column per ascension left, item rows with icons; tick
   const rowsOf = (h) => (h.match(/<tr/g) || []).length;
   assert.ok(rowsOf(levelingMatrix.view({ farm }, { state: st }, { showAll: true }).html) >= rowsOf(levelingMatrix.view({ farm }, { state: st }, {}).html));
 });
+
+test("📱 glance, plan: S = days to the target and its FLOWER; M = XP a day, FLOWER per 1 M XP, the bottleneck beside it; L = the XP split", () => {
+  assert.deepStrictEqual(levelingSummary.sizes, ["s", "m", "l"]);
+  const ctx = { savedLeveling: saved, icon: ICON };
+  const s = levelingSummary.glance({ farm, leveling }, ctx, {}, "s").html;
+  assert.match(s, new RegExp(`^<div class="g-big">${lvFmt(plan.days)}<small> days</small></div><div class="g-cap">to A6 · [\\d.]+k? FLOWER</div>$`));
+  const m = levelingSummary.glance({ farm, leveling }, ctx, {}, "m").html;
+  assert.match(m, /^<div class="g-split">/);
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.match(m, /<div class="g-n">aging held back by<\/div><span class="g-v">(salt|slots \(restarts\)|fish|—)<\/span>/);
+  const l = levelingSummary.glance({ farm, leveling }, ctx, {}, "l").html;
+  assert.match(l, /<div class="g-n">kitchens<div>XP a day<\/div>/);
+  assert.ok((l.match(/class="g-row"/g) || []).length <= 7);
+  // the actual pace gets a meter
+  assert.match(levelingSummary.glance({ farm, leveling: { inputs: { ...inputs, actualXpPerDay: 1000 } } }, ctx, {}, "l").html, /class="g-meter"[\s\S]*actually 1k XP a day · \d+ % of the plan/);
+  assert.match(levelingSummary.glance({ farm }, {}, {}, "s").empty, /did not load/);
+  assert.match(levelingSummary.glance({}, {}, {}, "m").empty, /No farm data/);
+});
+
+test("📱 glance, steps: S = the cheapest single change and its saving; M = the first three", () => {
+  assert.deepStrictEqual(levelingStepsWidget.sizes, ["s", "m"]);
+  const st = levelingState(farm, leveling, null, saved);
+  const ctx = { savedLeveling: saved, icon: ICON };
+  if (st.steps.length) {
+    const s = levelingStepsWidget.glance({ farm, leveling }, ctx, {}, "s").html;
+    assert.ok(s.includes(`${lvK(st.steps[0].dFlower)}<small> FLOWER</small></div><div class="g-cap">${st.steps[0].label}</div>`));
+    const m = levelingStepsWidget.glance({ farm, leveling }, ctx, {}, "m").html;
+    assert.strictEqual((m.match(/class="g-row"/g) || []).length, Math.min(3, st.steps.length));
+    assert.ok(m.includes(`<span class="g-v g-ok">${lvK(st.steps[0].dFlower)}</span>`));
+    assert.doesNotMatch(m, /_lvlUseStep/);
+  }
+  assert.match(levelingStepsWidget.glance({ farm }, { state: { ...st, steps: [] } }, {}, "s").empty, /No single change/);
+  assert.match(levelingStepsWidget.glance({}, {}, {}, "m").empty, /No farm data/);
+});

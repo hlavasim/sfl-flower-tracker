@@ -1,6 +1,7 @@
 // Beehives: each hive's honey, swarm and when it is full. The hive maths (flowers attached, rates)
 // is the page's extractBeehiveDetails (ctx.hives); this module shapes it into rows.
 import { ring } from "../ui/viz.mjs";
+import { big, ring as gRing, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const kind = (h, now) => (h.empty ? "empty" : h.idle || h.readyAt === undefined ? "idle" : h.readyAt <= now ? "full" : "filling");
@@ -42,4 +43,28 @@ export const beehives = {
     const footer = rows.length ? `<div style="color:var(--text-dim)">${full} full · ${rows.length - full - idle} filling · ${idle} no flowers</div>${swarm}` : "";
     return { rows, footer, empty: "No beehives on the farm." };
   },
+};
+
+// ── iPhone glance face: S = how many hives are full (ring = the fullest one still filling) and the
+// next one; M / L = the hives, full first, then the soonest ──
+beehives.sizes = ["s", "m", "l"];
+beehives.size = "s";
+beehives.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = beehives.build(data, ctx);
+  if (!out.rows.length) return { empty: out.empty };
+  const full = out.rows.filter((r) => r.kind === "full").length;
+  const filling = out.rows.filter((r) => r.kind === "filling").sort((a, b) => a.readyAt - b.readyAt);
+  const swarm = out.rows.some((r) => r.hasSwarm) ? " · 🐝 swarm" : "";
+  if (size === "s") {
+    const top = filling.length ? Math.max(...filling.map((r) => r.progressPct || 0)) : full ? 100 : 0;
+    return { html: `<div class="g-corner">${gRing(top, { tone: "warn" })}</div>` +
+      big(full, { unit: `/${out.rows.length}`, tone: full ? "ok" : "", cap: (full ? "hives full" : filling.length ? `next in ${filling[0].countdown}` : "no hive is filling") + swarm }) };
+  }
+  const order = { full: 0, filling: 1, idle: 2, empty: 3 };
+  const list = out.rows.slice().sort((a, b) => order[a.kind] - order[b.kind] || (a.readyAt || 0) - (b.readyAt || 0)).slice(0, size === "m" ? 3 : 7);
+  return { html: gRows(list.map((r) => ({ icon: r.iconHtml || "🍯", name: `Hive #${String(r.id).slice(-3)}`,
+    sub: [r.kind === "empty" ? "" : `${Math.round(r.progressPct || 0)} %`, r.hasSwarm ? "🐝 swarm" : ""].filter(Boolean).join(" · "),
+    ...(r.kind === "full" ? { chip: { text: "READY", tone: "ok" } } : r.kind === "filling" ? { chip: { text: r.countdown || "…", tone: "info" } }
+      : { value: r.kind === "idle" ? "no flowers" : "empty" }) }))) +
+    (size === "l" ? `<div class="g-cap g-foot">${full} full · ${filling.length} filling${swarm}</div>` : "") };
 };

@@ -9,6 +9,7 @@ import { levelingInit, levelingPlan, levelingLadder, levelingInputsWithBook, ite
   tickedAt, impactAt, breakEven, pointsReachedAt, tickedSkillPoints } from "../core/sections/leveling.mjs";
 import { sflIcon } from "../core/engine/power-formula.mjs";
 import { kpis, bar } from "../ui/viz.mjs";
+import { big, compact, meter as gMeter, rows as gRows } from "../ui/glance.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
@@ -220,5 +221,41 @@ export const levelingMatrix = {
     }
     return { html: h + `</table></div>` };
   },
+};
+
+// ── iPhone glance faces ──
+// plan: S = days to the target and the FLOWER it costs; M = XP a day, FLOWER per 1 M XP and what holds
+// aging back beside it; L = adds the XP split and the actual pace
+const daysBig = (d, cap) => (Number.isFinite(d) && d > 0 ? big(lvFmt(d), { unit: " days", cap }) : big(lvDays(d), { tone: d <= 0 ? "ok" : "bad", cap }));
+levelingSummary.sizes = ["s", "m", "l"];
+levelingSummary.size = "s";
+levelingSummary.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const { st, empty } = stateOf(data, ctx);
+  if (!st) return { empty };
+  const { plan, cfg: c, inputs } = st, x = plan.xpPerDay;
+  const head = daysBig(plan.days, `to A${c.target.ascension}${c.target.level !== 50 ? ` L${c.target.level}` : ""} · ${compact(plan.totalFlower)} FLOWER`);
+  if (size === "s") return { html: head };
+  const list = [{ name: "XP a day", value: compact(x.total) }, { name: "FLOWER / 1 M XP", value: perM(plan.costPerDay, x.total) },
+    { name: "aging held back by", value: plan.bottleneck ? LV_BOTTLENECK[plan.bottleneck] : "—" }];
+  if (size === "m") return { html: `<div class="g-split"><div>${head}</div>${gRows(list)}</div>` };
+  const more = [{ name: "kitchens", sub: "XP a day", value: compact(x.kitchens) }, { name: "aging", sub: "XP a day", value: compact(x.aging) },
+    { name: "raw fish", sub: "XP a day", value: compact(x.raw) }, { name: "FLOWER a day", value: compact(plan.costPerDay) }];
+  const actual = inputs.actualXpPerDay;
+  return { html: head + gRows([...list, ...more]) + (actual && x.total > 0 ? gMeter((actual / x.total) * 100, actual >= x.total ? "ok" : "warn") +
+    `<div class="g-cap">actually ${compact(actual)} XP a day${actual >= x.total ? " · on plan" : ` · ${Math.round((actual / x.total) * 100)} % of the plan`}</div>` : "") };
+};
+
+// steps: S = the cheapest single change and what it saves; M = the next steps
+levelingStepsWidget.sizes = ["s", "m"];
+levelingStepsWidget.size = "s";
+levelingStepsWidget.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = levelingStepsWidget.build(data, { ...ctx, interactive: false });
+  if (!out.rows.length) return { empty: out.empty };
+  const r = out.rows[0];
+  if (size === "s") {
+    return { html: (r.iconHtml ? `<div class="g-hero">${r.iconHtml}</div>` : "") + big(lvK(r.dFlower), { unit: " FLOWER", tone: r.dFlower < 0 ? "ok" : "", cap: r.label }) };
+  }
+  return { html: gRows(out.rows.slice(0, 3).map((s) => ({ icon: s.iconHtml, name: s.label,
+    sub: Number.isFinite(s.dDays) ? `${s.dDays > 0 ? "+" : ""}${lvFmt(s.dDays)} d` : s.dDays < 0 ? "from never" : "never", value: lvK(s.dFlower), tone: s.dFlower < 0 ? "ok" : "" }))) };
 };
 

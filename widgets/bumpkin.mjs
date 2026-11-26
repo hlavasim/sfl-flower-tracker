@@ -496,3 +496,41 @@ bumpkinPlanWidget.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s"
     ...(p.totalCostPerDay > 0 ? [{ label: "SFL / day", value: sfl(ctx, p.totalCostPerDay) }] : []),
     ...(p.ladder.length ? [{ label: `to ${p.nextLabel}`, value: `${sfl(ctx, p.nextCost)} SFL`, sub: `${Math.ceil(p.nextDays)} d` }] : [])]) };
 };
+
+// banked food: S = the XP in stock and the level after eating it; M = the three biggest dishes
+// beside it; L = more dishes
+bumpkinFood.sizes = ["s", "m", "l"];
+bumpkinFood.size = "s";
+bumpkinFood.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (noFarm(farm)) return { empty: noFarm(farm) };
+  if (!cook) return { empty: "Loading cooking data…" };
+  const p = planOf(farm, cook, ctx, opts);
+  if (!(p.bankedXP > 0)) return { empty: "No cooked food in the inventory." };
+  const head = big(compact(p.bankedXP), { unit: " XP", cap: `L${p.levelAfterFoodU} after eating${p.levelsGained > 0 ? ` · +${p.levelsGained}` : ""}` });
+  if (size === "s") return { html: head };
+  const list = rows(p.food.slice(0, size === "m" ? 3 : 6).map((f) => ({ icon: icon(ctx, f.name), name: f.name, sub: `${f.qty}×`, value: compact(f.totalFoodXP) })));
+  return { html: size === "m" ? `<div class="g-split"><div>${head}</div>${list}</div>` : head + list + `<div class="g-cap g-foot">${p.food.length} kinds of food in stock</div>` };
+};
+
+// cooking boosts: S = the pet streak (the one thing to act on); M = the counts as tiles; L = the boosts
+bumpkinBoosts.sizes = ["s", "m", "l"];
+bumpkinBoosts.size = "s";
+bumpkinBoosts.glance = ({ farm, cook } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (noFarm(farm)) return { empty: noFarm(farm) };
+  if (!cook) return { empty: "Loading cooking data…" };
+  const boosts = cook.boosts || {}, ps = boosts.petStreakInfo || {};
+  const xp = (boosts.xpBoosts || []).filter((b) => !b.petStreak), time = boosts.timeBoosts || [], amount = boosts.amountBoosts || [];
+  const next = ps.nextWeekQualified ? "next week ✓" : "feed your pet!";
+  if (size === "s") {
+    return { html: big(`×${ps.multiplier ?? 1}`, { tone: ps.thisWeekActive ? "ok" : "warn", cap: `pet streak ${ps.streak ?? 0}w · ${next}` }) };
+  }
+  if (size === "m") {
+    return { html: tiles([{ label: "XP boosts", value: String(xp.length) }, { label: "time / amount", value: String(time.length + amount.length) },
+      { label: "pet streak", value: `×${ps.multiplier ?? 1}`, sub: next }]) };
+  }
+  const list = [{ name: "Pet's Streak", sub: `${ps.streak ?? 0}w · ${next}`, value: `×${ps.multiplier ?? 1}`, tone: ps.thisWeekActive ? "ok" : "bad" },
+    ...xp.map((b) => ({ icon: icon(ctx, b.name), name: b.name + tagOf(b), sub: "XP", value: b.add ? "+" + b.add : "×" + b.multiplier })),
+    ...time.map((b) => ({ icon: icon(ctx, b.name), name: b.name, sub: "time", value: `×${b.multiplier}` })),
+    ...amount.map((b) => ({ icon: icon(ctx, b.name), name: b.name, sub: "amount", value: `+${b.extra}` }))];
+  return { html: rows(list.slice(0, 7)) + `<div class="g-cap g-foot">${xp.length} XP · ${time.length + amount.length} time / amount</div>` };
+};

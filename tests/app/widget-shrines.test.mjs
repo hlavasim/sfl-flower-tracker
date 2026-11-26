@@ -56,3 +56,17 @@ test("a copy may show only the active or only the profitable shrines", () => {
   assert.deepStrictEqual(shrinesRoi.build({ farm, power: {} }, CTX, { show: "profitable" }).rows.map((r) => r.name), ["Bear Shrine"]);
   assert.match(shrinesRoi.build({}, CTX, {}).empty, /No shrine data/);
 });
+
+test("📱 glance: S = active / total with a ring; M / L = the shrines, active first then most profit, in the copy's filter", () => {
+  assert.deepStrictEqual(shrinesRoi.sizes, ["s", "m", "l"]);
+  const s = shrinesRoi.glance({ farm, power: {} }, CTX, {}, "s").html;
+  assert.match(s, /^<div class="g-corner"><svg class="g-ring g-ok"/);
+  assert.match(s, /<div class="g-big g-ok">1<small>\/2<\/small><\/div><div class="g-cap">active · 1 profitable<\/div>/);
+  const m = shrinesRoi.glance({ farm, power: {} }, CTX, { show: "all" }, "m").html;
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 2);
+  assert.match(m, /^<div class="g-rows"><div class="g-row"><span class="g-ic"><i>Bear Shrine<\/i><\/span><div class="g-n">Bear Shrine<div>2\.1 days left<\/div><\/div><span class="g-chip g-ok">ACTIVE<\/span>/);
+  assert.match(m, /<div class="g-n">Boar Shrine<div>judge · 1 d<\/div><\/div><span class="g-v g-bad">-1\.00<\/span>/);
+  assert.strictEqual((shrinesRoi.glance({ farm, power: {} }, CTX, { show: "active" }, "l").html.match(/class="g-row"/g) || []).length, 1);
+  assert.deepStrictEqual(shrinesRoi.glance({}, CTX, {}, "s"), { empty: "No shrine data yet." });
+  assert.deepStrictEqual(shrinesRoi.glance({ farm, power: {} }, { ...CTX, shrineRows: () => ({ rows: [], acornPrice: 0 }) }, {}, "m"), { empty: "No shrines." });
+});
