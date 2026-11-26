@@ -124,7 +124,7 @@ decSummary.glanceModel = (data, ctx = {}) => {
     items: flowerItems(P, ctx).items,
     tiles: [{ label: "planted", value: `${n0(P.totalDone)}/${n0(P.totalNeed)}` },
       { label: "to grow", value: n0(P.totalMissing) },
-      { label: "plantable", value: n0(P.plantable) }, { label: "expansions", value: P.built }],
+      { label: "plantable", value: n0(P.plantable) }, { label: "band built", value: `${P.built}/12` }],
     foot: `${P.expansions} expansions · ascension A${P.ascLevel}`,
   };
 };

@@ -96,6 +96,8 @@ test("📱 glance models: summary = still to grow with a ring, the flowers, the 
   assert.deepStrictEqual(s.items.map((i) => i.name), ["Red Pansy", "White Lotus", "Blue Daffodil"]);
   assert.match(renderLook(s, "tiles-t").html, /<div class="gx-numlist"><div><span>planted<\/span><b>12\/30<\/b><\/div><div><span>to grow<\/span><b>7<\/b>/);
   assert.ok(looksFor(s).length >= 3);
+  // the band tile says what it counts (built of the 12 band expansions), not the farm's expansions the foot shows
+  assert.deepStrictEqual(s.tiles[3], { label: "band built", value: `${PLAN.built}/12` });
   const all = decSummary.glanceModel({ farm }, { ...ctx, plan: () => ({ ...PLAN, totalMissing: 0 }) }, {});
   assert.deepStrictEqual([all.head.value, all.head.tone], ["✓", "ok"]);
   assert.match(all.head.cap, /^all in hand/);
