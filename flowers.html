@@ -13072,7 +13072,7 @@
               const name = _resolveMarketName(m.collection, m.item_id);
               html += `<div class="market-mover-row">
                 <span class="market-mover-rank">${i + 1}.</span>
-                <span class="market-mover-name">${escHTML(name)}</span>
+                <span class="market-mover-name">${_mktIcon(name)}${escHTML(name)}</span>
                 <span class="market-mover-vol">${_fmtBigNum(m.total_volume)} SFL</span>
                 <span class="market-mover-trades">${_fmtBigNum(m.total_quantity || 0)} qty</span>
               </div>`;
