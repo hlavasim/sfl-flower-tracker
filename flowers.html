@@ -3396,7 +3396,11 @@
     .w-sheet .w-frame.pixel-panel { margin: 0; border-radius: 22px; box-shadow: 0 24px 70px rgba(0,0,0,0.5); }
     @keyframes w-sheet-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
     /* glance looks (ui/glance-templates.css) on a board and in the gallery: em-sized from the cell */
-    .w-board > .w-glance > .w-body { font-size: var(--fs, 13px); }
+    /* the whole card scales with its cell (padding, title, body), as the looks were designed at 170 px */
+    .w-board > .w-glance.pixel-panel { font-size: var(--fs, 13px); padding: 1em 1.15em 1.15em; border-radius: 1.7em; }
+    .w-board > .w-glance .w-head { margin-bottom: 0.5em; min-height: 1.6em; }
+    .w-board > .w-glance .w-title { font-size: 0.96em; }
+    .w-board > .w-glance > .w-body { font-size: 1em; }
     .w-board > .w-glance > .w-body > .gx { height: 100%; }
     .w-gal-v .w-gal-face { font-size: 13px; }
     .w-gal-v .w-gal-face > .gx { height: 100%; }
@@ -3412,7 +3416,8 @@
     .w-look:hover .gcard { transform: translateY(-2px); border-color: var(--c-accent); }
     .w-look.on .gcard { border: 2px solid var(--c-accent); }
     .w-look-n { position: absolute; left: 6px; bottom: -22px; font: 12px var(--c-font); color: var(--c-muted); white-space: nowrap; }
-    .w-look-table { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 34px !important; color: var(--c-muted); }
+    .w-look-table { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--c-muted); }
+    .w-look-table span { font-size: 34px; line-height: 1; }
     .w-look-table small { font-size: 12px; margin-top: 6px; }
     .w-gal-pick { z-index: 1000; }
     @media (max-width: 560px) { .w-looks { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 42vw; } .w-picker { padding: 14px; } }

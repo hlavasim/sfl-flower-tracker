@@ -81,7 +81,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     return `<div class="w-looks">` + offered.map((id) => {
       const r = renderLook(m, id, { cols }), [w, h] = r.size.split("x").map(Number), t = templateById(r.id);
       return btn(id, `<div class="gcard">${r.html}</div>`, `grid-column:span ${w};grid-row:span ${h}`, `${t.name} · ${r.size.replace("x", "×")}`);
-    }).join("") + btn("full", `<div class="gcard w-look-table">▦<small>the full table</small></div>`, "grid-column:span 1;grid-row:span 1", "Full table") + `</div>`;
+    }).join("") + btn("full", `<div class="gcard w-look-table"><span>▦</span><small>the full table</small></div>`, "grid-column:span 1;grid-row:span 1", "Full table") + `</div>`;
   }
   const sizeChoices = (type, settings) => {
     const s = sizesOf(type), cur = sizeOf(type, settings);

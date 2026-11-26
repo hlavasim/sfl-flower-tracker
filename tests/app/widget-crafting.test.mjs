@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { crabTraps, craftingBox } from "../../widgets/crafting.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 // What is in the crab traps and the crafting box right now (CRABS and DOLLS pages, pinnable).
 
@@ -58,15 +59,44 @@ test("crafting box: the game's queue — every job, ready ones first, with how m
   assert.match(out.footer, /1 ready · 2 crafting/);
 });
 
-test("📱 glances: S = the soonest job (ready first) as a big countdown, M = up to 3 rows with READY / countdown chips", () => {
+test("📱 glance model, traps: the soonest catch (ready first) as the headline; every catch with a READY / countdown chip and its progress", () => {
   const farm = { crabTraps: { trapSpots: {
-    t1: { waterTrap: { readyAt: NOW + 3_600_000, caught: { "Blue Crab": 1 } } },
+    t1: { waterTrap: { placedAt: NOW - 3_600_000, readyAt: NOW + 3_600_000, caught: { "Blue Crab": 1 } } },
     t2: { waterTrap: { readyAt: NOW - 1, caught: { Isopod: 2 } } },
   } } };
-  const s = crabTraps.glance({ farm }, CTX, {}, "s").html;
-  assert.match(s, /<div class="g-hero"><i>Isopod<\/i><\/div><div class="g-big g-ok">Ready<\/div><div class="g-cap">Isopod · 1 of 2 ready<\/div>/);
-  const m = crabTraps.glance({ farm }, CTX, {}, "m").html;
-  assert.match(m, /<div class="g-n">2× Isopod<\/div><span class="g-chip g-ok">READY<\/span>/);
-  assert.match(m, /<div class="g-n">1× Blue Crab<\/div><span class="g-chip g-info">60m<\/span>/);
-  assert.deepStrictEqual(craftingBox.glance({ farm: {} }, CTX, {}, "s"), { empty: "The crafting box is idle right now." });
+  const m = crabTraps.glanceModel({ farm }, CTX);
+  assert.deepStrictEqual(m.head, { value: "Ready", tone: "ok", hero: "<i>Isopod</i>", ring: 100, ringTone: "ok", cap: "Isopod · 1 of 2 ready" });
+  assert.strictEqual(m.items.length, 2);
+  assert.deepStrictEqual(m.items[1], { icon: "<i>Blue Crab</i>", name: "1× Blue Crab", at: NOW + 3_600_000, pct: 50 }, "a live countdown");
+  assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["ready", 1], ["in traps", 1], ["next", "60m"]]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num g-ok">Ready<\/div><div class="gx-cap">Isopod · 1 of 2 ready<\/div>/);
+  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, 2);
+  assert.strictEqual(crabTraps.look, "next");
+  assert.ok(looksFor(m).length >= 3);
+  assert.deepStrictEqual(crabTraps.glanceModel({}, CTX), { empty: "No farm data." });
+  assert.strictEqual(crabTraps.glance, undefined, "the hand-written face is gone");
+});
+
+test("📱 glance model, crafting box: the whole queue as icons with the time under each (its natural look); idle says so", () => {
+  const farm = { craftingBox: { status: "crafting", queue: [
+    { name: "Wooly Doll", readyAt: NOW + 3_600_000, startedAt: NOW - 3_600_000 },
+    { name: "Bear Doll", readyAt: NOW + 7_200_000, startedAt: NOW + 3_600_000 },
+    { name: "Doll", readyAt: NOW - 1, startedAt: NOW - 100_000 },
+  ] } };
+  const m = craftingBox.glanceModel({ farm }, CTX);
+  assert.strictEqual(craftingBox.look, "icons-1", "its natural look: the queue as icons");
+  assert.deepStrictEqual([m.head.value, m.head.cap, m.head.ring], ["Ready", "Doll · 1 of 3 ready", 100]);
+  assert.deepStrictEqual(m.items.map((i) => [i.name, i.at, i.pct]), [["Doll", NOW - 1, 100], ["Wooly Doll", NOW + 3_600_000, 50], ["Bear Doll", NOW + 7_200_000, 0]]);
+  assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["ready", 1], ["crafting", 2], ["next", "60m"], ["all done in", "120m"]]);
+  assert.strictEqual(m.foot, "1 ready · 2 crafting");
+  const icons = renderLook(m, "icons-1", { now: NOW }).html;
+  for (const n of ["Doll", "Wooly Doll", "Bear Doll"]) assert.ok(icons.includes(`<i>${n}</i>`), n);
+  assert.match(icons, /<small class="gx-tag g-ok"><span class="g-at" data-at="\d+">Ready<\/span><\/small>/);
+  assert.match(icons, /<small class="gx-tag g-info"><span class="g-at" data-at="\d+">2h 0m<\/span><\/small>/);
+  assert.ok(m.items.filter((i) => i.pct != null).length >= 2, "progress per job (bars)");
+  assert.ok(looksFor(m).length >= 3);
+  // an older farm's single item: no start time → no progress, no ring
+  const old = craftingBox.glanceModel({ farm: { craftingBox: { status: "crafting", readyAt: NOW + 120_000, item: { collectible: "Doll" } } } }, CTX);
+  assert.deepStrictEqual([old.head.value, old.head.ring, old.items[0].pct], ["2m", undefined, undefined]);
+  assert.deepStrictEqual(craftingBox.glanceModel({ farm: {} }, CTX), { empty: "The crafting box is idle right now." });
 });

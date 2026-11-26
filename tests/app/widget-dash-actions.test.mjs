@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { dashActions as W } from "../../widgets/dash-actions.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable, tableSettingsPanel, applyTableAction } from "../../ui/table.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 
 // DASH · "Co je hotové": the DASH page's own action list (the page hands over its parser), as a
 // table: when, category, what, efficiency; filterable by status and category.
@@ -79,14 +80,20 @@ test("what to list is this widget's own choice: non-ticket bounties, animal turn
   assert.strictEqual(W.columns.find((c) => c.key === "category").label, "type");
 });
 
-test("📱 glance: S = how many are ready, with a ring; M = ready ones first, then the soonest, as plain text with icons", () => {
-  const s = W.glance({ farm: {} }, CTX, {}, "s").html;
-  const ready = ACTIONS.filter((a) => a.status === "ready").length, running = ACTIONS.filter((a) => a.status === "upcoming").length;
-  assert.match(s, /<svg class="g-ring g-ok"/);
-  assert.ok(s.includes(`${ready}</div><div class="g-cap">to collect · ${running} running</div>`));
-  const m = W.glance({ farm: {} }, CTX, {}, "m").html;
-  assert.strictEqual((m.match(/class="g-row"/g) || []).length, Math.min(3, ready + running));
-  assert.doesNotMatch(m.replace(/<span class="g-ic">[^]*?<\/span>/g, ""), /<b>/, "label markup flattened to text");
-  const none = W.glance({ farm: {} }, { ...CTX, dashActions: () => [] }, {}, "s").html;
-  assert.match(none, /nothing pending/);
+test("📱 glance model: how many are ready (ring = ready vs running); items ready first, then the soonest, then idle, as plain text with icons", () => {
+  const m = W.glanceModel({ farm: {} }, CTX, {});
+  assert.deepStrictEqual(m.head, { value: 3, tone: "ok", ring: 75, ringTone: "ok", cap: "to collect · 1 running" });
+  assert.deepStrictEqual(m.items.map((i) => [i.name, i.chip.text]), [["Bounty", "READY"], ["Tree 2", "READY"], ["Beehive", "READY"], ["Sunflower", "60m"], ["Compost Bin", "IDLE"]]);
+  assert.deepStrictEqual(m.items[3], { icon: "🌾", name: "Sunflower", sub: "Crops", chip: { text: "60m", tone: "info" } });
+  assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["ready", 3], ["running", 1], ["next", "60m"], ["idle", 1]]);
+  assert.strictEqual(m.foot, "3 ready · 1 running · 1 idle");
+  assert.match(renderLook(m, "number").html, /<svg class="gx-ring g-ok"[^]*<div class="gx-num g-ok">3<\/div><div class="gx-cap">to collect · 1 running<\/div>/);
+  assert.match(renderLook(m, "icons-4").html, /<small class="gx-tag g-info">60m<\/small>/);
+  assert.strictEqual((renderLook(m, "list-4").html.match(/class="gx-row"/g) || []).length, 5);
+  assert.ok(looksFor(m).length >= 3);
+  // nothing pending: a ✓ headline, not an empty face; a missing parser explains itself
+  const none = W.glanceModel({ farm: {} }, { ...CTX, dashActions: () => [] }, {});
+  assert.deepStrictEqual([none.head.value, none.head.cap], ["✓", "nothing pending"]);
+  assert.match(W.glanceModel({ farm: {} }, {}, {}).empty, /DASH/);
+  assert.strictEqual(W.glance, undefined, "the hand-written face is gone");
 });

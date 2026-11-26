@@ -1,7 +1,6 @@
 // What is on the way right now: 🦀 the crab traps (CRABS page) and 🪆 the crafting box (DOLLS page).
 import { toMs } from "../core/engine/power-costs.mjs";
 import { craftingJobs } from "../core/engine/crafting-box.mjs";
-import { big, rows } from "../ui/glance.mjs";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
 const when = (r) => (r.ready ? `<span class="v-pill v-ok">READY</span>`
@@ -72,20 +71,42 @@ export const craftingBox = {
   },
 };
 
-// ── iPhone glance faces: what is on the way, soonest first ──
-function onTheWay(widget, empty) {
-  return (data = {}, ctx = {}, opts = {}, size = "s") => {
+// ── iPhone glance model: what is on the way, ready first, then the soonest. The headline is the
+// soonest job (its icon, READY or its countdown, a ring of how far along it is); the items are the
+// whole queue, each with a READY / countdown chip and its progress (where the farm says when it
+// started); every item with a time counts down live (at); ui/glance-templates offers the looks ──
+function onTheWay(widget, startOf, runningWord) {
+  return (data = {}, ctx = {}, opts = {}) => {
     const out = widget.build(data, ctx, opts);
-    if (!out.rows.length) return { empty: out.empty || empty };
+    if (!out.rows.length) return { empty: out.empty };
+    const now = ctx.now || Date.now();
     const list = out.rows.slice().sort((a, b) => (a.ready === b.ready ? (a.readyAt || 0) - (b.readyAt || 0) : a.ready ? -1 : 1));
-    const chip = (r) => (r.ready ? { text: "READY", tone: "ok" } : { text: r.countdown || "…", tone: "info" });
-    if (size === "s") {
-      const r = list[0], ready = list.filter((x) => x.ready).length;
-      return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(r.ready ? "Ready" : r.countdown || "…", { tone: r.ready ? "ok" : "", cap: `${r.name}${list.length > 1 ? ` · ${ready} of ${list.length} ready` : ""}` }) };
-    }
-    return { html: rows(list.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.qty ? `${r.qty}× ${r.name}` : r.name, chip: chip(r) }))) };
+    const pctOf = (r) => {
+      if (r.ready) return 100;
+      const s = startOf(data.farm, r);
+      return s && r.readyAt > s ? Math.min(100, Math.max(0, ((now - s) / (r.readyAt - s)) * 100)) : null;
+    };
+    const ready = list.filter((r) => r.ready).length, running = list.filter((r) => !r.ready);
+    const r0 = list[0], p0 = pctOf(r0);
+    const when = (r) => (r.ready ? "Ready" : r.countdown || "…");
+    return {
+      head: { value: when(r0), tone: r0.ready ? "ok" : "", ...(r0.iconHtml ? { hero: r0.iconHtml } : {}),
+        ...(p0 != null ? { ring: p0, ringTone: r0.ready ? "ok" : "info" } : {}),
+        cap: `${r0.name}${list.length > 1 ? ` · ${ready} of ${list.length} ready` : ""}` },
+      items: list.map((r) => { const p = pctOf(r); return { icon: r.iconHtml || "", name: r.qty ? `${r.qty}× ${r.name}` : r.name,
+        ...(r.readyAt ? { at: r.readyAt } : { chip: r.ready ? { text: "READY", tone: "ok" } : { text: r.countdown || "…", tone: "info" } }),
+        ...(p != null ? { pct: p } : {}) }; }),
+      tiles: [{ label: "ready", value: ready }, { label: runningWord, value: running.length },
+        ...(running.length ? [{ label: "next", value: running[0].countdown || "…" }] : []),
+        ...(running.length > 1 ? [{ label: "all done in", value: running[running.length - 1].countdown || "…" }] : [])],
+      foot: `${ready} ready · ${running.length} ${runningWord}`,
+    };
   };
 }
-for (const w of [craftingBox, crabTraps]) { w.sizes = ["s", "m"]; w.size = "s"; }
-craftingBox.glance = onTheWay(craftingBox, "The crafting box is idle.");
-crabTraps.glance = onTheWay(crabTraps, "Nothing in the traps.");
+// a job's start: the queue's startedAt (rows keep the queue's order as k); a trap's placedAt
+const jobStart = (farm, r) => ((craftingJobs(farm && farm.craftingBox)[r.k] || {}).startedAt || 0);
+const trapStart = (farm, r) => { const wt = ((((farm || {}).crabTraps || {}).trapSpots || {})[r.id] || {}).waterTrap; return wt && wt.placedAt ? toMs(wt.placedAt) : 0; };
+craftingBox.look = "icons-1";   // the whole queue as icons with the time under each
+craftingBox.glanceModel = onTheWay(craftingBox, jobStart, "crafting");
+crabTraps.look = "next";   // the soonest catch, big, with its countdown
+crabTraps.glanceModel = onTheWay(crabTraps, trapStart, "in traps");

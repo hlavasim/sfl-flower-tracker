@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { targetList as W } from "../../widgets/target-list.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
+import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 import { FLOWER_RECIPES, DOLL_RECIPES } from "../../core/data/recipes.mjs";
 import { CRUSTACEAN_RECIPES } from "../../core/data/crafting.mjs";
 import { COOKING_RECIPES_DATA } from "../../core/data/cooking.mjs";
@@ -124,13 +125,27 @@ test("every item in a recipe has its icon: dolls, crustaceans, dishes, flowers",
   assert.match(html(row("flowers", "Yellow Pansy")), /<i>Sunpetal Seed<\/i>Sunpetal Seed \+ <i>Sunflower<\/i>Sunflower/);
 });
 
-test("📱 glance: S = at the limit / all with a ring (done rows count even when hidden); M = the most missing", () => {
+test("📱 glance model: at the limit / all with a ring (done rows count even when hidden); items most missing first with progress", () => {
   const inv = all(Object.keys(DOLL_RECIPES), 10);
-  inv["Doll"] = "3.0";
-  const ctx = { inProgress: () => ({}), icon: (n) => `<i>${n}</i>` };
-  const s = W.glance({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10 }), "s").html;
-  const [, done, total] = s.match(/<div class="g-big">(\d+)<small>\/(\d+)<\/small><\/div><div class="g-cap">7 missing in total<\/div>/).map(Number);
-  assert.strictEqual(done, total - 1, "only Doll is short");
-  const m = W.glance({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10 }), "m").html;
-  assert.match(m, /<span class="g-ic"><i>Doll<\/i><\/span><div class="g-n">Doll<div>3 \/ 10<\/div><\/div><span class="g-v g-bad">−7<\/span>/);
+  inv["Doll"] = "3.0"; inv["Angler Doll"] = "8";
+  const ctx = { inProgress: () => ({ "Angler Doll": 1 }), icon: (n) => `<i>${n}</i>` };
+  const m = W.glanceModel({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10 }));
+  assert.deepStrictEqual({ ...m.head, ring: Math.round(m.head.ring) }, { value: 17, unit: "/19", ring: 89, ringTone: "accent", tone: "", cap: "8 missing in total" });
+  assert.strictEqual(m.items.length, 2, "hide done: only the short ones");
+  assert.deepStrictEqual(m.items[0], { icon: "<i>Doll</i>", name: "Doll", sub: "3 / 10", value: "−7", tone: "bad", pct: 30 });
+  assert.deepStrictEqual([m.items[1].sub, m.items[1].pct], ["8+1 / 10", 90]);
+  assert.deepStrictEqual(m.tiles.map((t) => [t.label, t.value]), [["at the limit", "17/19"], ["missing", 8], ["on the way", 1]]);
+  assert.match(renderLook(m, "number").html, /<div class="gx-num">17<small>\/19<\/small><\/div><div class="gx-cap">8 missing in total<\/div>/);
+  assert.match(renderLook(m, "icons-1").html, /<small class="gx-tag g-bad">−7<\/small>/);
+  assert.ok(looksFor(m).length >= 3);
+  // done rows shown → they come last, with a ✓
+  const shown = W.glanceModel({ farm: { inventory: inv } }, ctx, opts({ cat: "dolls", limit: 10, hideDone: false }));
+  assert.strictEqual(shown.items.length, 19);
+  assert.deepStrictEqual([shown.items[18].value, shown.items[18].tone, shown.items[18].pct], ["✓", "ok", 100]);
+  // everything at the limit: the headline still counts them, no items
+  const full = W.glanceModel({ farm: { inventory: all(Object.keys(CRUSTACEAN_RECIPES), 5) } }, {}, opts({ cat: "crabs", limit: 5 }));
+  assert.deepStrictEqual([full.head.value, full.head.cap, full.head.ringTone, full.items.length], [16, "all at the limit ✓", "ok", 0]);
+  assert.match(W.glanceModel({}, {}, opts({})).empty, /No farm data/);
+  assert.match(W.glanceModel({ farm: { inventory: {} } }, {}, opts({ cat: "foods" })).empty, /Pick lists or dishes/);
+  assert.strictEqual(W.glance, undefined, "the hand-written face is gone");
 });
