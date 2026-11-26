@@ -16424,6 +16424,12 @@
       _wOpenBoard(__widgets.doc().boards[0].id);
     };
     let _boardSeq = 0;
+    // What every page does when the farm arrives (main): the bed count and the boosted grow times.
+    function _wApplyFarmFlowers(farm) {
+      if (!farm) return;
+      FLOWER_BEDS = Math.max(1, Object.keys((farm.flowers && farm.flowers.flowerBeds) || {}).length);
+      applyFlowerBoosts(computeFlowerMultiplier(detectFlowerBoosts(farm)));
+    }
     setInterval(() => {
       let turned = false;
       for (const el of document.querySelectorAll(".g-at[data-at]")) {
@@ -16504,6 +16510,8 @@
         const focusAt = typeof __wFocusKey === "function" ? __wFocusKey(document.activeElement) : null;
         const board = __widgets.doc().boards.find((b) => b.id === boardId);   // read at paint time
         if (!board) return;
+        // the flower plan widgets read the bed count and grow times the pages set from the farm
+        _wApplyFarmFlowers(((__store.peek({ res: "farm", farm: FARM_ID }) || {}).data || {}).farm);
         const liveCols = _wLiveCols(app, __widgets.colsOf(board.id));
         const frames = board.items.map((it) => {
           const o = __widgets.itemOpts(it);   // this copy's options pick its data (needs(farm, opts))

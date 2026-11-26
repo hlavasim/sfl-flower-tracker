@@ -206,3 +206,8 @@ test("the gallery has a search over title, page and type; pages it does not list
   assert.match(SRC, /c\.hidden = !!q && !c\.dataset\.search\.includes\(q\);/);
   assert.match(SRC, /\[\.\.\._wGalleryCats, \["", "OTHER"\]\]/);
 });
+
+test("the board applies the farm's flower beds and grow boosts (as the pages do), so the flower plan widgets use them", () => {
+  assert.match(SRC, /function _wApplyFarmFlowers\(farm\) \{\s*if \(!farm\) return;\s*FLOWER_BEDS = Math\.max\(1, Object\.keys\(\(farm\.flowers && farm\.flowers\.flowerBeds\) \|\| \{\}\)\.length\);\s*applyFlowerBoosts\(computeFlowerMultiplier\(detectFlowerBoosts\(farm\)\)\);/);
+  assert.match(SRC, /_wApplyFarmFlowers\(\(\(__store\.peek\(\{ res: "farm", farm: FARM_ID \}\) \|\| \{\}\)\.data \|\| \{\}\)\.farm\);/);
+});
