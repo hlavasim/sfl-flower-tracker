@@ -292,6 +292,17 @@ export const API_SPEC = {
               "leaves the real streak state in effect.",
           },
           {
+            name: "fishReels",
+            in: "query",
+            required: false,
+            schema: { type: "string", enum: ["1"] },
+            description:
+              "section=cooking only. Set to \"1\" to price every fish as one plain cast — " +
+              "rod plus the cheapest no-chum worm it bites on — divided by the fish a cast " +
+              "yields (skills and NFTs), ignoring the odds of a named fish, chum and Fish " +
+              "Market baits. Absent: fish are priced as before.",
+          },
+          {
             name: "explain",
             in: "query",
             required: false,
