@@ -5476,7 +5476,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.51</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.53</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5503,6 +5503,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.53", items: [
+          { t: "fix", text: "The \u201cstale: Farm snapshots\u201d warning no longer fires on a quiet night: the collector records every run, and the check uses its last successful run (an unchanged farm is not stored again). Runs that fail now say why." },
+        ] },
+        { ver: "v6.52", items: [
+          { t: "fix", text: "Owner-private data (SPEKULACE trade log, egg cost basis, venue balances, repay plan, synced settings) can no longer be read without the write token; the season calendar and the LP board stay public." },
+        ] },
         { ver: "v6.51", items: [
           { t: "fix", text: "FISHING: ticking a worm + chum route in the Marvel planner crashed the page (and stayed crashed after a reload)." },
           { t: "fix", text: "Settings shared between devices: a setting deleted on one device no longer comes back from another; a change that could not be sent waits and is sent again (also when the tab closes), and a pull never overwrites it." },
@@ -25405,8 +25411,9 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       await Promise.all([
         // Shape-checked: a wrong answer must show as an error panel, not crash the render.
         get("cal", _specApi("calendar"), (j) => { if (!j || !j.current || !Array.isArray(j.items)) throw new Error((j && j.error) || "neplatná odpověď"); return j; }),
-        get("trades", _specApi("trades"), (j) => { if (!j || !Array.isArray(j.trades)) throw new Error((j && j.error) || "neplatná odpověď"); return j.trades; }),
-        get("eggs", _specApi("eggs"), (j) => { if (!j || !Array.isArray(j.snapshots)) throw new Error((j && j.error) || "neplatná odpověď"); return j.snapshots; }),
+        // Owner-only reads (the write token): refused, the panel shows the error instead of data.
+        get("trades", _specApi("trades"), (j) => { if (!j || !Array.isArray(j.trades)) throw new Error((j && j.error) || "neplatná odpověď"); return j.trades; }, (u) => writeFetch(u, undefined, true)),
+        get("eggs", _specApi("eggs"), (j) => { if (!j || !Array.isArray(j.snapshots)) throw new Error((j && j.error) || "neplatná odpověď"); return j.snapshots; }, (u) => writeFetch(u, undefined, true)),
         // The ledger is an owner-only read; refused, the skim tile shows a 🔒 link instead of 0.
         get("ledger", `/api/farm-history?type=btc-tx&farm=${FARM_ID}`, (j) => j.transactions || [], (u) => writeFetch(u, undefined, true)),
         get("btc", `/api/proxy?url=${encodeURIComponent("https://api.exchange.coinbase.com/products/BTC-USD/stats")}`, (j) => {
@@ -28300,7 +28307,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     let _invBalancesErr = null;   // a failed read shows the Yakke row as "—", not as "not set"
     async function invLoadBalances(farmId) {
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-balance`);
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=venue-balance`, undefined, true);
         if (!r.ok) throw new Error(`venue-balance ${r.status}`);
         const j = await r.json();
         _invBalances = {};
@@ -28419,7 +28426,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     let _invPlan = null;   // { start_date, rate, period } or null
     async function invLoadRepayPlan(farmId) {
       try {
-        const r = await fetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=repay-plan`);
+        const r = await writeFetch(`${INV_API_BASE}?farm=${encodeURIComponent(farmId)}&type=repay-plan`, undefined, true);
         if (r.ok) _invPlan = (await r.json()).plan || null;
       } catch (e) { /* the card offers to create one */ }
     }
@@ -30873,7 +30880,7 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     async function _prefPull() {
       const farm = _prefFarm();
       if (!farm) return false;
-      const r = await fetch(`/api/farm-history?type=prefs&farm=${encodeURIComponent(farm)}`);
+      const r = await writeFetch(`/api/farm-history?type=prefs&farm=${encodeURIComponent(farm)}`, undefined, true);
       if (!r.ok) return false;
       const server = (await r.json()).prefs || {};
       let changed = false;
