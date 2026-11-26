@@ -17,6 +17,11 @@ import { worldIslands, worldSkillPoints } from "./world-dist.mjs";
 import { targetList } from "./target-list.mjs";
 import { flowersNeeds, flowerBeds } from "./flowers.mjs";
 import { crabTraps, craftingBox } from "./crafting.mjs";
+// POWER, NODES, ROI, SHRINES
+import { POWER_WIDGETS } from "./power.mjs";
+import { NODES_WIDGETS } from "./nodes.mjs";
+import { ROI_WIDGETS } from "./roi.mjs";
+import { SHRINES_WIDGETS } from "./shrines.mjs";
 
 export const WIDGETS = {
   [fishingAgeNow.type]: fishingAgeNow,
@@ -35,4 +40,6 @@ export const WIDGETS = {
   [flowerBeds.type]: flowerBeds,
   [crabTraps.type]: crabTraps,
   [craftingBox.type]: craftingBox,
+  // POWER, NODES, ROI, SHRINES
+  ...Object.fromEntries([...POWER_WIDGETS, ...NODES_WIDGETS, ...ROI_WIDGETS, ...SHRINES_WIDGETS].map((w) => [w.type, w])),
 };

@@ -287,7 +287,11 @@ test("F a delivery item is priced one way: production cost first, then market, t
 test("F the Shrines page prices on Power's rate, Oil and efficiency — no constants of its own", () => {
   const body = SRC.slice(SRC.indexOf("async function renderShrines("), SRC.indexOf("async function renderBuds("));
   assert.ok(!/coinsPerSFL:\s*320/.test(body.slice(0, body.indexOf("function _shrineMarginalSflPerDay"))), "no hard-coded 320 coins/FLOWER");
-  assert.ok(/section=power/.test(body), "prices, Oil and rates from section=power");
-  assert.ok(/section=eff/.test(body), "efficiency from section=eff, the Power/Roadmap measurement");
+  // the page renders the shrines widget, whose needs load section=power and section=eff
+  assert.ok(/__widgets\.loadData\("shrines-roi"/.test(body) && /renderPage\("shrines-roi"/.test(body), "the page shows the shrines widget");
+  const W = readFileSync(new URL("../../widgets/shrines.mjs", import.meta.url), "utf8");
+  assert.ok(/section: "power"/.test(W), "prices, Oil and rates from section=power");
+  assert.ok(/section: "eff"/.test(W), "efficiency from section=eff, the Power/Roadmap measurement");
+  assert.ok(/_shrineExchangeRates = power\.exchangeRates/.test(body), "Power's coin rate");
   assert.ok(!/_shrineBuildEffMap|SHRINE_FALLBACK_EFF/.test(SRC), "the page's own 14-day efficiency is gone");
 });
