@@ -27,6 +27,22 @@ test("calendar reads one price per item per UTC day, not every change", async ()
   assert.match(sql, /captured_at DESC/);
 });
 
+test("ticket-weeks picks the week's last snapshot by time first, and builds the slim farm only for those rows", async () => {
+  // It built the JSON from all ~2,200 snapshots (each ~240 KB) before DISTINCT ON kept 40: 12.5-21 s,
+  // sometimes past the 20 s timeout. Picking the ids first: 0.3 s, the same 40 rows.
+  const fake = usePool(() => [{ wk: "2026-11-23", ts: "1795000000000", farm: { bounties: {} } }]);
+  const res = mockRes();
+  await handler({ method: "GET", query: { type: "ticket-weeks", farm: "155498" } }, res);
+  assert.equal(res._status, 200);
+  assert.deepEqual(res._json.weeks, [{ wk: "2026-11-23", ts: 1795000000000, farm: { bounties: {} } }]);
+  const sql = fake.sqlMatching(/FROM farm_snapshots/)[0].sql.replace(/\s+/g, " ");
+  const pick = sql.match(/WITH pick AS \((.*?)\) SELECT/);
+  assert.ok(pick, "ids picked in a CTE");
+  assert.match(pick[1], /SELECT DISTINCT ON \(date_trunc\('week', captured_at\)\) id FROM farm_snapshots WHERE farm_id = \$1/);
+  assert.doesNotMatch(pick[1], /game_data/, "the pick never touches game_data");
+  assert.match(sql, /WHERE id IN \(SELECT id FROM pick\)/);
+});
+
 test("the day-last reduction gives the calendar exactly what every change gives it", () => {
   // Deterministic pseudo-random intraday ticks over ~200 days for two items.
   let seed = 7;

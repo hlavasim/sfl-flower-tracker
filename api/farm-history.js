@@ -584,8 +584,15 @@ export default async function handler(req, res) {
       if (!Number.isFinite(farm) || !ALLOWED_FARMS.has(farm)) return res.status(400).json({ error: "disallowed farm" });
       const names = ["Gold Egg", "Golden Sheep", "Golden Cow", "Igloo", "Hammock", "Heart Air Balloon"];
       const pick = (path) => `jsonb_strip_nulls(jsonb_build_object(${names.map((n) => `'${n}', game_data${path}->'${n}'`).join(", ")}))`;
+      // The week's last snapshot is picked by time alone first (the index), and the slim farm is
+      // built only for those ~40 rows: building it inside the DISTINCT ON read every snapshot's
+      // ~240 KB game_data (2,200 of them) - 12.5-21 s against the 20 s timeout; this is 0.3 s.
       const r = await pool.query(
-        `SELECT DISTINCT ON (date_trunc('week', captured_at)) to_char(date_trunc('week', captured_at), 'YYYY-MM-DD') AS wk,
+        `WITH pick AS (
+           SELECT DISTINCT ON (date_trunc('week', captured_at)) id
+             FROM farm_snapshots WHERE farm_id = $1
+            ORDER BY date_trunc('week', captured_at), captured_at DESC)
+         SELECT to_char(date_trunc('week', captured_at), 'YYYY-MM-DD') AS wk,
                 (extract(epoch from captured_at) * 1000)::bigint AS ts,
                 jsonb_build_object(
                   'bounties', game_data->'bounties',
@@ -606,8 +613,8 @@ export default async function handler(req, res) {
                   'interior', jsonb_build_object('ground', jsonb_build_object('collectibles', ${pick("->'interior'->'ground'->'collectibles'")}),
                                                  'level_one', jsonb_build_object('collectibles', ${pick("->'interior'->'level_one'->'collectibles'")}))
                 ) AS farm
-           FROM farm_snapshots WHERE farm_id = $1
-          ORDER BY date_trunc('week', captured_at), captured_at DESC`, [farm]);
+           FROM farm_snapshots WHERE id IN (SELECT id FROM pick)
+          ORDER BY date_trunc('week', captured_at)`, [farm]);
       res.setHeader("Cache-Control", "public, max-age=900");
       return res.status(200).json({ weeks: r.rows.map((x) => ({ wk: x.wk, ts: Number(x.ts), farm: x.farm })) });
     } catch (err) {
