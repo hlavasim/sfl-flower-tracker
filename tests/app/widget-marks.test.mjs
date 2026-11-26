@@ -130,13 +130,16 @@ test("cost to #1: greedy kitchen simulation closes the gap or says it cannot", (
   assert.match(marksCostFirst.build({ marks: MARKS }, ctx).empty, /live farm/);
 });
 
-test("projections: sorted by current + optimal, total with the pet week, a stacked bar", () => {
+test("projections: sorted by the projected total (current + optimal + the pet week), a stacked bar", () => {
   const out = marksProjections.build({ marks: MARKS }, ctx);
   assert.deepStrictEqual(out.rows.map((r) => r.player_name), ["Top", "Me", "<b>x</b>"]);
   const me = out.rows[1];
   assert.strictEqual(me.projected, 8500);
   assert.strictEqual(me.curPct.toFixed(1), "38.5");
   assert.match(table(marksProjections, out), /class="v-mkt-stack"/);
+  // ranked by the total shown: 1000 + 500 pet beats 1100 without one
+  const pets = { ...MARKS, players: [{ farm_id: 7, player_name: "B", marks: 1100, resources: {} }, { farm_id: 8, player_name: "A", marks: 1000, pet_weekly: 500, resources: {} }] };
+  assert.deepStrictEqual(marksProjections.build({ marks: pets }, ctx).rows.map((r) => [r.n, r.player_name, r.projected]), [[1, "A", 1500], [2, "B", 1100]]);
 });
 
 test("burn rate: players with a previous snapshot, per-item change with icons and signals", () => {

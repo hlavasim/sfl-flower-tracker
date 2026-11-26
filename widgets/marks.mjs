@@ -480,11 +480,12 @@ export const marksProjections = {
 
   build({ marks } = {}, ctx = {}) {
     if (!marks || !Array.isArray(marks.players)) return { rows: [], footer: "", empty: NO_MARKS };
-    const projected = marksBoard(marks, ctx).players.map((p) => ({ ...p, total: (p.marks || 0) + (p.marks_optimal || 0) }))
+    // ranked by the projected total shown: current + kitchen optimal + pet weekly
+    const projected = marksBoard(marks, ctx).players.map((p) => ({ ...p, total: (p.marks || 0) + (p.marks_optimal || 0) + (p.pet_weekly || 0) }))
       .sort((a, b) => b.total - a.total);
     const maxProj = projected.length > 0 ? projected[0].total : 1;
     const rows = projected.map((p, i) => ({ ...p, n: i + 1, me: isMe(p, ctx.farmId), optimal: Math.round(p.marks_optimal || 0),
-      petWk: Math.round(p.pet_weekly || 0), projected: Math.round(p.total + (p.pet_weekly || 0)),
+      petWk: Math.round(p.pet_weekly || 0), projected: Math.round(p.total),
       curPct: p.total > 0 ? (p.marks || 0) / maxProj * 100 : 0, optPct: p.total > 0 ? (p.marks_optimal || 0) / maxProj * 100 : 0,
       petPct: p.total > 0 ? (p.pet_weekly || 0) / maxProj * 100 : 0 }));
     const footer = `<div class="v-dim"><span class="v-mkt-key v-mkt-s1"></span> current · <span class="v-mkt-key v-mkt-s2"></span> kitchen optimal · ` +
