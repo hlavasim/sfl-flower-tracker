@@ -234,3 +234,19 @@ test("at most four requests are on the network at once; the rest wait their turn
   assert.ok(peak <= 4, `peak ${peak}`);
   assert.ok(peak >= 2, "still in parallel, just capped");
 });
+
+test("the 7-day farm history is fetched once and shared by ROADMAP, ASCENSION and every computeHist section", async () => {
+  const f = fakeFetch({ "/api/farm-history?farm=": { snapshots: [{ captured_at: "t", diff: { "_h.crops": 1, x: 2 } }] },
+    "type=ticket-weeks": { weeks: [] }, "budfloors=1": { items: [] },
+    "/api/compute": (url, init) => ({ data: { body: init.body ? JSON.parse(init.body) : null } }) });
+  const s = createStore({ fetch: f });
+  await Promise.all([
+    s.get({ res: "computeHist", farm: "7", section: "power" }),
+    s.get({ res: "computeHist", farm: "7", section: "eff" }),
+    s.get({ res: "ascension", farm: "7", grinx: false, recipes: "{}" }),
+    s.get({ res: "roadmap", farm: "7" }),
+  ]);
+  assert.strictEqual(f.calls.filter((c) => c.url.includes("/api/farm-history?farm=")).length, 1, "one history fetch for all four");
+  const asc = f.calls.find((c) => c.url.includes("section=ascension"));
+  assert.deepStrictEqual(JSON.parse(asc.body).snapshots, [{ captured_at: "t", diff: { "_h.crops": 1 } }]);
+});

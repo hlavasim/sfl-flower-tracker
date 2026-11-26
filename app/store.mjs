@@ -134,14 +134,9 @@ export const RESOURCES = {
   ascension: {
     persist: true,
     ttl: 5 * 60_000,
-    load: async ({ farm, grinx, recipes }, { json }) => {
-      let snapshots = [];
-      try {
-        const from = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10), to = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-        const h = await json(`/api/farm-history?farm=${enc(farm)}&from=${from}&to=${to}&limit=2000`);
-        snapshots = (h.snapshots || []).map((sn) => ({ captured_at: sn.captured_at,
-          diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));
-      } catch { /* no history: the plan runs on theoretical production */ }
+    load: async ({ farm, grinx, recipes }, { json, get }) => {
+      // the shared 7-day history ([] when there is none: the plan runs on theoretical production)
+      const snapshots = (await get({ res: "roadmapHistory", farm })).data || [];
       const url = `/api/compute?farm=${enc(farm)}&section=ascension&grinx=${grinx ? 1 : 0}&max=10&recipes=${enc(recipes || "{}")}`;
       const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ snapshots }) };
       for (let attempt = 1; ; attempt++) {
@@ -152,9 +147,11 @@ export const RESOURCES = {
       }
     },
   },
-  // ROADMAP: the last 7 days of farm-history slimmed to the _h.* diff slices section=roadmap
-  // measures the harvest efficiency from ([] when there is no history).
+  // The last 7 days of farm-history slimmed to the _h.* diff slices the measured harvest efficiency
+  // comes from ([] when there is no history). ONE fetch (~2 s, ~460 snapshots) shared by ROADMAP,
+  // ASCENSION / NODES and every computeHist section (POWER, SHRINES…) — each used to fetch its own.
   roadmapHistory: {
+    persist: true,
     ttl: 10 * 60_000,
     load: async ({ farm }, { json }) => {
       const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -209,13 +206,7 @@ export const RESOURCES = {
     ttl: 5 * 60_000,
     load: async ({ farm, section, q = {}, weeks = false }, { json, get }) => {
       if (!section) throw new Error("computeHist: no section");
-      const day = (ms) => new Date(ms).toISOString().slice(0, 10);
-      let snapshots = [];
-      try {
-        const h = await json(`/api/farm-history?farm=${enc(farm)}&from=${day(Date.now() - 7 * 86400000)}&to=${day(Date.now() + 86400000)}&limit=2000`);
-        snapshots = (h.snapshots || []).map((sn) => ({ captured_at: sn.captured_at,
-          diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));
-      } catch { snapshots = []; }
+      const snapshots = (await get({ res: "roadmapHistory", farm })).data || [];   // the shared 7-day history
       const w = weeks ? (await get({ res: "ticketWeeks", farm })).data || [] : [];
       const extra = Object.keys(q).sort().map((k) => `&${enc(k)}=${enc(q[k])}`).join("");
       const url = `/api/compute?farm=${enc(farm)}&section=${enc(section)}${extra}`;

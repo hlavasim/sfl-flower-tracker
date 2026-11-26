@@ -14474,16 +14474,9 @@
     // farm-history rows slimmed to the _h.* diff slices section=roadmap/eff consume.
     let _roadmapSnapshotsCache = null;
     let _roadmapServer = null; // last section=roadmap payload { eff, currentProd, startIncome, sim }
+    // the store's shared 7-day history (one ~2 s fetch for the whole app, kept 10 min) — not a second copy
     async function _roadmapFetchHistorySlim() {
-      try {
-        const fromD = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-        const toD = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-        const r = await fetch(`/api/farm-history?farm=${FARM_ID}&from=${fromD}&to=${toD}&limit=2000`);
-        if (!r.ok) return [];
-        const d = await r.json();
-        return (d.snapshots || []).map(sn => ({ captured_at: sn.captured_at,
-          diff: Object.fromEntries(Object.entries(sn.diff || {}).filter(([k]) => k.startsWith("_h."))) }));
-      } catch { return []; }
+      try { return (await __store.get({ res: "roadmapHistory", farm: FARM_ID })).data || []; } catch { return []; }
     }
 
 
