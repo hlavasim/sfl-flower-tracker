@@ -3249,7 +3249,7 @@
   <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
-  <button id="wide-toggle" title="Roztáhnout stránku na šířku okna (ultrawide) / zpět na úzký sloupec" onclick="(function(){var on=document.body.classList.toggle('wide');try{localStorage.setItem('sfl_wide',on?'1':'0')}catch(e){}})()">↔</button>
+  <button id="wide-toggle" title="Stretch the page to the window width (ultrawide) / back to a narrow column" onclick="(function(){var on=document.body.classList.toggle('wide');try{localStorage.setItem('sfl_wide',on?'1':'0')}catch(e){}})()">↔</button>
   <div class="container">
     <div id="nav-bar"></div>
     <div id="app">
@@ -5904,8 +5904,8 @@
       html += `</div></div>`;
       html += `<button class="nav-link nav-farm" onclick="changeFarm()" title="change the farm">#${escHTML(FARM_ID)}</button>`;
       html += '<div class="nav-zoom">';
-      html += '<button class="zoom-btn" onclick="changeZoom(-1)" title="Zmenšit text">A-</button>';
-      html += '<button class="zoom-btn" onclick="changeZoom(1)" title="Zvětšit text">A+</button>';
+      html += '<button class="zoom-btn" onclick="changeZoom(-1)" title="Smaller text">A-</button>';
+      html += '<button class="zoom-btn" onclick="changeZoom(1)" title="Larger text">A+</button>';
       html += '</div>';
       html += '<button class="nav-link help-btn" onclick="openHelp()">?</button>';
       html += '</div>';
@@ -10076,7 +10076,7 @@
       window._wRerender = () => { if (getPage() === "crustaceans" && cachedFarmData) renderCrustaceans(cachedFarmData); };
       window._wRefresh = refresh;
       const _wFresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
-      if (typeof __widgets === "undefined") html += _wMissing("Korýši");
+      if (typeof __widgets === "undefined") html += _wMissing("Crustaceans");
       else {
         html += __widgets.renderPage("crab-traps", { data: { farm: data.farm }, ctx: _wCtx("crab-traps"), fresh: _wFresh });
         html += __widgets.renderPage("target-list", { data: { farm: data.farm }, ctx: _wCtx("target-list"), fresh: _wFresh, variant: "crabs", force: { cat: "crabs" } });
