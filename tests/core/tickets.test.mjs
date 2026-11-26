@@ -91,6 +91,24 @@ test("animal bounties cost the feed to raise a replacement plus the slot's outpu
   assert.equal(gcow.feed, 0); assert.equal(gcow.golden, true);
 });
 
+test("a Pig bounty (Cave Dwellers) is priced by its Slop feed and never throws — it took the whole TICKETY page down", () => {
+  const withPig = (req) => farm({ bounties: { requests: [req], completed: [] } });
+  const pig = (level) => buildTicketsSection(withPig({ id: "p1", name: "Pig", level, items: { "Shiny Feather": 4 } }),
+    { ...prices, marketValue: { ...(prices.marketValue || {}), Sunflower: 0.001, Wheat: 0.02 } }, { now: NOW, animalNet: { Cow: 0.5 } })
+    .sources.find((s) => s.label === `Pig L${level}`);
+  const p3 = pig(3), p6 = pig(6);
+  assert.ok(p3 && p3.feed > 0, "slop feed priced");
+  assert.ok(p6.feed > p3.feed, "a higher level costs more feed");
+  assert.equal(p3.slot, 0, "a pig needs a pen slot, not a barn slot");
+  assert.equal(p3.golden, false);
+});
+
+test("an animal the model does not know yet is left unpriced instead of throwing", () => {
+  const f = farm({ bounties: { requests: [{ id: "z", name: "Dragon", level: 2, items: { "Shiny Feather": 1 } }], completed: [] } });
+  const s = buildTicketsSection(f, prices, { now: NOW }).sources.find((x) => x.animal === "Dragon");
+  assert.equal(s.cost, null);
+});
+
 test("a lot is priced at today's floor after the fee, a joke floor falls back to the last sale", () => {
   const d = buildTicketsSection(farm(), prices, { now: NOW, floors: {
     "Salt Worker Gnome": { floor: 2488, lastSalePrice: 2200 }, "Rice Shirt": { floor: 99999999999999, lastSalePrice: 1200 } } });

@@ -18,7 +18,7 @@ import {
 import { findCollectible, ANIMAL_LEVELS, GOLDEN_ANIMALS, isWearableEquipped, calcSkillPointCost } from "../engine/power-helpers.mjs";
 import { FEED_RECIPES, FEED_QTY, FEED_XP_TABLE } from "../engine/power-costs.mjs";
 import { CHORE_TASKS } from "../engine/chore-tasks.mjs";
-import { SIDE_MODELS, sideValue } from "../engine/side-values.mjs";
+import { SIDE_MODELS, sideValue, PIG_LEVELS, SLOP_XP, SLOP_CROPS } from "../engine/side-values.mjs";
 
 const DAY = 86400000;
 const WEEKLY_BOUNTY_BONUS = 100;
@@ -194,6 +194,10 @@ function choreCost(text, prices, coinsPerSFL) {
  * (a level-up puts the animal to sleep for 24 h), so the slot is tied up ~`level` days.
  */
 function raiseCost(type, level, farm, prices, slotNetPerDay) {
+  if (type === "Pig") return pigRaiseCost(level, prices);
+  // An animal the model has no levels for yet: unpriced (cost null), never a throw — a Pig
+  // bounty once took the whole TICKETY page down.
+  if (!ANIMAL_LEVELS[type]) return { feed: null, slot: null, golden: false, total: null, days: level };
   const golden = Object.entries(GOLDEN_ANIMALS).some(([item, t]) => t === type && findCollectible(farm, item).length > 0);
   let feed = 0;
   if (!golden) {
@@ -211,6 +215,30 @@ function raiseCost(type, level, farm, prices, slotNetPerDay) {
   }
   const slot = Math.max(0, slotNetPerDay || 0) * level * RAISE_SLOT_LOSS;
   return { feed, slot, golden, total: feed + slot, days: level };
+}
+
+/*
+ * A Pig (Cave Dwellers) is fed Slop, not animal feed: per level the XP to the next one
+ * (PIG_LEVELS) at the cheapest Slop per XP for that level, a Slop costing its cheapest crop
+ * (side-values' pig model). It lives in the pigpen, so no barn or coop slot is tied up.
+ */
+function pigRaiseCost(level, prices) {
+  let feed = 0;
+  for (let lv = 0; lv < level; lv++) {
+    const need = lv >= 15 ? PIG_LEVELS[15] - PIG_LEVELS[14] : PIG_LEVELS[lv + 1] - PIG_LEVELS[lv];
+    const row = SLOP_XP.filter(([from]) => lv >= from).pop()[1];
+    let best = Infinity;
+    for (const [slop, xp] of Object.entries(row)) {
+      let unit = Infinity;
+      for (const [crop, q] of Object.entries(SLOP_CROPS[slop])) {
+        const v = itemValue(crop, q, prices, 0) || 0;
+        if (v > 0) unit = Math.min(unit, v);
+      }
+      if (xp > 0 && isFinite(unit)) best = Math.min(best, unit / xp);
+    }
+    if (isFinite(best)) feed += need * best;
+  }
+  return { feed, slot: 0, golden: false, total: feed, days: level };
 }
 
 /**
