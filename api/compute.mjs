@@ -371,6 +371,8 @@ async function _handler(req, res) {
     const settings = {
       savedRecipes: req.query.recipes ? JSON.parse(req.query.recipes) : {},
       petSimulate: req.query.petSimulate === "1",
+      // BUMPKIN "ryby jen za reely": every fish priced as one plain cast / fish per cast
+      fishReelsOnly: req.query.fishReels === "1",
       coinsPerSFL,
       // section=prices only (task-TRACE3): attaches marketTrace/productionTrace when "1".
       explain: req.query.explain === "1",

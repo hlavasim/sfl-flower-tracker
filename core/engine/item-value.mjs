@@ -421,6 +421,32 @@ function _pcInner(itemName, p2p, coinsPerSFL, skills, _seen, extras, trace) {
   }
 
   /*
+   * 2a. Fish "jen za reely" (extras.fishReelsOnly, the BUMPKIN switch): one cast — rod + the plain
+   * worm the fish bites on, the cheapest of its no-chum baits — divided by the fish a cast yields.
+   * No odds, no chum, no Fish Market bait: what cooking costs when you cook whatever you happen to
+   * catch on your daily reels, instead of hunting the one fish a recipe names.
+   */
+  if (extras && extras.fishReelsOnly && FISH_DATA[itemName]) {
+    const paths = FISH_DATA[itemName].paths || [];
+    const plain = paths.filter((p) => !p.chum);
+    const baits = [...new Set((plain.length ? plain : paths).map((p) => p.bait))];
+    let bait = null, baitSFL = 0;
+    for (const b of baits) {
+      const c = computeBaitCostSFL(b, p2p);
+      if (c > 0 && (bait === null || c < baitSFL)) { bait = b; baitSFL = c; }
+    }
+    const rod = computeRodCostSFL(p2p, coinsPerSFL, skills);
+    if (bait && rod > 0) {
+      const tier = FISH_TIER_MAP[itemName];
+      const yieldPerCast = (tier && ((extras.fishYieldByTier || {})[tier])) || 1;
+      const castPrice = rod + baitSFL;
+      const price = castPrice / yieldPerCast;
+      if (trace) emit(trace, { item: itemName, method: "reel only", formula: `(${rod.toFixed(5)} rod + ${baitSFL.toFixed(5)} ${bait}) / ${yieldPerCast} fish per cast`, value: price });
+      return { price, source: "fish-reel", via: bait, castPrice, yieldPerCast };
+    }
+  }
+
+  /*
    * 2. Fish, for the Aging Shed (extras.fishAsCaught) — how it is actually GOT, not a rod price.
    *
    * There are two ways to end up holding a named fish, and which is cheaper is not a matter of
