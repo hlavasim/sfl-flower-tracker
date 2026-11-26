@@ -21,6 +21,7 @@ function db(state) {
     if (/SELECT payload FROM world_agg WHERE gen = \$1/.test(sql)) { const h = agg.get(p.join("|")); return h ? [{ payload: h }] : []; }
     if (/INSERT INTO world_agg/.test(sql)) { agg.set([p[0], p[1], p[2]].join("|"), JSON.parse(p[3])); return []; }
     if (/DELETE FROM world_agg/.test(sql)) return [];
+    if (/^(BEGIN|COMMIT|ROLLBACK)$|^SET LOCAL statement_timeout/.test(sql)) return [];
     if (/FROM farm_world/.test(sql)) { scans++; return [COUNTS]; }
     throw new Error("unexpected SQL: " + sql);
   });
@@ -28,6 +29,16 @@ function db(state) {
 }
 
 beforeEach(() => _resetWorldGenCache());
+
+test("stats: the once-a-day scan gets a longer statement timeout, only inside its own transaction", async () => {
+  const d = db({ dump_path: "2026-11-26/active.jsonl.gz", complete: true });
+  await handleWorld(d.pool, { mode: "stats" });
+  const sqls = d.pool.calls.map((c) => c.sql);
+  const set = sqls.findIndex((s) => /SET LOCAL statement_timeout/.test(s));
+  const scan = sqls.findIndex((s) => /FROM farm_world/.test(s));
+  assert.ok(sqls.indexOf("BEGIN") >= 0 && sqls.indexOf("BEGIN") < set && set < scan, "BEGIN, SET LOCAL, then the scan");
+  assert.ok(sqls.indexOf("COMMIT") > scan);
+});
 
 test("stats: one scan of farm_world, cached for the dump; the same shape as before", async () => {
   const d = db({ dump_path: "2026-11-25/active.jsonl.gz", complete: true });
