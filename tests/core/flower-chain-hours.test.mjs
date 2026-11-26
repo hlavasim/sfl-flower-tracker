@@ -34,5 +34,9 @@ test("the shrine renew table asks for the owned effects by a function that exist
   // shrine's renew value was blank.
   const page = readFileSync(new URL("../../flowers.html", import.meta.url), "utf8");
   assert.ok(!page.includes("getOwnedEffects("));
-  assert.match(page, /_shrineMarginalSflPerDay\(sh, ps\.capacity, ps\.p2pPrices \|\| \{\}, roadmapOwnedEffects\(sh\.catId\), null\)/);
+  // the rows take owned(cat); the ROADMAP page hands in roadmapOwnedEffects (a board copy derives it
+  // from its payload's boostItems)
+  assert.match(page, /_shrineMarginalSflPerDay\(sh, ps\.capacity, ps\.p2pPrices \|\| \{\}, owned\(sh\.catId\), null\)/);
+  assert.match(page, /roadmapExpiredRows\(powerState, roadmapOwnedEffects\)/);
+  assert.match(page, /owned = owned \|\| \(\(cat\) => \(ps\.boostItems \|\| \[\]\)\.filter\(\(b\) => b\.has && !b\.isDisabled\)/);
 });
