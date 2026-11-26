@@ -2690,6 +2690,9 @@
     .w-more { color: var(--text-dim); padding-top: 2px; }
     .w-table tr.w-row-hl { background: rgba(255,200,80,0.12); }
     .w-table tr.w-row-click { cursor: pointer; }
+    .w-table tr.w-st-ready { background: rgba(80,200,120,0.07); }
+    .w-table .dash-detail { color: var(--text-dim); font-size: 0.9em; }
+    .w-filter { margin-bottom: 6px; } .w-filter-h { color: var(--sunpetal); margin-bottom: 2px; }
     .w-table tr.w-row-click:hover { background: rgba(255,255,255,0.04); }
     .w-error { color: var(--red); }
     /* the settings popover: floats under the cog, never pushes the table down */
@@ -9769,6 +9772,7 @@
       const farm = data.farm;
       const actions = parseDashboardActions(farm);
       const now = Date.now();
+      window._wRerender = () => { if (getPage() === "dashboard" && cachedFarmData) renderDashboard(cachedFarmData); };
 
       const ready = actions.filter(a => a.status === "ready");
       const upcoming = actions.filter(a => a.status === "upcoming");
@@ -9800,6 +9804,7 @@
           <button class="dash-toggle-btn ${_showFaction ? "on" : ""}" onclick="dashToggleFaction()">
             ${_showFaction ? "☑" : "☐"} Show faction items (Goblin NPCs, Mark rewards)
           </button>
+          ${_wPinBtn("dash-actions", "Co je hotové")}
         </div>
         ${_dashVoicePanelHtml()}
       </div>`;
@@ -19234,8 +19239,16 @@
       if (type === "leveling-ladder") {
         try { return { savedLeveling: JSON.parse(localStorage.getItem("sfl_leveling") || "null") }; } catch (e) { return {}; }
       }
+      if (type === "dash-actions") return { dashActions: parseDashboardActions, countdown: dashFormatCountdown };
       return {};
     }
+    // 📌 on a page that is not itself a widget frame (DASH): pin the widget with its defaults.
+    window._wPin = (type) => { if (typeof __widgets !== "undefined") __widgets.handle("page:" + type, "pin", ""); };
+    const _wPinBtn = (type, label) => {
+      if (typeof __widgets === "undefined") return "";
+      const n = __widgets.doc().boards.reduce((a, b) => a + b.items.filter((x) => x.type === type).length, 0);
+      return `<button class="dash-toggle-btn${n ? " on" : ""}" onclick="_wPin('${type}')" title="připnout na 📌 MŮJ DASHBOARD">📌 ${escHTML(label)}${n ? ` (připnuto ${n}×)` : ""}</button>`;
+    };
     // Shown in place of a widget panel when the widget modules did not load.
     function _wMissing(title) {
       return '<div class="pixel-panel w-error" style="padding:8px 10px;margin:8px 0;font-size:0.5rem">' + escHTML(title) + ': panel se nenačetl (moduly widgetů) — zkus RELOAD.</div>';
@@ -19272,7 +19285,21 @@
       };
       paint();
       const queries = board.items.flatMap((it) => __widgets.needsOf(it.type, FARM_ID));
-      await Promise.all(queries.map((q) => __store.get(q).then(paint)));
+      const extra = [];
+      if (board.items.some((it) => it.type === "dash-actions")) {
+        // the DASH parser prices bounties and deliveries from these, as on the DASH page
+        if (Object.keys(dashP2P).length === 0) extra.push(dashFetchP2P());
+        if (dashRates.coinsPerSFL == null) extra.push(dashFetchRates());
+      }
+      await Promise.all([...queries.map((q) => __store.get(q).then(paint)), ...extra.map((p) => p.then(paint))]);
+      startGrowingTimers();
+      // Live like DASH: the farm is re-read every 3 minutes while the board is open.
+      clearTimeout(window._boardLive);
+      window._boardLive = setTimeout(() => {
+        if (getPage() !== "board" || mine !== _boardSeq || document.querySelector("[data-pop]")) return;
+        __store.invalidate({ res: "farm", farm: FARM_ID });
+        renderBoard();
+      }, 3 * 60 * 1000);
     }
 
     let _fishData = null, _fishPrices = null, _fishErr = null, _fishLoading = false, _fishFarm = null;
@@ -25356,6 +25383,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
     async function main() {
       const seq = ++_navSeq;
+      window._wRerender = null; window._wRefresh = null;   // the new page sets its own
       const cfg = getConfig();
       const page = getPage();
       if (cachedFarmData && _cachedFarmFor !== cfg.farm) cachedFarmData = null;

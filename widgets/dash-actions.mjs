@@ -11,7 +11,8 @@ export const dashActions = {
   title: "🚨 Co je hotové",
   page: "dashboard",
   needs: (farmId) => ({ farm: { res: "farm", farm: farmId } }),
-  defaults: { sort: { key: "when", dir: "asc" } },
+  // deliveries alone can be 50+ rows: the first 20 by default, the rest via the cog (top N / Filtr)
+  defaults: { sort: { key: "when", dir: "asc" }, rows: { mode: "top", top: 20, picked: [] } },
   rowKey: (r) => `${r.category}|${r.label}`,
   rowLabel: (r) => `${r.category}: ${r.label}`,
   rowClass: (r) => `w-st-${r.status}`,
