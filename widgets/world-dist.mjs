@@ -94,7 +94,9 @@ export function slotRows(agg) {
 }
 export function islandRows(agg) {
   const by = new Map((agg || []).map((r) => [r.key, +r.n || 0]));
-  return islandOrder.map((key) => ({ key, n: by.get(key) || 0 }));
+  // the five known ones in their fixed order, then any island the game added since (crystal, marble…), by count
+  const extra = [...by.keys()].filter((k) => !islandOrder.includes(k)).sort((a, b) => by.get(b) - by.get(a));
+  return [...islandOrder, ...extra].map((key) => ({ key, n: by.get(key) || 0 }));
 }
 // Buyable-node bars: one row per T1-equivalent count (gap-filled), split into the three mutually
 // exclusive farm classes (only T1 / has T2 but no T3 / has T3).

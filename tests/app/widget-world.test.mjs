@@ -79,3 +79,10 @@ test("store: worldAgg asks mode=agg with the group and limit, worldMe mode=farm"
   assert.match(urls[0], /type=world&mode=agg&group=total_level&limit=1000/);
   assert.match(urls[1], /type=world&mode=farm&farm=7/);
 });
+
+test("islands: the five known ones in their fixed order, then any newer island (crystal, marble…) by count — none dropped", async () => {
+  const { islandRows } = await import("../../widgets/world-dist.mjs");
+  const rows = islandRows([{ key: "basic", n: 9 }, { key: "crystal", n: 47 }, { key: "galaxy", n: 48 }, { key: "volcano", n: 3 }]);
+  assert.deepStrictEqual(rows.map((r) => r.key), ["basic", "spring", "desert", "volcano", "swamp", "galaxy", "crystal"]);
+  assert.strictEqual(rows.find((r) => r.key === "crystal").n, 47);
+});
