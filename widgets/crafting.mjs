@@ -80,7 +80,9 @@ function onTheWay(widget, startOf, runningWord) {
     const out = widget.build(data, ctx, opts);
     if (!out.rows.length) return { empty: out.empty };
     const now = ctx.now || Date.now();
-    const list = out.rows.slice().sort((a, b) => (a.ready === b.ready ? (a.readyAt || 0) - (b.readyAt || 0) : a.ready ? -1 : 1));
+    // ready first, then by when; a queued job with no time yet goes after the timed ones
+    const at = (r) => (r.readyAt > 0 ? r.readyAt : Infinity);
+    const list = out.rows.slice().sort((a, b) => (a.ready === b.ready ? (at(a) === at(b) ? 0 : at(a) < at(b) ? -1 : 1) : a.ready ? -1 : 1));
     const pctOf = (r) => {
       if (r.ready) return 100;
       const s = startOf(data.farm, r);

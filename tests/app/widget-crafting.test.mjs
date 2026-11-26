@@ -98,5 +98,9 @@ test("📱 glance model, crafting box: the whole queue as icons with the time un
   // an older farm's single item: no start time → no progress, no ring
   const old = craftingBox.glanceModel({ farm: { craftingBox: { status: "crafting", readyAt: NOW + 120_000, item: { collectible: "Doll" } } } }, CTX);
   assert.deepStrictEqual([old.head.value, old.head.ring, old.items[0].pct], ["2m", undefined, undefined]);
+  // a queued job with no time yet goes after the timed ones; the head stays the soonest timed one
+  const q = craftingBox.glanceModel({ farm: { craftingBox: { status: "crafting", queue: [{ name: "Bear Doll" }, { name: "Wooly Doll", readyAt: NOW + 3_600_000, startedAt: NOW - 3_600_000 }] } } }, CTX);
+  assert.deepStrictEqual(q.items.map((i) => i.name), ["Wooly Doll", "Bear Doll"]);
+  assert.strictEqual(q.head.value, "60m");
   assert.deepStrictEqual(craftingBox.glanceModel({ farm: {} }, CTX), { empty: "The crafting box is idle right now." });
 });
