@@ -103,7 +103,20 @@ test("kitchens: one row per building with recipe, XP, cost, ingredients and fish
   const page = bumpkinKitchens.build({ farm, cook }, { ...CTX, editable: true }, { sort: "sflPerCook" });
   const ph = table(bumpkinKitchens, page);
   assert.match(ph, /<select class="v-bumpkin-select" onchange="selectBumpkinRecipe\('Fire Pit', this\.value\)">/);
-  assert.match(ph, /<option value="Pizza Margherita" selected>Pizza Margherita \([\d.,—<]+ SFL\/cook, /);
+  assert.match(ph, /<option value="Pizza Margherita" selected>Pizza Margherita · [\d.,—<]+ SFL\/cook<\/option>/, "a short option: the name and the metric it is ordered by");
+});
+
+test("kitchens look: the recipe picker sits on one line with its icon, whole-number XP, quiet colours, fewer default columns", () => {
+  const page = bumpkinKitchens.build({ farm, cook }, { ...CTX, editable: true }, {});
+  const ph = table(bumpkinKitchens, page);
+  assert.match(ph, /<small class="v-bumpkin-pick"><i>Pizza Margherita<\/i><select /, "icon and select in one nowrap line");
+  assert.match(ph, /<option value="Pizza Margherita" selected>Pizza Margherita · [\d,]+ XP\/h<\/option>/);
+  const row = page.rows.find((r) => r.name === "Fire Pit");
+  const xpCol = bumpkinKitchens.columns.find((c) => c.key === "xp");
+  assert.doesNotMatch(xpCol.fmt(50025.94, row), /\./, "XP/cook rounded");
+  assert.doesNotMatch(bumpkinKitchens.columns.find((c) => c.key === "xpPerDay").fmt(445643.79, row), /445,643\.79/);
+  assert.match(bumpkinKitchens.columns.find((c) => c.key === "time").fmt(1, row), /class="v-nowrap"/, "a time never wraps");
+  assert.deepStrictEqual(bumpkinKitchens.columns.filter((c) => c.extra).map((c) => c.key).sort(), ["xp", "xpPerSfl"], "XP/cook and XP/SFL on demand");
 });
 
 test("leveling plan: tiles, per-kitchen split and the cost per level", () => {

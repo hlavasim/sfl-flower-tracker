@@ -319,14 +319,10 @@ function optionLabel(r, sort) {
   const cost = r.cost == null ? "—" : fmtSfl(r.cost);
   const xps = r.cost && r.cost > 0 ? Math.round(r.xpPerSfl).toLocaleString() : "—";
   const xpStr = Math.round(r.xp).toLocaleString();
-  if (r.isInstant) {
-    if (sort === "xpPerSfl") return `${r.name} (${xps} XP/SFL, INSTANT ${xpStr} XP)`;
-    if (sort === "sflPerCook") return `${r.name} (${cost} SFL/cook, INSTANT ${xpStr} XP)`;
-    return `${r.name} (INSTANT ${xpStr} XP, ${cost} SFL/cook)`;
-  }
-  if (sort === "xpPerSfl") return `${r.name} (${xps} XP/SFL, ${xph} XP/h)`;
-  if (sort === "sflPerCook") return `${r.name} (${cost} SFL/cook, ${xpStr} XP)`;
-  return `${r.name} (${xph} XP/h, ${cost} SFL/cook)`;
+  // short: the closed picker shows this text, and the row's columns carry the rest
+  if (sort === "xpPerSfl") return `${r.name} · ${xps} XP/SFL`;
+  if (sort === "sflPerCook") return `${r.name} · ${cost} SFL/cook`;
+  return r.isInstant ? `${r.name} · instant ${xpStr} XP` : `${r.name} · ${xph} XP/h`;
 }
 // For a fish the engine prices it as it is actually got (fished at the odds, forced with bait, or
 // plain reels) and divides by what a cast yields; both halves are shown.
@@ -362,17 +358,17 @@ export const bumpkinKitchens = {
   rowClass: (r) => (r.selected ? "" : "w-st-done"),
   columns: [
     { key: "name", label: "kitchen", fmt: (v, r) => `<div class="v-name"><span class="v-bumpkin-emoji">${r.emoji}</span><div><b>${esc(v)}</b>` +
-      `${r.countText ? ` <span class="v-dim">${esc(r.countText)}</span>` : ""}<small>${r.recipeHtml}</small>${r.ingredients ? `<small class="v-bumpkin-ing">${r.ingredients}</small>` : ""}${r.fish.map((f) => `<small class="v-bumpkin-fish">${f}</small>`).join("")}${r.traceHtml}</div></div>` },
-    { key: "xp", label: "XP/cook", align: "right", get: (r) => (r.selected ? r.selected.xp : null), fmt: (v) => (v == null ? "" : `<span class="v-done">${esc(fmtXP2(v))}</span>`) },
+      `${r.countText ? ` <span class="v-dim">${esc(r.countText)}</span>` : ""}<small${r.pick ? ' class="v-bumpkin-pick"' : ""}>${r.recipeHtml}</small>${r.ingredients ? `<small class="v-bumpkin-ing">${r.ingredients}</small>` : ""}${r.fish.map((f) => `<small class="v-bumpkin-fish">${f}</small>`).join("")}${r.traceHtml}</div></div>` },
+    { key: "xp", label: "XP/cook", align: "right", extra: true, get: (r) => (r.selected ? r.selected.xp : null), fmt: (v) => (v == null ? "" : esc(num(v))) },
     { key: "time", label: "time", align: "right", get: (r) => (r.selected ? r.selected.time : null),
-      fmt: (v, r) => blank(r, r.selected && r.selected.isInstant ? pill("INSTANT", "run") : `<span class="v-bumpkin-blue">${esc(r.timeText)}</span>`) },
-    { key: "xpPerHour", label: "XP/hour", align: "right", get: (r) => (r.selected && !r.selected.isInstant ? r.selected.xpPerHour : null), fmt: (v) => (v == null ? "" : esc(fmtXP2(v))) },
+      fmt: (v, r) => blank(r, r.selected && r.selected.isInstant ? pill("INSTANT", "run") : `<span class="v-nowrap">${esc(r.timeText)}</span>`) },
+    { key: "xpPerHour", label: "XP/hour", align: "right", get: (r) => (r.selected && !r.selected.isInstant ? r.selected.xpPerHour : null), fmt: (v) => (v == null ? "" : esc(num(v))) },
     { key: "xpPerDay", label: "XP/day", align: "right", title: "all slots of the building", get: (r) => (r.selected && !r.selected.isInstant ? r.xpPerDay : null),
-      fmt: (v, r) => (v == null ? "" : `<b>${esc(fmtXP2(v))}</b>${bar(r.dayShare, "ok")}`) },
+      fmt: (v, r) => (v == null ? "" : `<b>${esc(num(v))}</b>${bar(r.dayShare, "ok")}`) },
     { key: "costPerCook", label: "SFL/cook", align: "right", get: (r) => (r.costPerCook > 0 ? r.costPerCook : null),
-      fmt: (v, r) => (v == null ? "" : `<span class="v-bumpkin-warn" title="${esc(r.costTip)}">${esc(r.sflCook)}</span>${r.recipeCost.hasUnpriced ? ' <span class="v-dim">+self</span>' : ""}`) },
-    { key: "costPerDay", label: "SFL/day", align: "right", get: (r) => (r.costPerCook > 0 ? r.costPerDay : null), fmt: (v, r) => (v == null ? "" : `<span class="v-bumpkin-warn">${esc(r.sflDay)}</span>`) },
-    { key: "xpPerSfl", label: "XP/SFL", align: "right", get: (r) => (r.costPerCook > 0 && r.selected.xpPerSfl > 0 ? r.selected.xpPerSfl : null), fmt: (v) => (v == null ? "" : esc(Math.round(v).toLocaleString())) },
+      fmt: (v, r) => (v == null ? "" : `<span title="${esc(r.costTip)}">${esc(r.sflCook)}</span>${r.recipeCost.hasUnpriced ? ' <span class="v-dim">+self</span>' : ""}`) },
+    { key: "costPerDay", label: "SFL/day", align: "right", get: (r) => (r.costPerCook > 0 ? r.costPerDay : null), fmt: (v, r) => (v == null ? "" : esc(r.sflDay)) },
+    { key: "xpPerSfl", label: "XP/SFL", align: "right", extra: true, get: (r) => (r.costPerCook > 0 && r.selected.xpPerSfl > 0 ? r.selected.xpPerSfl : null), fmt: (v) => (v == null ? "" : esc(Math.round(v).toLocaleString())) },
     { key: "days", label: "solo days", align: "right", title: "days to the target level with this kitchen alone (after eating the food)",
       get: (r) => (r.selected && r.showDays ? r.daysNeeded : null), fmt: (v) => (v == null ? "" : `<span class="v-dim">${esc(v.toLocaleString())}d</span>`) },
   ],
@@ -391,11 +387,12 @@ export const bumpkinKitchens = {
           b.recipes.map((r) => `<option value="${esc(r.name)}"${r.name === b.selectedName ? " selected" : ""}>${esc(optionLabel(r, sort))}</option>`).join("") + `</select>`
         : s ? `${icon(ctx, s.name)}${esc(s.name)}` : (b.recipes.length ? "Not cooking" : "No recipes available");
       const tr = b.trace && typeof ctx.trace === "function"
-        ? `<details class="v-bumpkin-trace"><summary>Show calculation</summary><div><div class="v-done"><b>XP/day</b></div>${ctx.trace(b.trace)}` +
+        ? `<details class="v-bumpkin-trace"><summary>calculation</summary><div><div class="v-done"><b>XP/day</b></div>${ctx.trace(b.trace)}` +
           `${b.costTrace ? `<div class="v-bumpkin-warn"><b>Cost/cook</b></div>${ctx.trace(b.costTrace)}` : ""}</div></details>` : "";
       return { ...b, emoji: COOKING_BUILDING_EMOJI[b.name] || "🏠",
         countText: b.name === "Aging Shed" ? `L${b.count} (×${b.count} slots)` : b.count > 1 ? `×${b.count}` : "",
-        recipeHtml: ctx.editable && !s ? recipeHtml + `<span class="v-dim"> ${b.recipes.length ? "Not cooking" : "No recipes available"}</span>` : recipeHtml,
+        recipeHtml: ctx.editable && !s ? recipeHtml + `<span class="v-dim">${b.recipes.length ? "not cooking" : "no recipes"}</span>` : recipeHtml,
+        pick: !!ctx.editable,
         traceHtml: tr, timeText: s && !s.isInstant ? cookTime(ctx, s.time) : "",
         sflCook: b.costPerCook > 0 ? `${sfl(ctx, b.costPerCook)}` : "", sflDay: b.costPerCook > 0 ? `${sfl(ctx, b.costPerDay)}` : "",
         costTip: b.recipeCost ? b.recipeCost.items.map((i) => `${i.qty}× ${i.name}${i.price > 0 ? ` = ${sfl(ctx, i.cost)} SFL` : " (self)"}`).join("\n") : "",
