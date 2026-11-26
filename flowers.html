@@ -3174,6 +3174,63 @@
     /* buy path: the badges stay together beside the name, the horizon % under its gain */
     .v-rm-badges { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: 1px; white-space: nowrap; }
     .v-rm-pct { display: block; white-space: nowrap; font-size: 11px; }
+    /* ROADMAP bottom sections (gifts, deliveries, animal feeding/lifecycle, settings): the clean theme */
+    .v-rms { font-family: var(--c-font); font-size: 13px; line-height: 1.45; color: var(--c-text); }
+    .v-rms .inline-icon { width: 18px; height: 18px; image-rendering: auto; vertical-align: -4px; margin-right: 6px; }
+    .v-rms .v-kpi b .inline-icon, .v-rms .v-kpi b img { width: 16px; height: 16px; vertical-align: -2px; }
+    .v-rms-intro { color: var(--c-muted); font-size: 12.5px; line-height: 1.6; margin: 0 0 12px; }
+    .v-rms-intro b { color: var(--c-text); font-weight: 600; }
+    .v-rms-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 16px 0 6px; font-size: 13.5px; font-weight: 600; color: var(--c-text); }
+    .v-rms-h:first-child { margin-top: 0; }
+    .v-rms-h .v-dim { font-weight: 400; }
+    .v-rms-sub { margin: -2px 0 6px; font-size: 12px; color: var(--c-muted); font-variant-numeric: tabular-nums; }
+    .v-rms-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .v-rms-scroll > .w-table { min-width: 560px; }
+    .v-rms .w-table td { font-variant-numeric: tabular-nums; }
+    .v-rms .w-table td.c, .v-rms .w-table th.c { text-align: center; }
+    .v-rms .w-table th { cursor: default; }
+    .v-rms .w-table tr.v-rms-best { background: rgba(95,179,107,0.08); }
+    .v-rms .w-table tr.v-rms-off { opacity: 0.45; }
+    .v-rms-give { color: var(--c-muted); min-width: 180px; }
+    .v-rms-pos { color: var(--c-green); font-weight: 600; }
+    .v-rms-gain { color: var(--c-green); }
+    .v-rms-neg { color: var(--c-red); }
+    .v-rms-tk, .v-rms-warn { color: var(--c-yellow); }
+    .v-rms-foot { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--c-dim); }
+    .v-rms-levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+    .v-rms-lvl { background: var(--c-card2); border: 1px solid transparent; border-radius: 8px; padding: 5px 4px; text-align: center;
+      font-variant-numeric: tabular-nums; cursor: default; }
+    .v-rms-lvl small { display: block; color: var(--c-dim); font-size: 11px; }
+    .v-rms-lvl b { font-size: 12.5px; font-weight: 600; }
+    .v-rms-lvl.v-rms-peak { background: rgba(95,179,107,0.14); }
+    .v-rms-lvl.v-rms-cur { border-color: var(--c-accent); }
+    .v-rms-card { background: var(--c-card2); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+    .v-rms-form { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+    .v-rms-form label { display: inline-flex; align-items: center; gap: 6px; color: var(--c-muted); cursor: pointer; white-space: nowrap; }
+    .v-rms-refresh { margin-left: auto; }
+    .v-rms-card .dash-toggle-btn { background: var(--c-card); cursor: pointer; }
+    .v-rms input[type=number], .v-rms select { background: var(--c-bg); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 8px;
+      font: inherit; font-size: 13px; padding: 4px 8px; outline: none; font-variant-numeric: tabular-nums; color-scheme: dark; }
+    .v-rms input[type=number] { width: 64px; }
+    .v-rms input.v-rms-in-l { width: 92px; }
+    .v-rms input[type=number]:focus, .v-rms select:focus { border-color: var(--c-accent); }
+    .v-rms input[type=checkbox] { appearance: none; width: 15px; height: 15px; margin: 0; background: var(--c-bg); border: 1px solid var(--c-dim);
+      border-radius: 4px; cursor: pointer; flex: none; }
+    .v-rms input[type=checkbox]:checked { background: var(--c-accent); border-color: var(--c-accent); box-shadow: inset 0 0 0 2px var(--c-bg); }
+    .v-rms input[type=range] { accent-color: var(--c-green); width: 100%; margin: 0; cursor: pointer; }
+    .v-rms-link { background: none; border: none; padding: 0; font: inherit; color: var(--c-accent); cursor: pointer; text-decoration: underline dotted; }
+    .v-rms-link:hover { color: var(--c-text); }
+    .v-rms-eff { display: grid; grid-template-columns: 120px minmax(120px, 200px) 48px 1fr; gap: 6px 12px; align-items: center; padding: 7px 0;
+      border-top: 1px solid var(--c-row); }
+    .v-rms-eff-name { white-space: nowrap; }
+    .v-rms-eff-pct { text-align: right; font-variant-numeric: tabular-nums; color: var(--c-green); font-weight: 600; }
+    .v-rms-eff-pct.v-rms-ovr { color: var(--c-yellow); }
+    .v-rms-eff-info { font-size: 12px; color: var(--c-dim); }
+    @media (max-width: 600px) {
+      .v-rms-eff { grid-template-columns: 1fr 48px; grid-auto-flow: dense; }
+      .v-rms-eff > input[type=range], .v-rms-eff-info { grid-column: 1 / -1; }
+      .v-rms-refresh { margin-left: 0; }
+    }
     .v-rm-types { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
     .v-rm-off { opacity: 0.45; text-decoration: line-through; }
     .v-rm-picks { position: sticky; bottom: 0; z-index: 5; margin-top: 10px; padding: 8px 12px; background: var(--c-card2); border-radius: 10px; }
@@ -13437,7 +13494,7 @@
         let tickets = 0; try { tickets = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
         rv += tickets * TV;
         for (const [it, q] of Object.entries(r.items || {})) { if (it === ticketName) continue; rv += (KEY_CHEST[it] ? roadmapKeyValue(it) : (p2pPrices[it] || estItem(it) || 0)) * q; }
-        dels.push({ from: o.from, needs: Object.entries(o.items || {}).map(([i, q]) => i === "coins" ? (q.toLocaleString() + " coins") : (q + "\u00d7 " + `<img class="inline-icon" src="${getItemIcon(i)}" onerror="this.style.display='none'" alt="">` + escHTML(i))).join(", "), cost, tickets, rv, net: rv - cost });
+        dels.push({ from: o.from, needs: Object.entries(o.items || {}).map(([i, q]) => i === "coins" ? (_dashIcon("coins") + q.toLocaleString() + " coins") : (q + "× " + _dashIcon(i) + escHTML(i))).join(", "), cost, tickets, rv, net: rv - cost });
       }
       dels.sort((a, b) => b.net - a.net);
 
@@ -13457,23 +13514,26 @@
       bos.sort((a, b) => b.net - a.net);
       if (!dels.length && !bos.length) return "";
 
-      const fmtNet = (n) => { const pos = n > 0.001, neg = n < -0.001; const col = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)"); return `<span style="color:${col};font-weight:bold">${(pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(n))}</span>`; };
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">DELIVERIES, BOUNTIES &amp; TICKETS \u2014 what to fulfil</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Net = reward (SFL + coins + marks/keys + tickets\u00d7value) \u2212 the items you hand over. <span style="color:var(--green)">Green = worth doing</span>, <span style="color:var(--red)">red = the items are worth more than the reward</span>. <b style="color:var(--yellow)">Tickets can\u2019t be sold and have no FLOWER price.</b> Checked the game source (Megastore): this chapter\u2019s ${escHTML(ticketName || "tickets")} buy only <b>temporary Hourglasses</b> (Gourmet 100, Blossom 150, Timber/Orchard 200, Ore 400), <b>cosmetics</b> (Dino Egg Trophy 250, Crystal Altar 3k, background 6k, Bubble Aura 10k) and the Spa ticket-boost set \u2014 <b>no permanent FLOWER-yield boost</b>. So a ticket is worth ~0 FLOWER for ROI and they count as <b>${TV} ${sflIcon()}</b> here. Delivering for tickets is for season collection / temporary boosts, not FLOWER. Raise \u201cTicket value\u201d if you value the season items. Tickets earned shown per row.</div>`;
+      const fmtNet = (n) => { const pos = n > 0.001, neg = n < -0.001; return `<span class="${pos ? "v-rms-pos" : (neg ? "v-rms-neg" : "v-dim")}">${(pos ? "+" : (neg ? "−" : "")) + roadmapFmtFlower(Math.abs(n))}</span>`; };
+      const fmtCost = (c) => c > 0.001 ? `<span class="v-rms-neg">−${roadmapFmtFlower(c)}</span>` : `<span class="v-dim">0</span>`;
+      const fmtTk = (t) => t ? `<span class="v-rms-tk">${ticketName ? _dashIcon(ticketName) : ""}${t}</span>` : "";
+      const worth = dels.filter(d => d.net > 0.001).length + bos.filter(b => b.net > 0.001).length;
+      let h = `<div class="v-rms">`;
+      h += `<div class="v-kpis"><div class="v-kpi"><b>${dels.length}</b><span>deliveries pending</span></div><div class="v-kpi"><b>${bos.length}</b><span>bounties open</span></div><div class="v-kpi"><b class="v-done">${worth}</b><span>worth doing (net &gt; 0)</span></div><div class="v-kpi"><b>${TV} ${sflIcon()}</b><span>value per ticket</span></div></div>`;
+      h += `<p class="v-rms-intro">Net = reward (SFL + coins + marks/keys + tickets×value) − the items you hand over. <span class="v-rms-pos">Green = worth doing</span>, <span class="v-rms-neg">red = the items are worth more than the reward</span>. <b class="v-rms-warn">Tickets can’t be sold and have no FLOWER price.</b> Checked the game source (Megastore): this chapter’s ${escHTML(ticketName || "tickets")} buy only <b>temporary Hourglasses</b> (Gourmet 100, Blossom 150, Timber/Orchard 200, Ore 400), <b>cosmetics</b> (Dino Egg Trophy 250, Crystal Altar 3k, background 6k, Bubble Aura 10k) and the Spa ticket-boost set — <b>no permanent FLOWER-yield boost</b>. So a ticket is worth ~0 FLOWER for ROI and they count as <b>${TV} ${sflIcon()}</b> here. Delivering for tickets is for season collection / temporary boosts, not FLOWER. Raise “Ticket value” if you value the season items. Tickets earned shown per row.</p>`;
       if (dels.length) {
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:6px 0 3px">DELIVERIES (${dels.length} pending)</div>`;
-        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td style="padding:0 6px">from</td><td style="padding:0 6px">give</td><td style="padding:0 6px;text-align:right">reward</td><td style="padding:0 6px;text-align:right">cost</td><td style="padding:0 6px;text-align:right">tickets</td><td style="text-align:right">net</td></tr>`;
-        for (const d of dels.slice(0, 14)) h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:2px 6px;white-space:nowrap">${escHTML(d.from)}</td><td style="padding:2px 6px;color:var(--text-dim)">${d.needs}</td><td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(d.rv)}</td><td style="padding:2px 6px;text-align:right;color:var(--red)">${d.cost > 0.001 ? "\u2212" + roadmapFmtFlower(d.cost) : "0"}</td><td style="padding:2px 6px;text-align:right;color:var(--sunpetal)">${d.tickets || ""}</td><td style="padding:2px 0 2px 6px;text-align:right">${fmtNet(d.net)}</td></tr>`;
-        h += `</table>`;
+        h += `<div class="v-rms-h">🚚 Deliveries <span class="v-dim">${dels.length} pending</span></div>`;
+        h += `<div class="v-rms-scroll"><table class="w-table"><thead><tr><th>from</th><th>give</th><th class="r">reward</th><th class="r">cost</th><th class="r">tickets</th><th class="r">net</th></tr></thead><tbody>`;
+        for (const d of dels.slice(0, 14)) h += `<tr><td class="nw"><div class="v-name"><img src="${getNpcIcon(d.from)}" onerror="this.style.display='none'" alt=""><b>${escHTML(d.from)}</b></div></td><td class="v-rms-give">${d.needs}</td><td class="r nw v-rms-gain">${roadmapFmtFlower(d.rv)}</td><td class="r nw">${fmtCost(d.cost)}</td><td class="r nw">${fmtTk(d.tickets)}</td><td class="r nw">${fmtNet(d.net)}</td></tr>`;
+        h += `</tbody></table></div>`;
       }
       if (bos.length) {
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:10px 0 3px">BOUNTY BOARD (${bos.length} open)</div>`;
-        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td style="padding:0 6px">give</td><td style="padding:0 6px;text-align:right">reward</td><td style="padding:0 6px;text-align:right">cost</td><td style="padding:0 6px;text-align:right">tickets</td><td style="padding:0 6px;text-align:right">marks</td><td style="text-align:right">net</td></tr>`;
-        for (const b of bos.slice(0, 14)) h += `<tr style="border-top:1px solid #1b1b1b"><td style="padding:2px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(b.name)}" onerror="this.style.display='none'" alt=""> ${escHTML(b.name)}</td><td style="padding:2px 6px;text-align:right;color:var(--green)">${roadmapFmtFlower(b.rv)}</td><td style="padding:2px 6px;text-align:right;color:var(--red)">${b.cost > 0.001 ? "\u2212" + roadmapFmtFlower(b.cost) : "0"}</td><td style="padding:2px 6px;text-align:right;color:var(--sunpetal)">${b.tickets || ""}</td><td style="padding:2px 6px;text-align:right;color:var(--text-dim)">${b.marks || ""}</td><td style="padding:2px 0 2px 6px;text-align:right">${fmtNet(b.net)}</td></tr>`;
-        h += `</table>`;
+        h += `<div class="v-rms-h">📋 Bounty board <span class="v-dim">${bos.length} open</span></div>`;
+        h += `<div class="v-rms-scroll"><table class="w-table"><thead><tr><th>give</th><th class="r">reward</th><th class="r">cost</th><th class="r">tickets</th><th class="r">marks</th><th class="r">net</th></tr></thead><tbody>`;
+        for (const b of bos.slice(0, 14)) h += `<tr><td class="nw"><div class="v-name">${_dashIcon(b.name)}<b>${escHTML(b.name)}</b></div></td><td class="r nw v-rms-gain">${roadmapFmtFlower(b.rv)}</td><td class="r nw">${fmtCost(b.cost)}</td><td class="r nw">${fmtTk(b.tickets)}</td><td class="r nw v-dim">${b.marks || ""}</td><td class="r nw">${fmtNet(b.net)}</td></tr>`;
+        h += `</tbody></table></div>`;
       }
-      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Ticket value is an estimate (${TV} ${sflIcon()}) \u2014 tickets buy season boosts whose worth varies. Bounty item cost uses the same pricing as the dashboard; animals/some items may read 0 if not priceable.</div>`;
+      h += `<div class="v-rms-foot">Ticket value is an estimate (${TV} ${sflIcon()}) — tickets buy season boosts whose worth varies. Bounty item cost uses the same pricing as the dashboard; animals/some items may read 0 if not priceable.</div>`;
       h += `</div>`;
       return h;
     }
@@ -13503,26 +13563,27 @@
       if (!rows.length) return "";
       rows.sort((a, b) => b.perDay - a.perDay);
       const beds = getCapacityCount("flowers", capacity) || 0;
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">FLOWER GIFTS \u2192 KEYS</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Gift each NPC once a day. <b>Best flower</b> = most friendship points per grow-day (1 bed grows 1 flower per its full chain time \u2014 Pansy 1d, Primula 14d). <b>Likes</b> = the flower this NPC bonuses (more points, usually slower). <b>/gift</b> = value one gift adds toward the key (key value \u00d7 points \u00f7 threshold). Key value = the live average chest payout (mostly gems + sunstone for you, coins are free): Treasure ~${roadmapFmtFlower(roadmapKeyValue("Treasure Key"))} / Rare ~${roadmapFmtFlower(roadmapKeyValue("Rare Key"))} / Luxury ~${roadmapFmtFlower(roadmapKeyValue("Luxury Key"))} ${sflIcon()}. You have <b>${beds} bed${beds === 1 ? "" : "s"}</b> \u2192 gift the top ${beds} (\u2713), one bed each.</div>`;
-      h += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.58rem"><thead><tr style="color:var(--text-dim);text-align:left;font-size:0.5rem"><th style="padding:2px 6px">NPC</th><th style="padding:2px 6px">best flower</th><th style="padding:2px 6px">likes</th><th style="padding:2px 6px">repeat reward</th><th style="padding:2px 6px;text-align:right">value</th><th style="padding:2px 6px;text-align:right">/gift</th><th style="padding:2px 6px;text-align:right">days/key</th><th style="padding:2px 6px;text-align:right">FL/day</th><th style="padding:2px 6px;text-align:center">bed</th></tr></thead><tbody>`;
+      const keyKpi = (k) => `<div class="v-kpi"><b>~${roadmapFmtFlower(roadmapKeyValue(k))} ${sflIcon()}</b><span>${_dashIcon(k)}${k}</span></div>`;
+      let h = `<div class="v-rms">`;
+      h += `<div class="v-kpis"><div class="v-kpi"><b>${beds}</b><span>flower bed${beds === 1 ? "" : "s"} → gift the top ${beds}</span></div>${keyKpi("Treasure Key")}${keyKpi("Rare Key")}${keyKpi("Luxury Key")}</div>`;
+      h += `<p class="v-rms-intro">Gift each NPC once a day. <b>Best flower</b> = most friendship points per grow-day (1 bed grows 1 flower per its full chain time — Pansy 1d, Primula 14d). <b>Likes</b> = the flower this NPC bonuses (more points, usually slower). <b>/gift</b> = value one gift adds toward the key (key value × points ÷ threshold). Key value = the live average chest payout (mostly gems + sunstone for you, coins are free): Treasure ~${roadmapFmtFlower(roadmapKeyValue("Treasure Key"))} / Rare ~${roadmapFmtFlower(roadmapKeyValue("Rare Key"))} / Luxury ~${roadmapFmtFlower(roadmapKeyValue("Luxury Key"))} ${sflIcon()}. You have <b>${beds} bed${beds === 1 ? "" : "s"}</b> → gift the top ${beds} (✓), one bed each.</p>`;
+      h += `<div class="v-rms-scroll"><table class="w-table"><thead><tr><th>NPC</th><th>best flower</th><th>likes</th><th>repeat reward</th><th class="r">value</th><th class="r">/gift</th><th class="r">days/key</th><th class="r">FL/day</th><th class="c">bed</th></tr></thead><tbody>`;
       rows.forEach((r, i) => {
         const within = i < beds; const pos = r.perDay > 0.02;
-        h += `<tr style="border-top:1px solid #222${within ? "" : ";opacity:0.45"}">
-          <td style="padding:3px 6px;white-space:nowrap">${escHTML(r.npc)}</td>
-          <td style="padding:3px 6px;white-space:nowrap"><img class="inline-icon" src="${getItemIcon(r.flower)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.flower)} <span style="color:var(--text-dim);font-size:0.5rem">${r.pts}pt\u00b7${r.growDays.toFixed(0)}d</span></td>
-          <td style="padding:3px 6px;white-space:nowrap;color:var(--text-dim)">${r.liked ? `<img class="inline-icon" src="${getItemIcon(r.liked.f)}" onerror="this.style.display='none'" alt="">` + escHTML(r.liked.f) + ' <span style="font-size:0.5rem">' + r.liked.pts + 'pt\u00b7' + r.liked.days.toFixed(0) + 'd</span>' : "\u2014"}</td>
-          <td style="padding:3px 6px;color:var(--text-dim)">${escHTML(r.repLabel)}</td>
-          <td style="padding:3px 6px;text-align:right">${roadmapFmtFlower(r.repVal)}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">+${roadmapFmtFlower(r.perGift)}</td>
-          <td style="padding:3px 6px;text-align:right;color:var(--text-dim)">${isFinite(r.daysToReward) ? Math.ceil(r.daysToReward) : "\u2014"}</td>
-          <td style="padding:3px 6px;text-align:right;color:${pos ? "var(--green)" : "var(--text-dim)"};font-weight:bold">${r.perDay > 0.0001 ? "+" + roadmapFmtFlower(r.perDay) : "0"}</td>
-          <td style="padding:3px 6px;text-align:center">${within ? '<span style="color:var(--green)">\u2713</span>' : "\u2014"}</td>
+        h += `<tr${within ? "" : ' class="v-rms-off"'}>
+          <td class="nw"><div class="v-name"><img src="${getNpcIcon(r.npc)}" onerror="this.style.display='none'" alt=""><b>${escHTML(r.npc)}</b></div></td>
+          <td class="nw">${_dashIcon(r.flower)}${escHTML(r.flower)} <span class="v-dim">${r.pts}pt·${r.growDays.toFixed(0)}d</span></td>
+          <td class="nw v-dim">${r.liked ? _dashIcon(r.liked.f) + escHTML(r.liked.f) + " " + r.liked.pts + "pt·" + r.liked.days.toFixed(0) + "d" : "—"}</td>
+          <td class="v-dim">${escHTML(r.repLabel)}</td>
+          <td class="r nw">${roadmapFmtFlower(r.repVal)}</td>
+          <td class="r nw v-dim">+${roadmapFmtFlower(r.perGift)}</td>
+          <td class="r nw v-dim">${isFinite(r.daysToReward) ? Math.ceil(r.daysToReward) : "—"}</td>
+          <td class="r nw ${pos ? "v-rms-pos" : "v-dim"}">${r.perDay > 0.0001 ? "+" + roadmapFmtFlower(r.perDay) : "0"}</td>
+          <td class="c">${within ? '<span class="v-done">✓</span>' : '<span class="v-dim">—</span>'}</td>
         </tr>`;
       });
       h += `</tbody></table></div>`;
-      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">days/key uses 1 bed per NPC at its grow rate. The NPC\u2019s liked flower gives more points but usually grows slower, so the best points-per-grow-day flower (often a 1-day Pansy/Cosmos) reaches the key faster. Keys are random chest opens \u2014 value shown is the average.</div>`;
+      h += `<div class="v-rms-foot">days/key uses 1 bed per NPC at its grow rate. The NPC’s liked flower gives more points but usually grows slower, so the best points-per-grow-day flower (often a 1-day Pansy/Cosmos) reaches the key faster. Keys are random chest opens — value shown is the average.</div>`;
       h += `</div>`;
       return h;
     }
@@ -13569,28 +13630,28 @@
         blocks.push({ animalType, count: animals.length, produce, sick, golden, rows, best: rows[0] });
       }
       if (!blocks.length) return "";
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">ANIMAL FEEDING — WHAT TO FEED (and whether to bother)</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Produce sold at p2p minus feed minus sickness, per day. Food changes only the FEED cost (produce is level-based), so the cheapest food for your animals\u2019 levels wins. <span style="color:var(--green)">Green = feeding is net-positive</span>; <span style="color:var(--red)">red = you lose FLOWER feeding them, don\u2019t bother</span>. \u2605 = best food.</div>`;
+      let h = `<div class="v-rms">`;
+      h += `<p class="v-rms-intro">Produce sold at p2p minus feed minus sickness, per day. Food changes only the FEED cost (produce is level-based), so the cheapest food for your animals’ levels wins. <span class="v-rms-pos">Green = feeding is net-positive</span>; <span class="v-rms-neg">red = you lose FLOWER feeding them, don’t bother</span>. ★ = best food.</p>`;
       for (const b of blocks) {
         const verdict = b.best.net > 0.001
-          ? `<span style="color:var(--green)">feed ${escHTML(b.best.food)} \u2192 +${roadmapFmtFlower(b.best.net)}/d</span>`
-          : `<span style="color:var(--red)">loss-making \u2014 best is ${roadmapFmtFlower(b.best.net)}/d, don\u2019t feed</span>`;
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:10px 0 3px">${b.animalType.toUpperCase()}S \u00d7${b.count}${b.golden ? " (golden \u2014 free feed)" : ""} \u00b7 produce +${roadmapFmtFlower(b.produce)}/d \u00b7 sick \u2212${roadmapFmtFlower(b.sick)}/d \u00b7 ${verdict}</div>`;
-        h += `<table style="width:100%;border-collapse:collapse;font-size:0.58rem"><tr style="color:var(--text-dim);font-size:0.5rem"><td>food</td><td style="text-align:right;padding:0 6px">feed/d</td><td style="text-align:right">net/d</td></tr>`;
+          ? `<span class="v-pill v-ok">feed ${escHTML(b.best.food)} → +${roadmapFmtFlower(b.best.net)}/d</span>`
+          : `<span class="v-pill v-bad">loss-making — best is ${roadmapFmtFlower(b.best.net)}/d, don’t feed</span>`;
+        h += `<div class="v-rms-h">${_dashIcon(b.animalType)}${b.animalType}${b.animalType === "Sheep" ? "" : "s"} <span class="v-dim">×${b.count}${b.golden ? " (golden — free feed)" : ""}</span> ${verdict}</div>`;
+        h += `<div class="v-rms-sub">produce <span class="v-rms-gain">+${roadmapFmtFlower(b.produce)}/d</span> · sickness <span class="v-rms-neg">−${roadmapFmtFlower(b.sick)}/d</span></div>`;
+        h += `<table class="w-table w-compact"><thead><tr><th>food</th><th class="r">feed/d</th><th class="r">net/d</th></tr></thead><tbody>`;
         for (const r of b.rows) {
           const pos = r.net > 0.001, neg = r.net < -0.001;
-          const ncol = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
+          const ncls = pos ? "v-rms-pos" : (neg ? "v-rms-neg" : "v-dim");
           const isBest = r.food === b.best.food;
-          h += `<tr style="border-bottom:1px solid #1b1b1b${isBest ? ";background:#14240f" : ""}">
-            <td style="padding:2px 6px 2px 0">${isBest ? "\u2605 " : ""}<img class="inline-icon" src="${getItemIcon(r.food)}" onerror="this.style.display='none'" alt=""> ${escHTML(r.food)}</td>
-            <td style="padding:2px 6px;text-align:right;color:var(--red)">${r.feedDay > 0.001 ? "\u2212" + roadmapFmtFlower(r.feedDay) : "0"}</td>
-            <td style="padding:2px 0 2px 6px;text-align:right;color:${ncol};font-weight:bold">${(pos ? "+" : (neg ? "\u2212" : "")) + roadmapFmtFlower(Math.abs(r.net))}</td>
+          h += `<tr${isBest ? ' class="v-rms-best"' : ""}>
+            <td class="nw">${_dashIcon(r.food)}${escHTML(r.food)}${isBest ? ' <span class="v-done">★</span>' : ""}</td>
+            <td class="r nw">${r.feedDay > 0.001 ? '<span class="v-rms-neg">−' + roadmapFmtFlower(r.feedDay) + "</span>" : '<span class="v-dim">0</span>'}</td>
+            <td class="r nw ${ncls}">${(pos ? "+" : (neg ? "−" : "")) + roadmapFmtFlower(Math.abs(r.net))}</td>
           </tr>`;
         }
-        h += `</table>`;
+        h += `</tbody></table>`;
       }
-      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Feed cost scales with animal level (higher levels eat more per cycle). Sickness = expected Barn Delight cure cost/day. Produce includes both drops (egg+feather / milk+leather / wool+merino) at your boosts.</div>`;
+      h += `<div class="v-rms-foot">Feed cost scales with animal level (higher levels eat more per cycle). Sickness = expected Barn Delight cure cost/day. Produce includes both drops (egg+feather / milk+leather / wool+merino) at your boosts.</div>`;
       h += `</div>`;
       return h;
     }
@@ -13621,25 +13682,24 @@
         blocks.push({ animalType, per, peak, lastPos, avgL });
       }
       if (!blocks.length) return "";
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">ANIMAL LIFECYCLE — net per level (feed up to where?)</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Net FLOWER/day for a SINGLE animal at each level (produce \u2212 feed \u2212 sickness, your boosts). Feed scales with level faster than produce, so net usually peaks then turns negative \u2014 \u2605 marks the peak. If your animals are past the break-even level and red, feeding them loses FLOWER; consider running them only to that level (or replacing leveled animals with fresh ones if you want the produce cycle to stay profitable).</div>`;
+      let h = `<div class="v-rms">`;
+      h += `<p class="v-rms-intro">Net FLOWER/day for a SINGLE animal at each level (produce − feed − sickness, your boosts). Feed scales with level faster than produce, so net usually peaks then turns negative — ★ marks the peak. If your animals are past the break-even level and red, feeding them loses FLOWER; consider running them only to that level (or replacing leveled animals with fresh ones if you want the produce cycle to stay profitable).</p>`;
       for (const b of blocks) {
         const verdict = b.lastPos > 0
-          ? `<span style="color:var(--green)">profitable to L${b.lastPos}</span>, peak L${b.peak.L} (+${roadmapFmtFlower(b.peak.net)}/d)`
-          : `<span style="color:var(--red)">never net-positive at any level</span>`;
-        h += `<div class="pixel-font" style="font-size:0.5rem;color:var(--lily);margin:10px 0 3px">${b.animalType.toUpperCase()} \u00b7 your avg level ${b.avgL} \u00b7 ${verdict}</div>`;
-        h += `<div style="display:flex;flex-wrap:wrap;gap:3px">`;
+          ? `<span class="v-pill v-ok">profitable to L${b.lastPos}</span> <span class="v-dim">peak L${b.peak.L} (+${roadmapFmtFlower(b.peak.net)}/d)</span>`
+          : `<span class="v-pill v-bad">never net-positive at any level</span>`;
+        h += `<div class="v-rms-h">${_dashIcon(b.animalType)}${b.animalType} <span class="v-dim">your avg level ${b.avgL}</span> ${verdict}</div>`;
+        h += `<div class="v-rms-levels">`;
         for (const p of b.per) {
           const pos = p.net > 0.0001, neg = p.net < -0.0001;
-          const col = pos ? "var(--green)" : (neg ? "var(--red)" : "var(--text-dim)");
+          const cls = pos ? "v-rms-pos" : (neg ? "v-rms-neg" : "v-dim");
           const star = p.L === b.peak.L;
           const cur = p.L === b.avgL;
-          h += `<div title="Level ${p.L}: ${p.net >= 0 ? "+" : "\u2212"}${roadmapFmtFlower(Math.abs(p.net))}/day" style="min-width:38px;text-align:center;font-size:0.5rem;padding:2px 3px;border:1px solid ${cur ? "var(--sunpetal)" : "#222"};border-radius:3px;background:${star ? "#14240f" : "transparent"}"><div style="color:var(--text-dim)">${star ? "\u2605" : ""}L${p.L}</div><div style="color:${col};font-weight:bold">${p.net >= 0 ? "+" : "\u2212"}${roadmapFmtFlower(Math.abs(p.net))}</div></div>`;
+          h += `<div title="Level ${p.L}: ${p.net >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(p.net))}/day" class="v-rms-lvl${star ? " v-rms-peak" : ""}${cur ? " v-rms-cur" : ""}"><small>${star ? "★ " : ""}L${p.L}</small><b class="${cls}">${p.net >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(p.net))}</b></div>`;
         }
         h += `</div>`;
       }
-      h += `<div style="margin-top:8px;font-size:0.5rem;color:var(--text-dim)">Orange border = your current average level. Per single animal; multiply by your pen size. Note SFL doesn\u2019t let you un-level an animal \u2014 this shows where the produce cycle stops being worth the feed.</div>`;
+      h += `<div class="v-rms-foot">Orange border = your current average level. Per single animal; multiply by your pen size. Note SFL doesn’t let you un-level an animal — this shows where the produce cycle stops being worth the feed.</div>`;
       h += `</div>`;
       return h;
     }
@@ -13659,9 +13719,9 @@
         rows.push({ cat, label, C });
       }
       if (!rows.length) return "";
-      let h = `<div class="pixel-panel" style="padding:12px;margin-bottom:16px">`;
-      h += `<div class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);margin-bottom:4px">HARVEST EFFICIENCY \u2014 how often you really harvest</div>`;
-      h += `<div style="font-size:0.55rem;color:var(--text-dim);margin-bottom:10px;line-height:1.6">Each resource respawns on a timer; you only get the full yield if you collect it every time it\u2019s ready. <b style="color:var(--green)">100%</b> = you harvest every cycle around the clock (incl. overnight); <b>50%</b> = you catch it half as often, so ~half the income. Drag a slider to match how you actually play \u2014 it rescales that category\u2019s income everywhere on this page and is saved to your browser. <span style="cursor:pointer;color:var(--lily)" onclick="_roadmapResetAllEff()">[reset all to measured]</span></div>`;
+      let h = `<div class="v-rms-card">`;
+      h += `<div class="v-rms-h">⏱ Harvest efficiency — how often you really harvest</div>`;
+      h += `<p class="v-rms-intro">Each resource respawns on a timer; you only get the full yield if you collect it every time it’s ready. <b class="v-done">100%</b> = you harvest every cycle around the clock (incl. overnight); <b>50%</b> = you catch it half as often, so ~half the income. Drag a slider to match how you actually play — it rescales that category’s income everywhere on this page and is saved to your browser. <button type="button" class="v-rms-link" onclick="_roadmapResetAllEff()">Reset all to measured</button></p>`;
       for (const r of rows) {
         const factor = roadmapEffFactor(r.cat, settings);
         const pct = Math.round(factor * 100);
@@ -13669,11 +13729,11 @@
         const eb = (roadmapState && roadmapState.effByCat) ? roadmapState.effByCat[r.cat] : null;
         const measured = (eb && eb.measured) ? Math.round(eb.ratio * 100) : null;
         const overridden = !!(settings.effOverrides && typeof settings.effOverrides[r.cat] === "number");
-        h += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0;font-size:0.58rem">`;
-        h += `<div style="min-width:84px"><img class="inline-icon" src="${getItemIcon(getDefaultProduct(r.cat))}" onerror="this.style.display='none'" alt=""> ${r.label}</div>`;
-        h += `<input type="range" min="0" max="${ROADMAP_EFF_MAX * 100}" step="1" value="${pct}" style="accent-color:var(--green);width:170px" oninput="_roadmapEffPreview('${r.cat}',this.value,${r.C.toFixed(3)})" onchange="_roadmapSetEffOverride('${r.cat}',this.value)">`;
-        h += `<div style="min-width:40px;text-align:right"><b id="eff-pct-${r.cat}" style="color:${overridden ? "var(--sunpetal)" : "var(--green)"}">${pct}%</b></div>`;
-        h += `<div style="color:var(--text-dim);flex:1;min-width:230px">100% = every ${roadmapEffFmtH(r.C)} day &amp; night \u00b7 now \u2248 every <b id="eff-int-${r.cat}">${roadmapEffFmtH(interval)}</b>${measured != null ? ` \u00b7 measured ${measured}%` : ""}${overridden ? ` \u00b7 <span style="cursor:pointer;color:var(--lily)" onclick="_roadmapResetEffOverride('${r.cat}')">[auto]</span>` : ""}</div>`;
+        h += `<div class="v-rms-eff">`;
+        h += `<div class="v-rms-eff-name">${_dashIcon(getDefaultProduct(r.cat))}${r.label}</div>`;
+        h += `<input type="range" min="0" max="${ROADMAP_EFF_MAX * 100}" step="1" value="${pct}" aria-label="${r.label} efficiency" oninput="_roadmapEffPreview('${r.cat}',this.value,${r.C.toFixed(3)})" onchange="_roadmapSetEffOverride('${r.cat}',this.value)">`;
+        h += `<b id="eff-pct-${r.cat}" class="v-rms-eff-pct${overridden ? " v-rms-ovr" : ""}">${pct}%</b>`;
+        h += `<div class="v-rms-eff-info">100% = every ${roadmapEffFmtH(r.C)} day &amp; night · now ≈ every <b id="eff-int-${r.cat}">${roadmapEffFmtH(interval)}</b>${measured != null ? ` · measured ${measured}%` : ""}${overridden ? ` · <button type="button" class="v-rms-link" onclick="_roadmapResetEffOverride('${r.cat}')">auto</button>` : ""}</div>`;
         h += `</div>`;
       }
       h += `</div>`;
@@ -14705,37 +14765,37 @@
       h += `</div>`;
       h += `<div id="buy-skills" style="display:none">` + roadmapSkillsViewHtml(settings) + `</div>`;
       h += `</div>`;
-      h += _rmCollapse("🎁 GIFTS — best NPC flower gifts", roadmapGiftsHtml(settings));
-      h += _rmCollapse("🚚 DELIVERIES — which are worth doing", roadmapDeliveriesHtml(settings));
-      h += _rmCollapse("ANIMAL FEEDING \u2014 what to feed, worth it?", roadmapAnimalFeedHtml(settings));
-      h += _rmCollapse("ANIMAL LIFECYCLE \u2014 net per level", roadmapAnimalLifecycleHtml(settings));
+      h += _rmCollapse("🎁 Gifts — best NPC flower gifts", roadmapGiftsHtml(settings));
+      h += _rmCollapse("🚚 Deliveries — which are worth doing", roadmapDeliveriesHtml(settings));
+      h += _rmCollapse("🐔 Animal feeding — what to feed, worth it?", roadmapAnimalFeedHtml(settings));
+      h += _rmCollapse("📈 Animal lifecycle — net per level", roadmapAnimalLifecycleHtml(settings));
       // ── Controls ──
-      h += `<details class="v-rm-sec"><summary>⚙ Settings &amp; assumptions — income source, efficiency sliders, restocks, ticket value, filters</summary><div>`;
-      h += `<div class="pixel-panel" style="padding:12px;margin-bottom:16px;font-size:0.62rem;color:var(--text-secondary)">`;
-      h += `<div style="display:flex;flex-wrap:wrap;gap:14px;align-items:center">`;
-      h += `<label>Start FLOWER/day: <input type="number" id="rm-income" value="${startIncome.toFixed(2)}" step="1" min="0" style="width:88px" onchange="_roadmapSetIncome(this.value)"> <span style="color:var(--text-dim)">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button onclick="_roadmapResetIncome()" style="font-size:0.55rem">reset</button></label>`;
-      h += `<label>Efficiency: <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Last 7 days (actual)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>100% (theoretical)</option></select></label>`;
+      h += `<details class="v-rm-sec"><summary>⚙ Settings &amp; assumptions — income source, efficiency sliders, restocks, ticket value, filters</summary><div class="v-rms">`;
+      h += `<div class="v-rms-card">`;
+      h += `<div class="v-rms-form">`;
+      h += `<label>Start FLOWER/day <input type="number" id="rm-income" class="v-rms-in-l" value="${startIncome.toFixed(2)}" step="1" min="0" onchange="_roadmapSetIncome(this.value)"> <span class="v-dim">auto ${roadmapFmtFlower(roadmapState.currentProdDefault)}</span> <button type="button" class="dash-toggle-btn" onclick="_roadmapResetIncome()">Reset</button></label>`;
+      h += `<label>Efficiency <select onchange="_roadmapSetEffMode(this.value)"><option value="real"${settings.effMode === "real" ? " selected" : ""}>Last 7 days (actual)</option><option value="theoretical"${settings.effMode === "theoretical" ? " selected" : ""}>100% (theoretical)</option></select></label>`;
       h += `<label><input type="checkbox" ${settings.incCollectibles ? "checked" : ""} onchange="_roadmapToggle('incCollectibles',this.checked)"> Collectibles</label>`;
       h += `<label><input type="checkbox" ${settings.incWearables ? "checked" : ""} onchange="_roadmapToggle('incWearables',this.checked)"> Wearables</label>`;
       h += `<label title="Treat coin-denominated costs (axes, seeds…) as free — coins aren't directly convertible to FLOWER. Auto-on when you hold >10k coins."><input type="checkbox" ${roadmapCoinsFree(settings) ? "checked" : ""} onchange="_roadmapToggle('coinsFree',this.checked)"> Coins free</label>`;
-      h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day: <input type="number" value="${settings.restocksPerDay}" min="1" step="1" style="width:46px" onchange="_roadmapSetRestocks(this.value)"></label>`;
-      h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value: <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" style="width:52px" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
-      h += `<label title="The plan maximises FLOWER in hand after this many years: what doesn’t pay back by then stays out of the plan.">Horizon: <input type="number" value="${settings.horizonYears}" min="1" step="1" style="width:46px" onchange="_roadmapSetHorizon(this.value)"> years</label>`;
+      h += `<label title="Betty seed restocks you do per day. Caps how much you can plant; fast crops (Sunflower) are seed-limited not plot-limited.">Restocks/day <input type="number" value="${settings.restocksPerDay}" min="1" step="1" onchange="_roadmapSetRestocks(this.value)"></label>`;
+      h += `<label title="What one seasonal delivery ticket is worth to YOU in FLOWER. Tickets only buy season-shop items and expire — set 0 to ignore ticket rewards in deliveries.">Ticket value <input type="number" value="${settings.ticketValueSfl}" min="0" step="0.5" onchange="_roadmapSetTicketValue(this.value)"> ${sflIcon()}</label>`;
+      h += `<label title="The plan maximises FLOWER in hand after this many years: what doesn’t pay back by then stays out of the plan.">Horizon <input type="number" value="${settings.horizonYears}" min="1" step="1" onchange="_roadmapSetHorizon(this.value)"> years</label>`;
       {
         const autoW = parseFloat(localStorage.getItem("sfl_repay_daily_flower"));
-        h += `<label title="How much FLOWER a day goes to BTC (the repay plan) — it is not reinvested into buys. Empty = automatically from the repay plan in the Investment Tracker.">BTC withdrawal: <input type="number" value="${settings.withdrawPerDay != null ? settings.withdrawPerDay : ""}" placeholder="${isFinite(autoW) && autoW > 0 ? "auto " + roadmapFmtFlower(autoW) : "0"}" min="0" step="1" style="width:72px" onchange="_roadmapSetWithdraw(this.value)"> /day</label>`;
+        h += `<label title="How much FLOWER a day goes to BTC (the repay plan) — it is not reinvested into buys. Empty = automatically from the repay plan in the Investment Tracker.">BTC withdrawal <input type="number" class="v-rms-in-l" value="${settings.withdrawPerDay != null ? settings.withdrawPerDay : ""}" placeholder="${isFinite(autoW) && autoW > 0 ? "auto " + roadmapFmtFlower(autoW) : "0"}" min="0" step="1" onchange="_roadmapSetWithdraw(this.value)"> /day</label>`;
       }
-      h += `<label title="How an NFT’s value changes per year when you sell it at the end of the horizon. Empty = measured on the market by price bucket (−19 to −47 % a year; above 10k an NFT doesn’t sell). 1 = the value holds.">NFT value/year: <input type="number" value="${settings.nftDriftPerYear != null ? settings.nftDriftPerYear : ""}" placeholder="from data" min="0" max="2" step="0.05" style="width:58px" onchange="_roadmapSetDrift(this.value)"></label>`;
+      h += `<label title="How an NFT’s value changes per year when you sell it at the end of the horizon. Empty = measured on the market by price bucket (−19 to −47 % a year; above 10k an NFT doesn’t sell). 1 = the value holds.">NFT value/year <input type="number" class="v-rms-in-l" value="${settings.nftDriftPerYear != null ? settings.nftDriftPerYear : ""}" placeholder="from data" min="0" max="2" step="0.05" onchange="_roadmapSetDrift(this.value)"></label>`;
       h += `<label><input type="checkbox" ${settings.showCosmetic ? "checked" : ""} onchange="_roadmapToggle('showCosmetic',this.checked)"> Show no-value boosts</label>`;
-      h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price: <input type="number" value="${settings.maxPrice || 0}" step="100" min="0" style="width:88px" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : "(no cap)"}</label>`;
-      h += `<button onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap" style="margin-left:auto;font-size:0.6rem;padding:4px 10px;cursor:pointer">↻ Refresh live data</button>`;
+      h += `<label title="Skip NFTs above this floor price (0 = no cap). Items priced over 500k FLOWER are always dropped as troll/no-liquidity listings.">Max price <input type="number" class="v-rms-in-l" value="${settings.maxPrice || 0}" step="100" min="0" onchange="_roadmapSetMaxPrice(this.value)"> ${settings.maxPrice ? "" : '<span class="v-dim">(no cap)</span>'}</label>`;
+      h += `<button type="button" class="dash-toggle-btn v-rms-refresh" onclick="refresh()" title="Re-fetch your live farm (new purchases) + current marketplace floor prices, then rebuild the whole roadmap">↻ Refresh live data</button>`;
       h += `</div>`;
       if (roadmapState.effMeta && roadmapState.effMeta.available) {
         const parts = [];
         for (const [cat, e] of Object.entries(roadmapState.effByCat)) { if (!e.measured) continue; parts.push(`${POWER_CATEGORIES[cat] ? POWER_CATEGORIES[cat].label : cat} ${Math.round(e.ratio * 100)}%`); }
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--text-dim)">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, last 7 days, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${roadmapState.meanRatio != null ? Math.round(roadmapState.meanRatio * 100) + "%" : "100% (unmeasured)"}</div>`;
+        h += `<div class="v-rms-foot">Harvest efficiency (throughput vs theoretical), ${roadmapState.effMeta.from} → ${roadmapState.effMeta.to}, last 7 days, ${roadmapState.effMeta.snaps} snaps: ${parts.join(" · ")}${parts.length ? "" : "no harvests recorded"} · bees/fishing use avg ${roadmapState.meanRatio != null ? Math.round(roadmapState.meanRatio * 100) + "%" : "100% (unmeasured)"}</div>`;
       } else {
-        h += `<div style="margin-top:8px;font-size:0.55rem;color:var(--yellow)">No recent history available — efficiency is UNMEASURED, so every figure is at theoretical (100%) rates.</div>`;
+        h += `<div class="v-rm-warn">No recent history available — efficiency is UNMEASURED, so every figure is at theoretical (100%) rates.</div>`;
       }
       h += `</div>`;
 
@@ -14773,7 +14833,7 @@
     window._roadmapResetResVal = function() { saveRoadmapSettings({ resourceUseValue: {} }); renderRoadmapContent(); };
     window._roadmapEffPreview = function(cat, v, C) {
       const pct = Math.round(parseFloat(v));
-      const p = document.getElementById("eff-pct-" + cat); if (p) { p.textContent = pct + "%"; p.style.color = "var(--sunpetal)"; }
+      const p = document.getElementById("eff-pct-" + cat); if (p) { p.textContent = pct + "%"; p.classList.add("v-rms-ovr"); }
       const i = document.getElementById("eff-int-" + cat);
       if (i) { const f = pct / 100; const iv = f > 0 ? (parseFloat(C) / f) : Infinity; i.textContent = !isFinite(iv) ? "never" : (iv >= 48 ? (iv / 24).toFixed(1) + " days" : (iv >= 10 ? Math.round(iv) + "h" : iv.toFixed(1) + "h")); }
     };
