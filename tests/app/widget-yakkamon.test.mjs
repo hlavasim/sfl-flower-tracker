@@ -162,3 +162,58 @@ test("the host renders a planner copy with its own options; views have a cog too
   assert.strictEqual((h.renderPage("yk-planner", { data: {}, ctx: ctx() }).match(/data-row="/g) || []).length, 1);
   assert.match(h.renderPage("yk-live", { data: {}, ctx: ctx() }), /data-action="cog"/, "every widget has a cog (title, options)");
 });
+
+test("📱 glance: live S = your trainer number with the tier ring; M = the #10/#50/#100 cut-offs; L prices them in FLOWER", () => {
+  assert.deepStrictEqual(Y.ykLive.sizes, ["s", "m", "l"]);
+  const s = Y.ykLive.glance({}, ctx(), {}, "s").html;
+  assert.match(s, /^<div class="g-corner"><svg class="g-ring g-warn"/);
+  assert.match(s, /<div class="g-big">#41\.2k<\/div><div class="g-cap">you'd be · Platinum egg · 58\.8k left<\/div>$/);
+  const m = Y.ykLive.glance({}, ctx(), {}, "m").html;
+  assert.match(m, /^<div class="g-split">/);
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.match(m, /#50<div>last Storm<\/div><\/div><span class="g-v">150k</);
+  const l = Y.ykLive.glance({}, ctx(), {}, "l").html;
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 5);
+  assert.match(l, /#50<div>last Storm · ≈ 68\.2k FLOWER<\/div>/);         // ceil(150,000 / 2.2)
+  // no board yet: M falls back to the number alone
+  assert.doesNotMatch(Y.ykLive.glance({}, ctx({ live: { ...LIVE, board: null } }), {}, "m").html, /g-row/);
+  assert.match(Y.ykLive.glance({}, ctx({ live: null }), {}, "s").empty, /Loading live data/);
+  assert.match(Y.ykLive.glance({}, ctx({ live: null, liveErr: "502" }), {}, "m").empty, /\(502\)/);
+});
+
+test("📱 glance: placing S = the #50 threshold, its move and line; M adds #3 / #10 / #100", () => {
+  const s = Y.ykPlacing.glance({}, ctx(), {}, "s").html;
+  assert.match(s, /<div class="g-big">20\.6k<small> pts<\/small><\/div><div class="g-cap">#50 Storm cut-off · \+2\.4k in 24 h<\/div><svg class="g-spark g-warn"/);
+  const m = Y.ykPlacing.glance({}, ctx(), {}, "m").html;
+  assert.match(m, /#10<div>\+50\.1k in 24 h<\/div><\/div><span class="g-v g-warn">129k</);
+  assert.strictEqual((m.match(/class="g-row"/g) || []).length, 3);
+  assert.match(Y.ykPlacing.glance({}, ctx({ hist: HIST.slice(0, 1) }), {}, "s").empty, /Not enough snapshots/);
+});
+
+test("📱 glance: planner S = the week-1 deposit; M = three tiles; L = the tranches", () => {
+  const s = Y.ykPlanner.glance({}, ctx(), {}, "s").html;
+  assert.match(s, /^<div class="g-big g-ok">943k<small> FLOWER<\/small><\/div><div class="g-cap">week 1 deposit · [\d.]+M pts · then 8 top-ups<\/div>$/);
+  const m = Y.ykPlanner.glance({}, ctx(), {}, "m").html;
+  assert.match(m, /<span>Week 1<\/span><b>943k<\/b>/);
+  assert.match(m, /<span>Top-ups<\/span><b>[\d.]+k<\/b><small>8 weeks<\/small>/);
+  assert.match(m, /<span>Total<\/span><b>960k<\/b><small>9 deposits<\/small>/);
+  const l = Y.ykPlanner.glance({}, ctx(), {}, "l").html;
+  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 6);
+  assert.match(l, /Week 1<div>Aug 10 · 3\.0×<\/div><\/div><span class="g-v g-ok">943k</);
+  assert.match(Y.ykPlanner.glance({}, ctx({ live: null }), {}, "s").empty, /Waiting for the live FLOWER and BTC prices/);
+});
+
+test("📱 glance: calculator S = the points; M splits base / bonus / per FLOWER", () => {
+  assert.strictEqual(Y.ykCalculator.size, "s");
+  const s = Y.ykCalculator.glance({}, ctx(), {}, "s").html;
+  assert.match(s, /^<div class="g-big g-ok">1\.6k<small> pts<\/small><\/div><div class="g-cap">500 FLOWER in week 1 · 3\.0×<\/div>$/);
+  const m = Y.ykCalculator.glance({}, ctx(), { amount: 5000, week: 2 }, "m").html;
+  assert.match(m, /5,000 FLOWER in week 2 · 2\.8×/);
+  assert.match(m, /Bulk bonus<\/div><span class="g-v g-accent">\+2k</);       // 5,000 × 0.4 = 2,000
+  assert.match(m, /Per FLOWER<\/div><span class="g-v">3\.20 pts</);           // (14,000 + 2,000) / 5,000
+  assert.match(Y.ykCalculator.glance({}, ctx(), { amount: 0 }, "s").empty, /Enter a deposit amount/);
+});
+
+test("📱 glance: the reference tables and the verdict stay table-only", () => {
+  for (const w of [Y.ykFacts, Y.ykTiers, Y.ykSources, Y.ykRanks, Y.ykEggs, Y.ykVerdict]) assert.strictEqual(w.glance, undefined, w.type);
+});
