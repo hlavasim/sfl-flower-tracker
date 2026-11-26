@@ -91,16 +91,29 @@ test("Petal Blessed: the beds to plant with their recipes (icons), the hours it 
   assert.match(cd.summary, /id="pb-timer" data-next="2000000000000" data-ready="2000000000000">10m</);
 });
 
-test("grow planner: plantings with times, the PB batch, the sleep hours editable above the table", () => {
-  const m = P._growPlanModel(P._flowerPageData(FARM));
-  const out = growPlanner.build({ farm: FARM }, ctx(() => m));
+test("grow planner: plantings with times, the PB batch; target and sleep hours are the copy's ⚙ options", () => {
+  const opts = { mode: "collection", n: 5, sleepStart: 22, sleepEnd: 6 };
+  const m = P._growPlanModel(P._flowerPageData(FARM), opts);
+  assert.deepStrictEqual(m.sleep, { start: 22, end: 6 });
+  const out = growPlanner.build({ farm: FARM }, ctx((f, o) => P._growPlanModel(P._flowerPageData(f), o)), opts);
+  assert.deepStrictEqual(growPlanner.options.map((o) => o.key), ["mode", "n", "sleepStart", "sleepEnd"]);
+  assert.strictEqual(growPlanner.titleFor({ mode: "gifts", n: 3 }), "📋 Grow planner · 🎁 3");
   if (m.done) { assert.match(out.empty, /All flowers at target/); return; }
   assert.strictEqual(out.rows.length, (m.plan.pbReady ? 0 : m.plan.steps.length) + m.plan.pbFlowers.length);
-  assert.match(out.summary, /onchange="updateSleepSchedule\(this,'start'\)"/);
-  assert.match(out.summary, /💤 sleep/);
+  assert.match(out.summary, /<b>22–06<\/b>/);
+  assert.doesNotMatch(out.summary, /updateSleepSchedule/);
   const html = renderTable(growPlanner.columns, out.rows, growPlanner.defaults, { rowKey: growPlanner.rowKey });
   assert.match(html, /class="v-ring"/);
   assert.match(html, /class="v-pill v-(ok|idle|run)">(Plant|⚡)/);
+});
+
+test("Petal Blessed and the grow planner plan for their own copy's target, not the page's", () => {
+  const data = P._flowerPageData(FARM);
+  const a = P._petalBlessedModel(data, { mode: "collection", n: 1 }).picks.length;
+  const b = P._petalBlessedModel(data, { mode: "collection", n: 60 }).picks.length;
+  assert.ok(b >= a, `a higher N wants at least as many beds (${a} → ${b})`);
+  const coll = P._growPlanModel(data, { mode: "collection", n: 60 });
+  assert.strictEqual(coll.done, false, "60 of every flower is not done");
 });
 
 test("beehives: a honey ring per hive and the swarm note", () => {

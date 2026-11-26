@@ -3387,19 +3387,8 @@
       const v = parseInt(localStorage.getItem("sfl_flower_n") || "");
       return Number.isFinite(v) && v >= 1 ? v : (LIMIT || 2);
     }
-    function setFlowerMode(m) {
-      localStorage.setItem("sfl_flower_mode", m);
-      if (cachedFarmData) renderFlowers(cachedFarmData);
-    }
-    function setFlowerN(n) {
-      const v = Math.max(1, Math.min(99, parseInt(n) || 1));
-      localStorage.setItem("sfl_flower_n", v);
-      if (cachedFarmData) renderFlowers(cachedFarmData);
-    }
-    // Build baseDemandFn for current mode
-    function buildFlowerDemandFn() {
-      const mode = getFlowerMode();
-      const n = getFlowerN();
+    // Build baseDemandFn for a mode and N (default: the last ones the FLOWERS page used)
+    function buildFlowerDemandFn(mode = getFlowerMode(), n = getFlowerN()) {
       if (mode === "gifts") {
         // Demand = (gifts/day for that flower) × N days
         const plan = getGiftPlan();
@@ -8010,10 +7999,8 @@
     //  PETAL BLESSED
     // ═══════════════════════════════════════
 
-    function getPetalBlessedRecommendation(inventory, inProgress) {
-      const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn());
-      const flowerMode = getFlowerMode();
-      const N = getFlowerN();
+    function getPetalBlessedRecommendation(inventory, inProgress, flowerMode = getFlowerMode(), N = getFlowerN()) {
+      const { totalNeeded } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn(flowerMode, N));
       const candidates = [];
       for (const [name, needed] of Object.entries(totalNeeded)) {
         const have = getCount(inventory, name);
@@ -8068,10 +8055,6 @@
         if (s) return JSON.parse(s);
       } catch(e) {}
       return { start: 23, end: 7 };
-    }
-
-    function saveSleepSchedule(s) {
-      localStorage.setItem("sfl_sleep_schedule", JSON.stringify(s));
     }
 
     function isHourDuringSleep(hour, sleep) {
@@ -8161,13 +8144,6 @@
       }
 
       return { steps, pbFlowers, pbTime, pbReady, idleH };
-    }
-
-    function updateSleepSchedule(input, field) {
-      const s = getSleepSchedule();
-      s[field] = Math.max(0, Math.min(23, parseInt(input.value) || 0));
-      saveSleepSchedule(s);
-      if (window._wRerender) window._wRerender();
     }
 
     // ═══════════════════════════════════════
@@ -9641,8 +9617,8 @@
         petalBlessed: extractPetalBlessed(farm), flowerBeds: (farm.flowers && farm.flowers.flowerBeds) || {} };
     }
     // Per flower: what the page's mode and N still want (the grow planner's input).
-    function _flowerDataOf(inventory, inProgress) {
-      const { totalNeeded, dependents } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn());
+    function _flowerDataOf(inventory, inProgress, mode, n) {
+      const { totalNeeded, dependents } = computeAllTotalNeeded(inventory, inProgress, buildFlowerDemandFn(mode, n));
       const flowerData = {};
       for (const [name, needed] of Object.entries(totalNeeded)) {
         const have = getCount(inventory, name);
@@ -9793,15 +9769,22 @@
       return { npcs, plannedCount, hasBlossomBonding, yieldBoosts, yieldFactor, beds: FLOWER_BEDS, cycle };
     }
 
+    // A widget copy's mode and N (its ⚙ options), else the page's last ones.
+    const _flowerTarget = (opts = {}) => ({ mode: opts.mode === "gifts" || opts.mode === "collection" ? opts.mode : getFlowerMode(),
+      n: Number(opts.n) >= 1 ? Number(opts.n) : getFlowerN() });
     // ⚡ Petal Blessed: its state and the flowers to plant before using it.
-    function _petalBlessedModel(data) {
-      return { status: data.petalBlessed, picks: getPetalBlessedRecommendation(data.inventory, data.inProgress)
+    function _petalBlessedModel(data, opts) {
+      const t = _flowerTarget(opts);
+      return { status: data.petalBlessed, picks: getPetalBlessedRecommendation(data.inventory, data.inProgress, t.mode, t.n)
         .map((p) => ({ ...p, seedLabel: SEED_DATA[p.seed].label })) };
     }
     // 📋 The grow planner: what to plant when, up to the next Petal Blessed (sleep hours marked).
-    function _growPlanModel(data) {
-      const flowerData = _flowerDataOf(data.inventory, data.inProgress);
-      const sleep = getSleepSchedule();
+    function _growPlanModel(data, opts = {}) {
+      const t = _flowerTarget(opts);
+      const flowerData = _flowerDataOf(data.inventory, data.inProgress, t.mode, t.n);
+      const hour = (v, d) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.max(0, Math.min(23, Math.round(Number(v)))) : d);
+      const page = getSleepSchedule();
+      const sleep = { start: hour(opts.sleepStart, page.start), end: hour(opts.sleepEnd, page.end) };
       const done = Object.values(flowerData).every(f => f.isComplete);
       const plan = buildGrowPlan(flowerData, data.flowerBeds ? extractBedDetails(data.flowerBeds) : [], data.petalBlessed, sleep);
       const info = (name) => {
@@ -9821,29 +9804,22 @@
       lastInventory = inventory;
       lastInProgress = inProgress;
 
-      const flowerMode = getFlowerMode();
-      const flowerN = getFlowerN();
       const app = document.getElementById("app");
 
       // Every panel is a widget (widgets/flowers.mjs, flowers-plan.mjs, beehives.mjs): the same on a
-      // board. The page's mode and N (the head) feed the needs table, Petal Blessed and the grow planner.
+      // board. Mode and N, the sleep hours: each copy's own ⚙ options (the page copies start from
+      // the page's old settings).
       window._wRerender = () => { if (getPage() === "flowers" && cachedFarmData) renderFlowers(cachedFarmData); };
       window._wRefresh = refresh;
       const _wFlowerFresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
+      const target = { mode: getFlowerMode(), n: getFlowerN() };
+      _wSeedOpts("flowers-needs", target);
+      _wSeedOpts("petal-blessed", target);
+      const sleep = getSleepSchedule();
+      _wSeedOpts("grow-planner", { ...target, sleepStart: sleep.start, sleepEnd: sleep.end });
 
-      const targetText = flowerMode === "gifts"
-        ? `Target: ${flowerN} day${flowerN === 1 ? "" : "s"} of gifts`
-        : `Target: ${flowerN} of each`;
-      // The head: mode, N (number + slider) and the pin of the flower target list
-      const modeBtn = (m, label) => `<button class="dash-toggle-btn${flowerMode === m ? " on" : ""}" onclick="setFlowerMode('${m}')">${label}</button>`;
-      const toolbar = `<div class="dash-toolbar">${modeBtn("gifts", "🎁 Gifts")}${modeBtn("collection", "📦 Collection")}
-        <span class="v-flw-n">${flowerMode === "gifts" ? "Days buffer" : "Per flower"}
-          <input type="number" min="1" max="99" value="${flowerN}" onchange="setFlowerN(this.value)" class="flower-n-input">
-          <input type="range" min="1" max="${flowerMode === "gifts" ? 30 : 20}" value="${flowerN}" oninput="document.getElementById('flower-n-val').textContent=this.value" onchange="setFlowerN(this.value)" class="flower-n-slider">
-          <b id="flower-n-val">${flowerN}</b></span>
-        ${_wPinBtn("target-list", "Flowers to the limit", { cat: "flowers" })}</div>`;
-      const head = _wPageHead("🌸 Flowers", `Farm #${escHTML(FARM_ID)} · ${targetText}${season ? ` · Season: ${escHTML(season)}` : ""}`);
-      let html = head.slice(0, head.lastIndexOf("</div>")) + toolbar + "</div>";
+      const head = _wPageHead("🌸 Flowers", `Farm #${escHTML(FARM_ID)}${season ? ` · Season: ${escHTML(season)}` : ""} · the target (mode and N) is set per widget in ⚙`);
+      let html = head.slice(0, head.lastIndexOf("</div>")) + `<div class="dash-toolbar">${_wPinBtn("target-list", "Flowers to the limit", { cat: "flowers" })}</div></div>`;
 
       if (typeof __widgets === "undefined") { app.innerHTML = html + _wMissing("Flowers"); return; }
       const w = (type, extra) => __widgets.renderPage(type, { data: { farm: data.farm }, ctx: Object.assign(_wCtx(type), extra || {}), fresh: _wFlowerFresh });
@@ -18372,8 +18348,16 @@
     }
     _wCtxMap["flower-gifts"] = _wCtxMap["flower-gift-cycle"] = () => ({ icon: _wIcon, model: (farm) => _giftsModel(_flowerPageData(farm)) });
     _wCtxMap["petal-blessed"] = () => ({ icon: _wIcon, hours: formatHours, countdown: dashFormatCountdown,
-      model: (farm) => _petalBlessedModel(_flowerPageData(farm)) });
-    _wCtxMap["grow-planner"] = () => ({ icon: _wIcon, hours: formatHours, model: (farm) => _growPlanModel(_flowerPageData(farm)) });
+      model: (farm, opts) => _petalBlessedModel(_flowerPageData(farm), opts) });
+    _wCtxMap["grow-planner"] = () => ({ icon: _wIcon, hours: formatHours, model: (farm, opts) => _growPlanModel(_flowerPageData(farm), opts) });
+    // A page control turned ⚙ option: the page copy starts from the page's old setting, once (only
+    // while it has no options saved of its own). Saved without a repaint.
+    function _wSeedOpts(key, opts) {
+      if (typeof __widgets === "undefined") return;
+      const page = __widgets.doc().page || {};
+      if (page[key] && page[key].opts) return;
+      __widgets.update((doc) => ({ ...doc, page: { ...(doc.page || {}), [key]: { ...((doc.page || {})[key] || {}), opts } } }));
+    }
     _wCtxMap["beehives"] = () => ({ hives: (farm) => (farm.beehives ? extractBeehiveDetails(farm.beehives) : []), countdown: dashFormatCountdown, icon: _wIcon });
 
     let _fishData = null, _fishPrices = null, _fishErr = null, _fishLoading = false, _fishFarm = null;

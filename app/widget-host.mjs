@@ -4,7 +4,7 @@
 // Frame ids: "page:<type>" on the widget's page, "b:<boardId>:<itemId>" on a board.
 // handle(frameId, action, value) applies one frame/table action, saves the document when it
 // changed, calls onChange(frameId) and returns whether it was handled.
-import { renderTable, tableSettingsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
+import { renderTable, tableSettingsPanel, optionsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
 import { renderFrame, freshness } from "../ui/frame.mjs";
 import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
   pageSettings, setPageSettings, pinnedCount, pinTarget, addBoard, removeBoard, setLastBoard } from "./boards.mjs";
@@ -28,6 +28,8 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     return out;
   };
   const withForce = (settings, force) => (force ? { ...settings, opts: { ...(settings.opts || {}), ...force } } : settings);
+  // a table always has settings; a view only when it has options of its own
+  const hasCog = (widget) => !widget.view || !!(widget.options && widget.options.length);
   const titleOf = (widget, settings) => (typeof widget.titleFor === "function" ? widget.titleFor(settings.opts || {}) : widget.title);
 
   function parse(frameId) {
@@ -47,9 +49,11 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   function body(widget, settings, data, ctx, tab, force = null) {
     try {
       if (widget.view) {
-        // a tile or a chart: its own HTML, no table settings
+        // a tile or a chart: its own HTML, no table settings; its own options (if any) are the panel
         const out = widget.view(data || {}, ctx || {}, settings.opts || {}) || {};
-        return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`, settingsHtml: "" };
+        const options = (widget.options || []).filter((o) => !force || !(o.key in force));
+        return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`,
+          settingsHtml: options.length ? optionsPanel(options, settings) : "" };
       }
       const out = widget.build(data || {}, ctx || {}, settings.opts || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
@@ -74,7 +78,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     if (force) forced.set(id, force); else forced.delete(id);
     const settings = withForce(effective(widget, pageSettings(doc, key)), force);
     const b = body(widget, settings, data, ctx, open.get(id), force);
-    return renderFrame({ id, title: titleOf(widget, settings), place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type), cog: !widget.view,
+    return renderFrame({ id, title: titleOf(widget, settings), place: "page", body: b.html, fresh, pinned: pinnedCount(doc, type), cog: hasCog(widget),
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 
@@ -86,7 +90,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     }
     const settings = effective(widget, item.settings);
     const b = pending ? { html: `<div class="w-fresh">Loading…</div>`, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id));
-    return renderFrame({ id, title: titleOf(widget, settings), place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: !widget.view,
+    return renderFrame({ id, title: titleOf(widget, settings), place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: hasCog(widget),
       settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
   }
 

@@ -1,5 +1,5 @@
 // FLOWERS · the planners. The maths stays the page's (_giftsModel, _petalBlessedModel, _growPlanModel
-// over the farm, handed in as ctx.model(farm)); these shape it:
+// over the farm and the copy's options, handed in as ctx.model(farm, opts)); these shape it:
 //   🎁 Gift planner: per NPC — given today, friendship, the next reward, the flower planned (pick one).
 //   🔁 Gift cycle: the daily demand of the plan and the batch cycle (with Petal Blessed) that grows it.
 //   ⚡ Petal Blessed: its state, and which flowers to plant before using it.
@@ -10,8 +10,14 @@ const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replac
 const icon = (ctx, n) => (typeof ctx.icon === "function" ? ctx.icon(n) : "");
 const hrs = (ctx, h) => (typeof ctx.hours === "function" ? ctx.hours(h) : `${Math.round(h * 10) / 10}h`);
 const farmNeeds = (farmId) => ({ farm: { res: "farm", farm: farmId } });
-const modelOf = (farm, ctx) => (typeof ctx.model === "function" ? ctx.model(farm) : null);
+const modelOf = (farm, ctx, opts = {}) => (typeof ctx.model === "function" ? ctx.model(farm, opts) : null);
 const NO_MODEL = "The flower planner did not load.";
+// The target each copy plans for (⚙): collection (N of each) or gifts (gifts for N days).
+const TARGET_OPTIONS = [
+  { key: "mode", label: "Mode", kind: "select", choices: [["collection", "📦 Collection (N of each)"], ["gifts", "🎁 Gifts (gifts for N days)"]] },
+  { key: "n", label: "N", kind: "number", min: 1, max: 99 },
+];
+const targetTitle = (base, o) => `${base} · ${o.mode === "gifts" ? "🎁" : "📦"} ${o.n ?? 5}`;
 const fmtDur = (h) => (h >= 24 ? `${(h / 24).toFixed(1)}d` : `${h}h`);
 
 // A reward: items and coins with their icons, wearables, a recipe.
@@ -155,9 +161,12 @@ const pbState = (st, ctx) => (st.status === "ready" ? pill("READY", "ok")
 export const petalBlessed = {
   type: "petal-blessed",
   title: "⚡ Petal Blessed",
+  titleFor: (o) => targetTitle("⚡ Petal Blessed", o),
   page: "flowers",
   needs: farmNeeds,
-  defaults: {},
+  optionsLabel: "Target",
+  options: TARGET_OPTIONS,
+  defaults: { opts: { mode: "collection", n: 5 } },
   rowKey: (r) => String(r.bed),
   rowLabel: (r) => `${r.bed}. ${r.name}`,
   columns: [
@@ -166,10 +175,10 @@ export const petalBlessed = {
     { key: "seedHours", label: "saved", align: "right", fmt: (v, r) => `<b>${esc(r.savedText)}</b>` },
   ],
 
-  // ctx: { model(farm) → _petalBlessedModel, icon, hours, countdown, pbTimer? }
-  build({ farm } = {}, ctx = {}) {
+  // ctx: { model(farm, opts) → _petalBlessedModel, icon, hours, countdown, pbTimer? }; opts: { mode, n }
+  build({ farm } = {}, ctx = {}, opts = {}) {
     if (!farm) return { rows: [], footer: "", empty: "No farm data." };
-    const m = modelOf(farm, ctx);
+    const m = modelOf(farm, ctx, opts);
     if (!m) return { rows: [], footer: "", empty: NO_MODEL };
     const rows = m.picks.map((p, i) => ({ ...p, bed: i + 1, iconHtml: icon(ctx, p.name), savedText: hrs(ctx, p.seedHours),
       recipeHtml: `${icon(ctx, `${p.seedLabel} Seed`)}${esc(p.seedLabel)} Seed + ${icon(ctx, p.input)}` +
@@ -185,9 +194,14 @@ export const petalBlessed = {
 export const growPlanner = {
   type: "grow-planner",
   title: "📋 Grow planner",
+  titleFor: (o) => targetTitle("📋 Grow planner", o),
   page: "flowers",
   needs: farmNeeds,
-  defaults: {},
+  optionsLabel: "Plan",
+  options: [...TARGET_OPTIONS,
+    { key: "sleepStart", label: "💤 Sleep from (hour)", kind: "number", min: 0, max: 23 },
+    { key: "sleepEnd", label: "💤 Sleep until (hour)", kind: "number", min: 0, max: 23 }],
+  defaults: { opts: { mode: "collection", n: 5, sleepStart: 23, sleepEnd: 7 } },
   rowKey: (r) => r.key,
   rowLabel: (r) => r.flower,
   rowClass: (r) => (r.now ? "w-st-ready" : ""),
@@ -198,16 +212,14 @@ export const growPlanner = {
     { key: "chain", label: "chain", extra: true, get: () => "", fmt: (v, r) => `<div class="v-ii" style="font-size:12px">${r.chainHtml}</div>` },
   ],
 
-  // ctx: { model(farm) → _growPlanModel, icon, hours, now? }
-  build({ farm } = {}, ctx = {}) {
+  // ctx: { model(farm, opts) → _growPlanModel, icon, hours, now? }; opts: { mode, n, sleepStart, sleepEnd }
+  build({ farm } = {}, ctx = {}, opts = {}) {
     if (!farm) return { rows: [], footer: "", empty: "No farm data." };
-    const m = modelOf(farm, ctx);
+    const m = modelOf(farm, ctx, opts);
     if (!m) return { rows: [], footer: "", empty: NO_MODEL };
     const { plan, sleep } = m;
     const now = ctx.now || Date.now();
     const two = (n) => String(n).padStart(2, "0");
-    const sleepCfg = `<div class="v-note">💤 Sleep: <input type="number" min="0" max="23" value="${sleep.start}" onchange="updateSleepSchedule(this,'start')" style="width:3.5em">:00 — ` +
-      `<input type="number" min="0" max="23" value="${sleep.end}" onchange="updateSleepSchedule(this,'end')" style="width:3.5em">:00 <span class="v-dim">(a harvest that lands while you sleep is marked 💤)</span></div>`;
     if (m.done) return { rows: [], footer: "", empty: "✓ All flowers at target — nothing to plan." };
     const detail = (name, text) => { const f = m.info(name); return `${icon(ctx, `${f.seedLabel} Seed`)}${esc(f.seedLabel)} · ${esc(text)} · + ${icon(ctx, f.input)}${esc(f.input)} (have ${f.inputHave})`; };
     const rows = [];
@@ -230,10 +242,10 @@ export const growPlanner = {
     const d = plan.pbTime ? plan.pbTime - now : 0;
     const summary = kpis([{ v: plan.pbReady ? "READY" : plan.pbTime ? `${Math.floor(d / 3600000)}h ${Math.floor((d % 3600000) / 60000)}m` : "—", l: "⚡ Petal Blessed" },
       { v: rows.filter((r) => !r.pb).length, l: "plantings before it" }, { v: saved ? hrs(ctx, saved) : "—", l: "PB batch saves" },
-      { v: `${two(sleep.start)}–${two(sleep.end)}`, l: "💤 sleep" }]);
+      { v: `${two(sleep.start)}–${two(sleep.end)}`, l: "💤 sleep (⚙; a harvest landing in it is marked)" }]);
     const idle = !plan.pbReady && plan.steps.length && plan.idleH > 0.5 && plan.pbTime ? `<div class="v-note v-warn">⏳ ${Math.round(plan.idleH * 10) / 10}h idle before Petal Blessed</div>`
       : !plan.pbReady && !plan.steps.length ? `<div class="v-note">${!plan.pbTime ? "No Petal Blessed data · plant highest priority flowers" : "⏳ No flowers fit before Petal Blessed — wait for PB"}</div>` : "";
-    // the sleep hours and the idle note sit above the table, so they show even with nothing to plant
-    return { rows, summary: summary + idle + sleepCfg, footer: "", empty: "Nothing to plant right now." };
+    // the idle note sits above the table, so it shows even with nothing to plant
+    return { rows, summary: summary + idle, footer: "", empty: "Nothing to plant right now." };
   },
 };
