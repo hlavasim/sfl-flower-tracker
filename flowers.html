@@ -2676,6 +2676,17 @@
     .w-table tr.w-row-click:hover { background: rgba(255,255,255,0.04); }
     .w-error { color: var(--red); }
     /* the settings popover: floats under the cog, never pushes the table down */
+    .welcome { min-height: 70vh; display: grid; place-items: center; }
+    .welcome-card { width: min(420px, 100%); background: #262624; border: 1px solid #3a3936; border-radius: 16px; padding: 28px 28px 24px;
+      font-family: Inter, "Segoe UI", system-ui, sans-serif; color: #f2f0e9; display: flex; flex-direction: column; gap: 14px; }
+    .welcome-logo { font-size: 1.4rem; font-weight: 700; } .welcome-logo span { color: #d97757; }
+    .welcome-card p { margin: 0; color: #a39e96; }
+    .welcome-card label { display: flex; flex-direction: column; gap: 6px; font-size: 0.8rem; color: #a39e96; }
+    .welcome-card input { background: #1c1b1a; color: #f2f0e9; border: 1px solid #3a3936; border-radius: 10px; padding: 10px 12px; font: inherit; font-size: 1rem; outline: none; }
+    .welcome-card input:focus { border-color: #d97757; }
+    .welcome-go { background: #d97757; color: #fff; border: none; border-radius: 10px; padding: 11px; font: inherit; font-weight: 600; font-size: 1rem; cursor: pointer; }
+    .welcome-back { background: none; border: none; color: #a39e96; font: inherit; cursor: pointer; text-decoration: underline; }
+    .nav-farm { margin-left: auto; opacity: 0.8; }
     .w-pinmenu { position: fixed; z-index: 1000; min-width: 220px; background: var(--bg-card); border: 2px solid var(--border-brown);
       box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; }
     .w-pinmenu-h { color: var(--sunpetal); font-weight: bold; padding: 4px 8px; }
@@ -2791,8 +2802,6 @@
   <button id="wide-toggle" title="Roztáhnout stránku na šířku okna (ultrawide) / zpět na úzký sloupec" onclick="(function(){var on=document.body.classList.toggle('wide');try{localStorage.setItem('sfl_wide',on?'1':'0')}catch(e){}})()">↔</button>
   <div class="container">
     <div id="nav-bar"></div>
-    <div id="config-bar"></div>
-    <div id="price-banner" style="display:none;margin:0 0 8px;padding:6px 10px;border-radius:6px;font-size:0.6rem;line-height:1.5"></div>
     <div id="app">
       <div class="loading-screen pixel-font">
         <div class="loading-flower">🌻</div>
@@ -5333,7 +5342,8 @@
      * a fresh #app so a slower render of the page left behind writes into a detached node.
      */
     let _navSeq = 0, _navPage = null, _navFarm = null, _farmInflight = null, _cachedFarmFor = null;
-    let configExpanded = false;
+    // The farm-id page instead of the app: no farm yet, or the farm chip in the bar was clicked.
+    let _welcomeOpen = false;
     let growingTimerInterval = null;
     let pbTimerInterval = null;
 
@@ -5354,7 +5364,6 @@
       const url = new URL(window.location);
       url.searchParams.set("page", page);
       history.pushState(null, "", url);
-      configExpanded = false;
       main();
     }
 
@@ -5413,7 +5422,7 @@
       if (!farm) return;
       saveConfig(farm, limit);
       cachedFarmData = null;
-      configExpanded = false;
+      _welcomeOpen = false;
       main();
     }
 
@@ -5473,6 +5482,7 @@
         html += `<button class="nav-link${cls}" onclick="navigateTo('${l.id}')">${l.label}</button>`;
       }
       html += `</div></div>`;
+      html += `<button class="nav-link nav-farm" onclick="changeFarm()" title="change the farm">#${escHTML(FARM_ID)}</button>`;
       html += '<div class="nav-zoom">';
       html += '<button class="zoom-btn" onclick="changeZoom(-1)" title="Zmenšit text">A-</button>';
       html += '<button class="zoom-btn" onclick="changeZoom(1)" title="Zvětšit text">A+</button>';
@@ -5523,36 +5533,25 @@
     //  CONFIG BAR
     // ═══════════════════════════════════════
 
-    function renderConfigBar(page) {
+    // One page asking for the farm (and the default per-item target); nothing like it once set.
+    function renderWelcome() {
       const cfg = getConfig();
-      const el = document.getElementById("config-bar");
-      if (!configExpanded && cfg.farm) {
-        el.innerHTML = `<div class="config-collapsed pixel-panel pixel-font" onclick="expandConfig()">
-          <span>Farm #${escHTML(cfg.farm)}</span>
-          <span>Limit: ${cfg.limit}</span>
-          <span class="config-toggle">EDIT &#9660;</span>
-        </div>`;
-        return;
-      }
-
-      el.innerHTML = `
-        <div class="config-bar pixel-panel">
-          <div class="config-field">
-            <label class="pixel-font">FARM ID</label>
-            <input id="cfg-farm" type="text" value="${escHTML(cfg.farm)}" placeholder="e.g. 155498">
-          </div>
-          <div class="config-field small">
-            <label class="pixel-font">LIMIT</label>
-            <input id="cfg-limit" type="number" min="1" max="99" value="${cfg.limit}">
-          </div>
-          <button class="config-go" onclick="applyConfig()">LOAD</button>
-        </div>`;
+      document.getElementById("nav-bar").innerHTML = "";
+      document.getElementById("donate-section").innerHTML = "";
+      document.getElementById("app").innerHTML = `<div class="welcome">
+        <div class="welcome-card">
+          <div class="welcome-logo">🌻 SFL <span>Tracker</span></div>
+          <p>Enter your farm ID to open your dashboard.</p>
+          <label>Farm ID <input id="cfg-farm" type="text" inputmode="numeric" value="${escHTML(cfg.farm)}" placeholder="e.g. 155498" autofocus
+            onkeydown="if (event.key === 'Enter') applyConfig()"></label>
+          <label>Default target per item <input id="cfg-limit" type="number" min="1" max="99" value="${cfg.limit}"
+            onkeydown="if (event.key === 'Enter') applyConfig()"></label>
+          <button class="welcome-go" onclick="applyConfig()">Open</button>
+          ${cfg.farm && _welcomeOpen ? `<button class="welcome-back" onclick="_welcomeOpen = false; main()">Back to farm #${escHTML(cfg.farm)}</button>` : ""}
+        </div>
+      </div>`;
     }
-
-    function expandConfig() {
-      configExpanded = true;
-      renderConfigBar(getPage());
-    }
+    window.changeFarm = () => { _welcomeOpen = true; main(); };
 
     // ═══════════════════════════════════════
     //  DONATE
@@ -12301,8 +12300,7 @@
 
       const statusWarn = treasuryStatusWarnings(td);
 
-      let html = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
-      ${statusWarn.length ? `<div class="pixel-panel pixel-font" style="padding:8px 12px;margin-bottom:10px;font-size:0.5625rem;color:#ff8c42;line-height:1.7">⚠ Incomplete valuation: ${statusWarn.map(escHTML).join(" · ")}</div>` : ""}
+      let html = `${statusWarn.length ? `<div class="pixel-panel pixel-font" style="padding:8px 12px;margin-bottom:10px;font-size:0.5625rem;color:#ff8c42;line-height:1.7">⚠ Incomplete valuation: ${statusWarn.map(escHTML).join(" · ")}</div>` : ""}
       <div class="treasury-header pixel-panel pixel-font">
         <h1>TREASURY</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
@@ -12385,8 +12383,7 @@
     async function renderTreasury(data) {
       const app = document.getElementById("app");
 
-      app.innerHTML = `<div class="bumpkin-dev-banner pixel-panel pixel-font">⚠ UNDER DEVELOPMENT — might show incorrect data</div>
-      <div class="header pixel-panel pixel-font">
+      app.innerHTML = `<div class="header pixel-panel pixel-font">
         <h1>TREASURY</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
       </div>
@@ -13646,9 +13643,6 @@
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
       </div>`;
 
-      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size: 0.5625rem;color:var(--lily)">
-        ⚠️ UNDER DEVELOPMENT ⚠️
-      </div>`;
 
       // Show loading while fetching market data
       html += `<div id="wishlist-panel"></div>`;
@@ -14429,13 +14423,6 @@
      */
     function _powerDormantHtml() {
       const all = (powerState && powerState.dormantBoosts) || [];
-      // Stash a one-line summary for the global banner: it fires on any page from this cache,
-      // so a fresh reader of another page still gets nudged after POWER has run once.
-      try {
-        const wearN = all.filter((d) => d.type === "Wearable").length;
-        const missed = all.reduce((s, d) => s + (d.value > 0 ? d.value : 0), 0);
-        sessionStorage.setItem("sfl_dormant_summary", JSON.stringify({ n: all.length, wear: wearN, missed: Math.round(missed) }));
-      } catch (e) {}
       if (!all.length) return "";
       const wear = all.filter((d) => d.type === "Wearable");
       const coll = all.filter((d) => d.type === "Collectible" && d.value >= 0.01);
@@ -14591,14 +14578,6 @@
         </div>`;
       }
 
-      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size: 0.5625rem;color:var(--lily)">
-        ⚠️ UNDER DEVELOPMENT ⚠️
-        <div style="margin-top:6px;font-size: 0.5rem;color:var(--text-secondary);line-height:1.5">
-          All NFT collectibles, wearables & bumpkin skills with production boosts.<br>
-          Shows ${sflIcon()}/day value, synergy with your other boosts, ROI payback time, and expandable formulas.<br>
-          Organized by category (Crops, Animals, Mining, etc.) with product selectors and Best Buys ranking.
-        </div>
-      </div>`;
 
       html += `<div id="power-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading boost data...</div></div></div>`;
       app.innerHTML = html;
@@ -15851,14 +15830,6 @@
       let html = `<div class="header pixel-panel pixel-font">
         <h1>NFT ROADMAP</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
-      </div>`;
-      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
-        ⚠️ UNDER DEVELOPMENT ⚠️
-        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
-          Fastest ROI-ordered path through every boost-bearing NFT you don't own.<br>
-          Real May-2026 harvest efficiency (NODES) × each NFT's boost value &amp; synergy (POWER).<br>
-          Cheap high-ROI boosts first → income compounds → everything else gets faster.
-        </div>
       </div>`;
       html += `<div id="roadmap-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Building roadmap…</div></div></div>`;
       app.innerHTML = html;
@@ -17537,9 +17508,6 @@
       const bestBuysOpen = bestBuysBody?.style.display === "block";
 
       document.getElementById("power-content").innerHTML = content;
-      // POWER just refreshed the dormant summary in sessionStorage; surface the banner now
-      // (it is a no-op if already shown or dismissed this session).
-      try { renderDormantBanner(); } catch (e) {}
 
       // Restore open/closed state after re-render
       openCats.forEach(catId => {
@@ -18728,7 +18696,6 @@
       url.searchParams.set("page", "board");
       url.searchParams.set("board", id);
       history.pushState(null, "", url);
-      configExpanded = false;
       main();
     };
     window._wNewBoard = () => {
@@ -22616,13 +22583,6 @@
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
       </div>`;
 
-      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size: 0.5625rem;color:var(--lily)">
-        ⚠️ UNDER DEVELOPMENT ⚠️
-        <div style="margin-top:6px;font-size: 0.5rem;color:var(--text-secondary);line-height:1.5">
-          ROI calculator for buying new resource nodes (Sunstones) and merging t1→t2→t3.<br>
-          Sorted by fastest payback time. Uses your farm's actual boosts for production estimates.
-        </div>
-      </div>`;
 
       html += `<div id="nodes-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Calculating investments...</div></div></div>`;
       app.innerHTML = html;
@@ -24123,13 +24083,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
       </div>`;
 
-      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
-        ⚠️ UNDER DEVELOPMENT ⚠️
-        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
-          All ${BUD_COUNT} bud NFTs with boost calculations (hardcoded data).<br>
-          ${sflIcon()}/day based on YOUR farm capacity. A bud's type and stem boosts on the same resource add up, then the aura multiplies them (as in the game); across several buds only the best one counts. Owned buds shown first.
-        </div>
-      </div>`;
 
       html += `<div id="buds-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div></div>`;
       app.innerHTML = html;
@@ -24375,13 +24328,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
       </div>`;
 
-      html += `<div class="under-dev-banner pixel-font" style="background:linear-gradient(180deg,#3b1768,#2a1050);padding:8px 12px;border:3px solid #000;margin-bottom:16px;text-align:center;font-size:0.5625rem;color:var(--lily)">
-        &#x26A0;&#xFE0F; UNDER DEVELOPMENT &#x26A0;&#xFE0F;
-        <div style="margin-top:6px;font-size:0.5rem;color:var(--text-secondary);line-height:1.5">
-          Pet fetch resource advisor. Prices from sfl.world P2P market.<br>
-          Shows optimal fetch targets based on ${sflIcon()}/energy efficiency.
-        </div>
-      </div>`;
 
       html += `<div id="pets-content"><div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Loading prices...</div></div></div>`;
       app.innerHTML = html;
@@ -24909,36 +24855,30 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       LIMIT = cfg.limit;
       FLOWER_BEDS = 4;
 
+      if (!FARM_ID || _welcomeOpen) { renderWelcome(); return; }
       renderNavBar(page);
       renderDonate();
 
       // WORLD describes every farm in the game, not the configured one, so it renders
       // without a farm id and without paying for the personal farm fetch.
-      if (page === "world") { renderConfigBar(page); renderWorld(); return; }
+      if (page === "world") { renderWorld(); return; }
 
       // YAKKAMON is about a different game entirely (Thought Farm's second title) — it needs
       // no farm data, so it renders without a farm id and without the personal farm fetch.
-      if (page === "yakkamon") { renderConfigBar(page); renderYakkamon(); return; }
+      if (page === "yakkamon") { renderYakkamon(); return; }
       // Fishing answers entirely from the raw per-snapshot diffs and live p2p prices, so like
       // WORLD and YAKKAMON above it skips the shared farm fetch. It takes no argument: `data`
       // does not exist this early in the dispatcher, and passing it threw a ReferenceError that
       // left the page blank.
-      if (page === "fishing") { renderConfigBar(page); renderFishing(); return; }
+      if (page === "fishing") { renderFishing(); return; }
 
       // MY DASHBOARD: the pinned widgets fetch what they need through the store.
-      if (page === "board") { renderConfigBar(page); renderBoard(); return; }
+      if (page === "board") { renderBoard(); return; }
 
       // DECORATIONS fetches the raw farm itself (it needs x/y of every placed object, which
       // the compute sections do not carry) — so it also skips the shared farm pipeline.
-      if (page === "decorations") { renderConfigBar(page); renderDecorations(); return; }
+      if (page === "decorations") { renderDecorations(); return; }
 
-      if (!FARM_ID) {
-        renderConfigBar(page);
-        document.getElementById("app").innerHTML = `<div class="header pixel-panel pixel-font"><h1>SFL TRACKER</h1><div class="farm-id">Enter your Farm ID above, then click LOAD</div></div>`;
-        return;
-      }
-
-      renderConfigBar(page);
 
       const app = document.getElementById("app");
 
@@ -26344,7 +26284,6 @@ Kola: ${i.rounds.map(when).join(", ")}`;
         <h1>\u2694\uFE0F MARKS WAR TRACKER</h1>
         <div class="farm-id">Farm #${escHTML(FARM_ID)}</div>
       </div>
-      <div class="under-dev-banner pixel-font">\u26A0\uFE0F UNDER DEVELOPMENT</div>
       <div id="marks-root" class="pixel-font" style="padding:8px 0">
         <div style="text-align:center;padding:40px;color:var(--text-dim)">Loading marks data...</div>
       </div>`;
@@ -30364,63 +30303,6 @@ Kola: ${i.rounds.map(when).join(", ")}`;
       setTimeout(() => toast.classList.remove("show"), 1500);
     }
 
-    // Enter key in config inputs triggers load
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && e.target.closest(".config-bar")) applyConfig();
-    });
-
-    // ── Collector-health banner ──────────────────────────────────────────────
-    // The background collectors (farm/price/nft/orderbook snapshots, marketplace
-    // trades) once broke silently for months. This surfaces a slim warning bar at the
-    // top ONLY when something is stale — otherwise it's invisible. Dismissible per session.
-    // (No game-token line any more: nothing uses a game JWT since the move to the
-    // community API with the project's API key, which does not expire.)
-    async function renderHealthBanner() {
-      if (sessionStorage.getItem("sfl_health_dismissed") === "1") return;
-      let d;
-      try {
-        const r = await fetch("/api/marketplace-orderbook?health=1");
-        if (!r.ok) return;
-        d = await r.json();
-      } catch { return; }
-      if (!d || d.ok) return; // all healthy → say nothing
-      const parts = [];
-      if (d.warnings?.staleCollectors?.length) parts.push(`⚠️ stale: ${d.warnings.staleCollectors.map(escHTML).join(", ")}`);
-      if (!parts.length) return;
-      const bar = document.createElement("div");
-      bar.id = "health-banner";
-      bar.style.cssText = "background:#3a1a1a;border-bottom:1px solid #ff6b6b;color:#ffbaba;font-size:0.62rem;padding:6px 12px;display:flex;align-items:center;gap:10px;font-family:'Courier New',monospace;position:sticky;top:0;z-index:9999";
-      bar.innerHTML = `<span style="flex:1">🛰️ Data collection: ${parts.join(" · ")}</span>
-        <button onclick="sessionStorage.setItem('sfl_health_dismissed','1');this.parentElement.remove()" style="background:none;border:1px solid #ff6b6b;color:#ffbaba;border-radius:4px;cursor:pointer;font-size:0.6rem;padding:1px 7px">✕</button>`;
-      document.body.insertBefore(bar, document.body.firstChild);
-    }
-
-    /*
-     * Dormant-boost banner. Same slim, dismissible, sticky pattern as the collector-health bar,
-     * but amber — an opportunity, not an error. It reads the summary POWER stashed in
-     * sessionStorage, so it can nudge from any page once POWER has computed once this session,
-     * without recomputing the whole boost engine on every load. Wearables are the headline,
-     * since a spare equipment slot is nearly free.
-     */
-    function renderDormantBanner() {
-      if (sessionStorage.getItem("sfl_dormant_dismissed") === "1") return;
-      if (document.getElementById("dormant-banner")) return;
-      let s;
-      try { s = JSON.parse(sessionStorage.getItem("sfl_dormant_summary") || "null"); } catch { return; }
-      if (!s || !s.n) return;
-      if (!s.wear && s.missed < 1) return; // nothing worth interrupting for
-      const bits = [];
-      if (s.wear) bits.push(`<b>${s.wear} wearable${s.wear > 1 ? "s" : ""} not equipped</b>`);
-      bits.push(`${s.n} owned boost${s.n > 1 ? "s" : ""} inactive · up to ${Number(s.missed).toLocaleString("en-US")} ${sflIcon()}/day idle`);
-      const bar = document.createElement("div");
-      bar.id = "dormant-banner";
-      bar.style.cssText = "background:#2a2010;border-bottom:1px solid #e8a060;color:#f0c890;font-size:0.62rem;padding:6px 12px;display:flex;align-items:center;gap:10px;font-family:'Courier New',monospace;position:sticky;top:0;z-index:9998;cursor:pointer";
-      bar.onclick = (ev) => { if (ev.target.tagName !== "BUTTON") navigateTo("power"); };
-      bar.innerHTML = `<span style="flex:1">💤 ${bits.join(" · ")} — <span style="text-decoration:underline">open POWER</span></span>
-        <button onclick="event.stopPropagation();sessionStorage.setItem('sfl_dormant_dismissed','1');this.parentElement.remove()" style="background:none;border:1px solid #e8a060;color:#f0c890;border-radius:4px;cursor:pointer;font-size:0.6rem;padding:1px 7px">✕</button>`;
-      document.body.insertBefore(bar, document.body.firstChild);
-    }
-
     // ═══════════════════════════════════════
     //  PREFS SYNC (farm_prefs)
     // ═══════════════════════════════════════
@@ -30443,36 +30325,6 @@ Kola: ${i.rounds.map(when).join(", ")}`;
      * sfl_pref_outbox) until the server has them: a failed push is retried, closing the tab flushes
      * it with keepalive, and a pull never overwrites a change still waiting there.
      */
-    /*
-     * Prices behind the numbers. Every /api/compute answer says pricesOk (false = the market feed
-     * failed and every price reads 0) and, when the server fell back to its last good price map,
-     * staleSources includes "prices". One hook on fetch turns that into a banner above the page,
-     * so zeros never pass for real numbers; the next good answer hides it.
-     */
-    function _priceBanner(p) {
-      const el = document.getElementById("price-banner");
-      if (!el || !p) return;
-      const stale = p.stale && Array.isArray(p.staleSources) && p.staleSources.includes("prices");
-      if (p.pricesOk === false) {
-        el.style.display = "block"; el.style.background = "#3a1212"; el.style.color = "#ffb4b4";
-        el.innerHTML = "⚠ Ceny z trhu se teď nenačetly — čísla, která na nich stojí (hodnoty, náklady, ROI), ukazují 0. Zkus za chvíli REFRESH.";
-      } else if (stale) {
-        el.style.display = "block"; el.style.background = "#33290f"; el.style.color = "#f0d58a";
-        el.innerHTML = "⚠ Trh teď neodpovídá — ceny jsou z dřívějška (" + (p.staleAgeMin || 0) + " min).";
-      } else el.style.display = "none";
-    }
-    try {
-      const _origFetch = window.fetch.bind(window);
-      window.fetch = async function (input, init) {
-        const r = await _origFetch(input, init);
-        try {
-          const u = String((input && input.url) || input);
-          if (u.includes("/api/compute") && r.ok) r.clone().json().then(_priceBanner).catch(() => {});
-        } catch (e) {}
-        return r;
-      };
-    } catch (e) {}
-
     const PREF_TOMBSTONE = "__sfl_deleted__";
     let _prefApplying = false, _prefTimer = null, _prefFails = 0, _prefPending = {};
     try { _prefPending = JSON.parse(localStorage.getItem("sfl_pref_outbox") || "{}") || {}; } catch (e) { _prefPending = {}; }
@@ -30577,8 +30429,6 @@ Kola: ${i.rounds.map(when).join(", ")}`;
     // The shared settings arrive after the first render; only when they change something (another
     // device ticked it) does the page render again.
     _prefPull().then((changed) => { if (changed) main(); }).catch(() => {});
-    renderHealthBanner();
-    renderDormantBanner();
     });
   </script>
 </body>

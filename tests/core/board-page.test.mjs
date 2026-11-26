@@ -21,7 +21,7 @@ test("DASH (the boards) is the home page, first in the bar; CHORES next to it; r
   assert.match(SRC, /const primary = \[\s*\{ id: "board", label: "DASH" \},\s*\{ id: "chores", label: "CHORES" \}/);
   assert.match(SRC, /if \(page === "dashboard"\) return "chores";/);
   assert.match(SRC, /return "board";\s*\}/);
-  assert.match(SRC, /if \(page === "board"\) \{ renderConfigBar\(page\); renderBoard\(\); return; \}/);
+  assert.match(SRC, /if \(page === "board"\) \{ renderBoard\(\); return; \}/);
 });
 
 async function renderBoardWith(boardsJson, { slowLeveling = false, page = "board", search = "", extra = {} } = {}) {
@@ -117,9 +117,14 @@ test("CHORES (the old DASH) is a page: its widgets render on it (each with 📌 
   assert.doesNotMatch(SRC, /dashVoice|voiceDue|speechSynthesis/, "no voice");
 });
 
-test("no HUB page: an empty farm id asks for it on the dashboard", () => {
+test("no HUB page and no config bar: without a farm id one page asks for it; the farm chip in the bar changes it", () => {
   assert.doesNotMatch(SRC, /renderHub|"hub"/);
-  assert.match(SRC, /Enter your Farm ID above, then click LOAD/);
+  assert.doesNotMatch(SRC, /renderConfigBar|expandConfig|configExpanded/);
+  assert.match(SRC, /if \(!FARM_ID \|\| _welcomeOpen\) \{ renderWelcome\(\); return; \}/);
+  assert.match(SRC, /<input id="cfg-farm"/);
+  assert.match(SRC, /onclick="changeFarm\(\)"/);
+  // and no "under development" banners anywhere
+  assert.doesNotMatch(SRC, /UNDER DEVELOPMENT/);
 });
 
 test("every board page has the switcher; ?board= picks the board", async () => {
