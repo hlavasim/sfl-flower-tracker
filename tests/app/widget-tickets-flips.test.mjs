@@ -51,6 +51,23 @@ test("tickets: not loaded → an explanation", () => {
   assert.match(ticketChecklist.build({ tickets: null }).empty, /tickets/i);
 });
 
+test("📱 tickets glance: S = sources left with a ring and their tickets; M = the biggest open ones; L = both; empty / all done", () => {
+  const G = (size, tk = TK) => ticketChecklist.glance({ tickets: tk }, { icon: (n) => `<i>${n}</i>` }, {}, size);
+  assert.ok(ticketChecklist.sizes.includes(ticketChecklist.size));
+  const s = G("s").html;
+  assert.match(s, /<div class="g-big">5<small>left<\/small><\/div><div class="g-cap">\+19 tickets this week<\/div>/);
+  assert.match(s, /class="g-ring g-accent"/);
+  const m = G("m").html;
+  assert.deepStrictEqual([...m.matchAll(/<div class="g-n">([^<]+)/g)].map((x) => x[1]), ["Deliver Rapid Roast", "Tywin: Chop 50 trees", "Jester: Harvest 10 Kale"]);
+  assert.match(m, /<span class="g-ic"><i>Rapid Roast<\/i><\/span>.*<span class="g-v g-ok">\+7</);
+  const l = G("l").html;
+  assert.match(l, /g-corner.*Cow at level 5\+.*Daily reward/);
+  assert.ok(!/Betty/.test(l), "the done delivery is not listed");
+  assert.match(G("s", { sources: SOURCES.map((x) => ({ ...x, done: true })) }).html, /<div class="g-big g-ok">✓<\/div><div class="g-cap">all done this week/);
+  assert.match(G("s", null).empty, /did not load/);
+  assert.match(G("m", { sources: [] }).empty, /No ticket sources/);
+});
+
 test("store: tickets POSTs the recorded weeks like the TICKETY page", async () => {
   const calls = [];
   const f = async (url, init = {}) => {
