@@ -40,4 +40,6 @@ export const WIDGETS = {
 // ── FISHING, LEVELING, FLOWERS, DIFF, JSON, CONSTANTS pages (one block) ──
 import { constantsCoverage, constantsTables } from "./constants.mjs";
 import { flowerGifts, flowerGiftCycle, petalBlessed, growPlanner } from "./flowers-plan.mjs";
-for (const w of [constantsCoverage, constantsTables, flowerGifts, flowerGiftCycle, petalBlessed, growPlanner]) WIDGETS[w.type] = w;
+import { levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix } from "./leveling.mjs";
+for (const w of [constantsCoverage, constantsTables, flowerGifts, flowerGiftCycle, petalBlessed, growPlanner,
+  levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix]) WIDGETS[w.type] = w;

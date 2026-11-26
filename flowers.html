@@ -2868,6 +2868,10 @@
     .w-frame .gift-dd-icon img { height: 20px; margin: 0; }
     .w-frame .gift-dd-pts { color: var(--c-accent); font-size: 11.5px; }
     .w-frame .gift-dd-time, .w-frame .gift-dd-meta, .w-frame .gift-dropdown-item .gift-dd-have { font-size: 11.5px; background: none; }
+    .v-lvl-row { display: flex; gap: 10px 14px; flex-wrap: wrap; align-items: center; }
+    .v-lvl-kitchens { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 4px 14px; margin-top: 8px; }
+    .v-lvl-set label { cursor: pointer; }
+    .v-lvl-set img, .v-mini img, .v-note img { height: 1.2em; vertical-align: -0.25em; margin-right: 3px; }
 
     .w-pinmenu { position: fixed; z-index: 1000; min-width: 220px; background: var(--bg-card); border: 2px solid var(--border-brown);
       box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; }
@@ -24620,15 +24624,18 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
      * any boost the farm does not have. Every click re-runs the core plan here — no API call — and is
      * saved under sfl_leveling, which prefSyncKeys mirrors to the other devices.
      */
-    const lvlGroups = [["fishing", "🎣 RYBOLOV"], ["salt", "🧂 SŮL"], ["aging", "🐟 STÁRNUTÍ"], ["cooking", "🍳 VAŘENÍ"]];
-    const lvlBottleneck = { salt: "sůl", slots: "sloty (restarty)", fish: "ryby" };
-    const lvlFmt = (n) => (Number.isFinite(n) ? Math.round(n).toLocaleString("cs-CZ") : "—");
-    const lvlDays = (d) => (d === Infinity || !Number.isFinite(d) ? "nikdy" : d <= 0 ? "hotovo" : `${lvlFmt(d)} dní`);
+    const lvlBottleneck = { salt: "salt", slots: "slots (restarts)", fish: "fish" };
+    const lvlFmt = (n) => (Number.isFinite(n) ? Math.round(n).toLocaleString("en-US") : "—");
+    // On a board the LEVELING widgets compute the plan from the saved config (widgets/leveling.mjs).
+    for (const t of ["leveling-summary", "leveling-steps", "leveling-frontier", "leveling-matrix"]) _wCtxMap[t] = () => {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
+      return { savedLeveling: saved, icon: _wIcon };
+    };
     async function renderLeveling() {
       const app = document.getElementById("app");
-      const head = `<div class="header pixel-panel pixel-font"><h1>📈 LEVELING</h1>
-        <div class="farm-id">Farm #${escHTML(FARM_ID)} · za jak dlouho a za kolik na cílový level</div></div>`;
-      app.innerHTML = head + `<div class="loading-screen pixel-font" style="padding:20px"><div class="loading-text">Počítám kuchyně, ryby a sůl…</div></div>`;
+      const head = _wPageHead("📈 Leveling", `Farm #${escHTML(FARM_ID)} · how long and how much FLOWER to the target level`);
+      app.innerHTML = head + `<div class="w-card v-dim">Computing kitchens, fish and salt…</div>`;
       let d;
       try {
         // The store's leveling resource POSTs the recorded weeks (salt follows the measured harvests).
@@ -24636,11 +24643,11 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         if (r.status !== "ok" || !r.data) throw new Error(r.error || "compute leveling");
         d = r.data;
       } catch (e) {
-        app.innerHTML = head + `<div class="error-screen pixel-panel pixel-font"><p>Nenačetlo se: ${escHTML(e.message)}</p></div>`;
+        app.innerHTML = head + `<div class="w-card w-error">Did not load: ${escHTML(e.message)}</div>`;
         return;
       }
       const farm = cachedFarmData && cachedFarmData.farm;
-      if (!farm) { app.innerHTML = head + `<div class="error-screen pixel-panel pixel-font"><p>Chybí data farmy — obnov stránku.</p></div>`; return; }
+      if (!farm) { app.innerHTML = head + `<div class="w-card w-error">The farm data is missing — reload the page.</div>`; return; }
       // Bids and bud floors from the marketplace book; a floor the boost catalogue lacks comes from it too.
       const book = (_rmBook && _rmBook.items) || {};
       const inputs = levelingInputsWithBook(d.inputs, book);
@@ -24681,7 +24688,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
     function _lvlFindFront() {
       const L = window._lvl; if (!L) return;
       const box = document.getElementById("lvl-front");
-      if (box) box.innerHTML = `<div style="padding:8px;color:var(--text-dim)">Počítám nejlevnější cesty… (pár sekund)</div>`;
+      if (box) box.innerHTML = `<div class="v-note">Computing the cheapest routes… (a few seconds)</div>`;
       setTimeout(() => {
         const key = JSON.stringify([L.cfg.target, L.cfg.restarts, L.cfg.costScale, L.cfg.resell]);
         L.front = { key, points: levelingFrontier(L.farm, L.inputs, L.cfg, 10) };
@@ -24689,65 +24696,37 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       }, 30);
     }
     function _lvlShowAll(on) { window._lvl.showAll = on; _lvlRender(); }
-    // Compact FLOWER: 950, 1,2k, 14k.
+    // Compact FLOWER: 950, 1.2k, 14k.
     const lvlK = (v) => {
       if (!Number.isFinite(v)) return v > 0 ? "∞" : v < 0 ? "−∞" : "—";
       const a = Math.abs(v), s = v < 0 ? "−" : v > 0 ? "+" : "";
-      return s + (a < 1000 ? Math.round(a) : a < 10000 ? (a / 1000).toFixed(1).replace(".", ",") + "k" : Math.round(a / 1000) + "k");
+      return s + (a < 1000 ? Math.round(a) : a < 10000 ? (a / 1000).toFixed(1) + "k" : Math.round(a / 1000) + "k");
     };
-    const lvlAL = (p) => (p === "now" ? "hned" : p ? `A${p.ascension} L${p.level}` : "—");
-    const lvlPerM = (c, x) => (x > 0 ? lvlFmt(c / (x / 1e6)) : "—");
-    const lvlDate = (d) => (Number.isFinite(d) && d > 0 ? new Date(Date.now() + d * 86400000).toLocaleDateString("cs-CZ") : "");
 
-    /* The days × FLOWER frontier: a scatter (fastest left), today's config as a cross; click to use. */
-    function _lvlFrontSvg(points, cur) {
-      const W = 600, H = 190, pl = 46, pr = 10, pt = 10, pb = 26;
-      const all = [...points, cur].filter((p) => Number.isFinite(p.days) && Number.isFinite(p.flower));
-      if (!all.length) return "";
-      const x0 = 0, x1 = Math.max(...all.map((p) => p.days)) * 1.05;
-      const yMin = Math.min(...all.map((p) => p.flower)), yMax = Math.max(...all.map((p) => p.flower));
-      const y0 = yMin - (yMax - yMin) * 0.1 - 1, y1 = yMax + (yMax - yMin) * 0.1 + 1;
-      const X = (d) => pl + ((d - x0) / (x1 - x0)) * (W - pl - pr), Y = (f) => pt + (1 - (f - y0) / (y1 - y0)) * (H - pt - pb);
-      let g = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;display:block" font-size="10" fill="var(--text-dim)">`;
-      for (let i = 0; i <= 4; i++) {
-        const f = y0 + ((y1 - y0) * i) / 4, d = x0 + ((x1 - x0) * i) / 4;
-        g += `<line x1="${pl}" x2="${W - pr}" y1="${Y(f)}" y2="${Y(f)}" stroke="var(--text-dim)" stroke-opacity="0.15"/>`;
-        g += `<text x="${pl - 4}" y="${Y(f) + 3}" text-anchor="end">${lvlK(f).replace("+", "")}</text>`;
-        g += `<text x="${X(d)}" y="${H - 8}" text-anchor="middle">${lvlFmt(d)} d</text>`;
-      }
-      g += `<polyline fill="none" stroke="var(--sunpetal)" stroke-opacity="0.5" points="${points.map((p) => `${X(p.days)},${Y(p.flower)}`).join(" ")}"/>`;
-      points.forEach((p, i) => {
-        g += `<circle cx="${X(p.days)}" cy="${Y(p.flower)}" r="6" fill="var(--sunpetal)" style="cursor:pointer" onclick="_lvlUseFront(${i})"><title>${lvlFmt(p.days)} dní · ${lvlFmt(p.flower)} FLOWER — klikni pro použití</title></circle>`;
-      });
-      if (Number.isFinite(cur.days) && Number.isFinite(cur.flower)) {
-        const cx = X(cur.days), cy = Y(cur.flower);
-        g += `<path d="M${cx - 6},${cy - 6}L${cx + 6},${cy + 6}M${cx - 6},${cy + 6}L${cx + 6},${cy - 6}" stroke="var(--red)" stroke-width="2.5"><title>tvoje nastavení</title></path>`;
-      }
-      return g + `</svg>`;
-    }
-
-    // What the plan makes at the Fish Market, a day, summed over the seasons; or why it makes nothing.
     // The day's supply of what the farm cannot buy, for the extras that use it (stock shown beside).
     function lvlSupplyInputs(L, c) {
       const inv = (L.farm && L.farm.inventory) || {};
-      return ["Wild Mushroom", "Magic Mushroom"].map((k) => `<label title="Kolik ${k} za den můžeš dát do doplňkových receptů (máš ${lvlFmt(+(inv[k] || 0))}). Bez čísla se recepty s ${k} nevaří.">${k}/den <input type="number" min="0" max="10000" step="any" value="${(c.supply || {})[k] || 0}" style="width:46px" data-k="${k}" onchange="_lvlChange((c)=>{c.supply={...(c.supply||{}),[this.dataset.k]:+this.value||0}})"></label>`).join("");
+      return ["Wild Mushroom", "Magic Mushroom"].map((k) => `<label title="How many ${k} a day the extra recipes may use (you have ${lvlFmt(+(inv[k] || 0))}). Without a number the recipes with ${k} are not cooked.">${_wIcon(k)}${k}/day <input type="number" min="0" max="10000" step="any" value="${(c.supply || {})[k] || 0}" style="width:56px" data-k="${k}" onchange="_lvlChange((c)=>{c.supply={...(c.supply||{}),[this.dataset.k]:+this.value||0}})"></label>`).join("");
     }
     // What caps an extra a day (levelingPlan's extras[].limit).
-    const lvlLimit = { time: "čas kuchyně", fish: "ryby z úlovku", supply: "tvůj příděl za den", market: "Fish Market — jedna fronta (Fish Oil 16 h, Crab Stick 4 h, Fish Stick 2 h)", traps: "pasti na korýše (místa × 4 h / 8 h)", none: "nic — neplánuje se" };
+    const lvlLimit = { time: "kitchen time", fish: "fish from the catch", supply: "your daily supply", market: "Fish Market — one queue (Fish Oil 16 h, Crab Stick 4 h, Fish Stick 2 h)", traps: "crab traps (spots × 4 h / 8 h)", none: "nothing — not planned" };
     function _lvlExtra(building, name, on) {
       _lvlChange((c) => {
         const b = c.buildings[building], cur = (b.extras || []).filter((x) => x !== name);
         b.extras = on ? [...cur, name] : cur;
       });
     }
+    // What the plan makes at the Fish Market, a day, summed over the seasons; or why it makes nothing.
     function lvlBaitLine(plan) {
       const f = plan.fish, by = {};
-      for (const b of f.baitUse || []) { const k = `${b.bait} → ${b.fish}`; by[k] = (by[k] || 0) + b.perDay; }
-      for (const d of f.marketDishes || []) if (d.perDay > 1e-6) { const k = `${d.product} → ${d.recipe} (vaření)`; by[k] = (by[k] || 0) + d.perDay; }
+      for (const b of f.baitUse || []) { const k = `${_wIcon(b.bait)}${escHTML(b.bait)} → ${_wIcon(b.fish)}${escHTML(b.fish)}`; by[k] = (by[k] || 0) + b.perDay; }
+      for (const d of f.marketDishes || []) if (d.perDay > 1e-6) { const k = `${_wIcon(d.product)}${escHTML(d.product)} → ${_wIcon(d.recipe)}${escHTML(d.recipe)} (cooking)`; by[k] = (by[k] || 0) + d.perDay; }
       const list = Object.entries(by).sort((a, b) => b[1] - a[1]);
-      if (!list.length) return `nic — ${plan.bottleneck === "salt" ? "brzdí sůl a každá ryba dá za sůl stejně XP, bait by jen spálil ryby na vstupu" : "bait se nevyplatí (stárnutí ryb, co chytíš, dá víc)"}`;
-      return list.map(([k, n]) => `${escHTML(k)} ${n.toFixed(2)}/den`).join(" · ") + ` · fronta ${f.marketHours.toFixed(1)} z 24 h${f.vip ? " (VIP)" : ""}`;
+      if (!list.length) return `nothing — ${plan.bottleneck === "salt" ? "salt holds it back and every fish gives the same XP per salt, a bait would only burn the fish it takes" : "a bait does not pay (aging the fish you catch gives more)"}`;
+      return list.map(([k, n]) => `${k} ${n.toFixed(2)}/day`).join(" · ") + ` · queue ${f.marketHours.toFixed(1)} of 24 h${f.vip ? " (VIP)" : ""}`;
     }
+    // The settings stay page HTML (an editor); the plan, the steps, the routes, the ladder and the
+    // matrix are widgets (widgets/leveling.mjs, leveling-ladder.mjs) fed the page's own state.
     function _lvlRender() {
       const L = window._lvl, body = document.getElementById("lvl-body");
       if (!L || !body) return;
@@ -24761,129 +24740,54 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const sel = (v, cur) => (String(v) === String(cur) ? " selected" : "");
       const chk = (on) => (on ? " checked" : "");
       const S = sflIcon();
-      const panel = (title, inner, extra = "") => `<div class="pixel-panel" style="padding:8px 10px;margin-bottom:8px${extra}">${title ? `<div class="pixel-font" style="font-size:0.58rem;color:var(--sunpetal);margin-bottom:4px">${title}</div>` : ""}${inner}</div>`;
 
       // ── settings ──
-      const targetLabel = `konce A${c.target.ascension}${c.target.level !== 50 ? ` (L${c.target.level})` : ""}`;
-      let set = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <label>Cíl <select onchange="_lvlTarget(+this.value)">${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}"${sel(i + 1, c.target.ascension)}>konec A${i + 1}</option>`).join("")}</select></label>
-          <label>restartů/den <input type="number" min="1" max="48" value="${c.restarts}" style="width:46px" onchange="_lvlChange((c)=>{c.restarts=+this.value})"></label>
-          <label title="Co když ceny surovin (vaření, pruty, sůl) za ty stovky dní stoupnou nebo klesnou. Ceny NFT se nemění.">ceny surovin <select onchange="_lvlChange((c)=>{c.costScale=+this.value})">${[[0.8, "−20 %"], [1, "dnešní"], [1.2, "+20 %"]].map(([v, t]) => `<option value="${v}"${sel(v, c.costScale || 1)}>${t}</option>`).join("")}</select></label>
-          <label title="Zapnuto: NFT po dosažení cíle prodáš a počítá se jen ztráta (cena − nejvyšší nabídka). Vypnuto: celá cena."><input type="checkbox"${chk(c.resell)} onchange="_lvlChange((c)=>{c.resell=this.checked})"> NFT po cíli prodám</label>
-          <button class="refresh-btn" style="font-size:0.5rem" onclick="_lvlReset()">výchozí</button></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:2px 12px;margin-top:4px">`;
+      let set = `<h3>⚙ Setup</h3><div class="v-lvl-row">
+          <label>Target <select onchange="_lvlTarget(+this.value)">${Array.from({ length: 10 }, (_, i) => `<option value="${i + 1}"${sel(i + 1, c.target.ascension)}>end of A${i + 1}</option>`).join("")}</select></label>
+          <label>restarts/day <input type="number" min="1" max="48" value="${c.restarts}" style="width:56px" onchange="_lvlChange((c)=>{c.restarts=+this.value})"></label>
+          <label title="What if ingredient prices (cooking, rods, salt) rise or fall over those hundreds of days. NFT prices do not change.">ingredient prices <select onchange="_lvlChange((c)=>{c.costScale=+this.value})">${[[0.8, "−20 %"], [1, "today's"], [1.2, "+20 %"]].map(([v, t]) => `<option value="${v}"${sel(v, c.costScale || 1)}>${t}</option>`).join("")}</select></label>
+          <label title="On: you sell the NFTs once the target is reached and only the loss counts (price − the highest bid). Off: the full price."><input type="checkbox"${chk(c.resell)} onchange="_lvlChange((c)=>{c.resell=this.checked})"> I sell the NFTs after the target</label>
+          <button onclick="_lvlReset()">defaults</button></div>
+        <div class="v-lvl-kitchens">`;
       for (const [name, b] of Object.entries(c.buildings)) {
         const opts = L.options[name] || [];
         // Extras: dishes bounded by something other than time (instant, fish, Fish Market, mushrooms),
         // cooked up to their cap a day on top of the main recipe. Each line is that extra on its own.
         const ex = (L.extraOpts && L.extraOpts[name]) || [];
         set += `<div style="min-width:0"><div style="display:flex;gap:6px;align-items:center;min-width:0">
-          <label style="white-space:nowrap;min-width:104px"><input type="checkbox"${chk(b.on)} data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].on=this.checked})"> ${escHTML(name)}</label>
-          <select style="flex:1;min-width:0;max-width:100%" data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].recipe=this.value})">${opts.map((o) => `<option value="${escHTML(o.name)}"${sel(o.name, b.recipe)}>${escHTML(o.name)} · ${lvlK(o.xpPerDay).replace("+", "")} XP/d · ${o.costPerDay.toFixed(1)} FL/d · ${lvlFmt(o.perM)} FL/1M</option>`).join("")}</select></div>
-          ${ex.length ? `<div style="font-size:0.5rem;line-height:1.6;color:var(--text-dim);padding-left:18px">${ex.map((o) => {
+          <label style="white-space:nowrap;min-width:124px"><input type="checkbox"${chk(b.on)} data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].on=this.checked})"> ${_wIcon(name)}${escHTML(name)}</label>
+          ${b.recipe ? _wIcon(b.recipe) : ""}<select style="flex:1;min-width:0;max-width:100%" data-b="${escHTML(name)}" onchange="_lvlChange((c)=>{c.buildings[this.dataset.b].recipe=this.value})">${opts.map((o) => `<option value="${escHTML(o.name)}"${sel(o.name, b.recipe)}>${escHTML(o.name)} · ${lvlK(o.xpPerDay).replace("+", "")} XP/d · ${o.costPerDay.toFixed(1)} FL/d · ${lvlFmt(o.perM)} FL/1M</option>`).join("")}</select></div>
+          ${ex.length ? `<div class="v-note" style="padding-left:18px;margin:2px 0">${ex.map((o) => {
             const on = (b.extras || []).includes(o.name), live = o.cooksPerDay > 0.005;
-            return `<label style="white-space:nowrap;margin-right:8px;${live || on ? "" : "opacity:0.55"}" title="${escHTML(o.name)}: sám o sobě ${o.cooksPerDay.toFixed(2)}× za den (strop: ${lvlLimit[o.limit] || "—"}), ${lvlK(o.xpPerDay)} XP/den, ${o.costPerDay >= 0 ? "+" : ""}${o.costPerDay.toFixed(2)} FL/den proti tomu bez něj"><input type="checkbox"${chk(on)} data-b="${escHTML(name)}" data-e="${escHTML(o.name)}" onchange="_lvlExtra(this.dataset.b,this.dataset.e,this.checked)"> ${escHTML(o.name)} <span style="color:${o.xpPerDay > 0 ? "var(--green)" : "var(--text-dim)"}">${o.cooksPerDay.toFixed(1)}/d ${lvlK(o.xpPerDay)} XP${Number.isFinite(o.perM) && o.xpPerDay > 0 ? ` · ${lvlFmt(o.perM)} FL/1M` : ""}</span></label>`;
+            return `<label style="white-space:nowrap;margin-right:8px;${live || on ? "" : "opacity:0.55"}" title="${escHTML(o.name)}: on its own ${o.cooksPerDay.toFixed(2)}× a day (cap: ${lvlLimit[o.limit] || "—"}), ${lvlK(o.xpPerDay)} XP/day, ${o.costPerDay >= 0 ? "+" : ""}${o.costPerDay.toFixed(2)} FL/day against without it"><input type="checkbox"${chk(on)} data-b="${escHTML(name)}" data-e="${escHTML(o.name)}" onchange="_lvlExtra(this.dataset.b,this.dataset.e,this.checked)"> ${_wIcon(o.name)}${escHTML(o.name)} <span class="${o.xpPerDay > 0 ? "v-good" : "v-dim"}">${o.cooksPerDay.toFixed(1)}/d ${lvlK(o.xpPerDay)} XP${Number.isFinite(o.perM) && o.xpPerDay > 0 ? ` · ${lvlFmt(o.perM)} FL/1M` : ""}</span></label>`;
           }).join("")}</div>` : ""}</div>`;
       }
       const f = c.fish, saltPrice = (L.inputs.prices || {}).Salt || 0;
-      set += `</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px">
-          <span class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal)">RYBY</span>
-          <label><input type="checkbox"${chk(f.age)} onchange="_lvlChange((c)=>{c.fish.age=this.checked})"> stárnout</label>
-          <label><input type="checkbox"${chk(f.eatRaw)} onchange="_lvlChange((c)=>{c.fish.eatRaw=this.checked})"> zbytek syrový</label>
-          ${saltPrice > 0 ? `<label title="Když vlastní sůl nestačí, dokoupit ji na trhu (${saltPrice.toFixed(4)} FLOWER za kus). Stárnutí pak brzdí sloty."><input type="checkbox"${chk(f.buySalt)} onchange="_lvlChange((c)=>{c.fish.buySalt=this.checked})"> dokupovat sůl</label>` : ""}
-          <label>reelů/den <input type="number" min="0" max="500" value="${f.reels}" style="width:50px" onchange="_lvlChange((c)=>{c.fish.reels=+this.value})"></label>
-          <label title="Jakého červa nahazuješ: určuje, co chytíš (komunitní úlovky, rok rozdělený na 4 sezóny) a cenu hodu. Historie = tvoje dosavadní úlovky, hod oceněný mixem červů, na který ukazují.">červ <select onchange="_lvlChange((c)=>{if(this.value)c.fish.worm=this.value;else delete c.fish.worm})"><option value=""${sel("", f.worm || "")}>historie${plan.fish.wormMix && !f.worm ? ` (${Object.entries(plan.fish.wormMix).filter(([, v]) => v > 0.02).map(([k, v]) => `${Math.round(v * 100)} % ${k}`).join(", ")})` : ""}</option>${["Earthworm", "Grub", "Red Wiggler"].map((w) => `<option value="${w}"${sel(w, f.worm)}>${w}</option>`).join("")}</select></label>
-          ${lvlSupplyInputs(L, c)}
-          <span style="color:var(--text-dim)">hod ${plan.fish.castCost.toFixed(3)} ${S} · ${lvlFmt(plan.fish.perDay)} ryb/den · stárne ${lvlFmt(plan.fish.aged)}${plan.fish.baitsPerDay > 0.05 ? ` (${plan.fish.baitsPerDay.toFixed(1)} přes návnady)` : ""} · sůl ${lvlFmt(plan.fish.saltUsed)}/${lvlFmt(plan.fish.saltPerDay)}${plan.fish.saltBought > 0.5 ? ` + koupeno ${lvlFmt(plan.fish.saltBought)}` : ""}</span></div>
-        <div style="color:var(--text-dim)">Fish Market: ${lvlBaitLine(plan)}</div>`;
-      let h = panel("", set, ";font-size:0.6rem;line-height:1.9");
+      set += `</div><div class="v-lvl-row" style="margin-top:8px">
+          <b>🐟 Fish</b>
+          <label><input type="checkbox"${chk(f.age)} onchange="_lvlChange((c)=>{c.fish.age=this.checked})"> age them</label>
+          <label><input type="checkbox"${chk(f.eatRaw)} onchange="_lvlChange((c)=>{c.fish.eatRaw=this.checked})"> eat the rest raw</label>
+          ${saltPrice > 0 ? `<label title="When your own salt is not enough, buy it on the market (${saltPrice.toFixed(4)} FLOWER each). Aging is then held back by the slots."><input type="checkbox"${chk(f.buySalt)} onchange="_lvlChange((c)=>{c.fish.buySalt=this.checked})"> buy ${_wIcon("Salt")}salt</label>` : ""}
+          <label>reels/day <input type="number" min="0" max="500" value="${f.reels}" style="width:60px" onchange="_lvlChange((c)=>{c.fish.reels=+this.value})"></label>
+          <label title="Which worm you cast: it decides what you catch (community catches, the year split into 4 seasons) and what a cast costs. History = your catches so far, a cast priced at the worm mix they point to.">worm ${f.worm ? _wIcon(f.worm) : ""}<select onchange="_lvlChange((c)=>{if(this.value)c.fish.worm=this.value;else delete c.fish.worm})"><option value=""${sel("", f.worm || "")}>history${plan.fish.wormMix && !f.worm ? ` (${Object.entries(plan.fish.wormMix).filter(([, v]) => v > 0.02).map(([k, v]) => `${Math.round(v * 100)} % ${k}`).join(", ")})` : ""}</option>${["Earthworm", "Grub", "Red Wiggler"].map((w) => `<option value="${w}"${sel(w, f.worm)}>${w}</option>`).join("")}</select></label>
+          ${lvlSupplyInputs(L, c)}</div>
+        <div class="v-note">a cast ${plan.fish.castCost.toFixed(3)} ${S} · ${lvlFmt(plan.fish.perDay)} fish/day · ${lvlFmt(plan.fish.aged)} aged${plan.fish.baitsPerDay > 0.05 ? ` (${plan.fish.baitsPerDay.toFixed(1)} through baits)` : ""} · ${_wIcon("Salt")}salt ${lvlFmt(plan.fish.saltUsed)}/${lvlFmt(plan.fish.saltPerDay)}${plan.fish.saltBought > 0.5 ? ` + bought ${lvlFmt(plan.fish.saltBought)}` : ""}</div>
+        <div class="v-note v-ii">Fish Market: ${lvlBaitLine(plan)}</div>`;
 
-      // ── summary: the plan to the target in one block ──
-      const x = plan.xpPerDay;
-      const src = [...plan.buildings.map((b) => `${escHTML(b.name)} ${lvlPerM(b.costPerDay, b.xpPerDay)}`),
-        x.aging + x.raw > 0 ? `ryby ${lvlPerM(plan.costSplit.fish, x.aging + x.raw)}` : null].filter(Boolean).join(" · ");
-      const actual = L.inputs.actualXpPerDay;
-      h += panel("", `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:baseline">
-          <span class="pixel-font" style="font-size:0.9rem">${lvlDays(plan.days)}</span>
-          <span style="color:var(--text-dim)">${lvlDate(plan.days) ? `≈ ${lvlDate(plan.days)} · ` : ""}do ${targetLabel}</span>
-          <span style="font-size:0.75rem"><b>${lvlFmt(plan.totalFlower)}</b> ${S}</span>
-          <span style="color:var(--text-dim)">${plan.oneOff > 0 ? `z toho NFT ${lvlFmt(plan.oneOff)} ${S}${c.resell ? " (ztráta při prodeji)" : ""}` : "bez nákupů"}</span></div>
-        <div style="color:var(--text-dim);line-height:1.7">
-          XP/den <b>${lvlFmt(x.total)}</b> (kuchyně ${lvlFmt(x.kitchens)} · stárnutí ${lvlFmt(x.aging)} · syrové ${lvlFmt(x.raw)}) · ${lvlFmt(plan.costPerDay)} ${S}/den · <b>${lvlPerM(plan.costPerDay, x.total)}</b> ${S} za 1 M XP${plan.bottleneck ? ` · stárnutí brzdí: <b>${lvlBottleneck[plan.bottleneck]}</b>` : ""}<br>
-          ${S} za 1 M XP podle zdroje: ${src || "—"}<br>
-          ${plan.bankedXp > 0 ? `uvařené jídlo ve skladu: ${lvlFmt(plan.bankedXp)} XP (už odečteno) · ` : ""}${actual ? `skutečně za poslední týdny: <b>${lvlFmt(actual)}</b> XP/den (${actual >= x.total ? "plníš" : `${Math.round((actual / x.total) * 100)} % plánu`})` : ""}</div>`, ";font-size:0.6rem");
-
-      // ── frontier + steps ──
-      const fr = L.front;
-      let fh = `<div id="lvl-front">`;
-      if (fr) {
-        const stale = fr.key !== JSON.stringify([c.target, c.restarts, c.costScale, c.resell]);
-        fh += `${stale ? `<div style="color:var(--red)">Spočítáno pro jiný cíl nebo nastavení — přepočítej.</div>` : ""}
-          ${_lvlFrontSvg(fr.points, plan)}
-          <div style="color:var(--text-dim)">✕ = tvoje nastavení · tečka = nejlevnější cesta pro to tempo (klik = použít)</div>
-          <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;margin-top:4px">${fr.points.map((p, i) => `<tr class="roi-row" style="cursor:pointer" onclick="_lvlUseFront(${i})">
-            <td style="white-space:nowrap"><b>${lvlFmt(p.days)}</b> dní</td><td style="white-space:nowrap"><b>${lvlFmt(p.flower)}</b> ${S}</td>
-            <td>${p.kitchens.length ? escHTML(p.kitchens.join(" + ")) : "žádná kuchyně"} · ${p.fish.age ? "stárnutí" : ""}${p.fish.age && p.fish.eatRaw ? " + " : ""}${p.fish.eatRaw ? "syrové" : ""}${!p.fish.age && !p.fish.eatRaw ? "bez ryb" : ""}${p.fish.buySalt ? " + kupovaná sůl" : ""}${p.fish.worm ? ` · ${escHTML(p.fish.worm)}` : ""}${(p.extras || []).length ? ` · + ${escHTML(p.extras.join(", "))}` : ""}</td>
-            <td style="color:var(--text-dim)">${p.ticked.length ? escHTML(p.ticked.join(", ")) : "nic nekupovat"}</td>
-            <td><button class="refresh-btn" style="font-size:0.45rem">použít</button></td></tr>`).join("")}</table></div>`;
-      } else {
-        fh += `<div style="color:var(--text-dim)">Projde kombinace kuchyní, receptů, ryb a nákupů a ukáže nejlevnější cestu pro každé tempo (rychlejší = dražší).</div>`;
-      }
-      fh += `<button class="refresh-btn" style="font-size:0.5rem;margin-top:4px" onclick="_lvlFindFront()">${fr ? "přepočítat" : "Najdi nejlevnější cesty"}</button></div>`;
-      const st = L.steps;
-      const sh = st.length ? `<table style="width:100%;border-collapse:collapse">${st.map((s, i) => `<tr>
-          <td>${i + 1}. ${escHTML(s.label)}${s.price ? ` <span style="color:var(--text-dim)">(${lvlFmt(s.price)} ${S})</span>` : ""}</td>
-          <td style="text-align:right;color:var(--green);white-space:nowrap">${lvlK(s.dFlower)} ${S}</td>
-          <td style="text-align:right;white-space:nowrap;color:var(--text-dim)">${Number.isFinite(s.dDays) ? `${s.dDays > 0 ? "+" : ""}${lvlFmt(s.dDays)} d` : s.dDays < 0 ? "z nikdy" : "nikdy"}</td>
-          <td><button class="refresh-btn" style="font-size:0.45rem" onclick="_lvlUseStep(${i})">použít</button></td></tr>`).join("")}</table>
-          ${st.length > 1 ? `<button class="refresh-btn" style="font-size:0.5rem;margin-top:4px" onclick="_lvlUseSteps()">použít všechny</button>` : ""}`
-        : `<div style="color:var(--text-dim)">Žádná jednotlivá změna už cestu nezlevní.</div>`;
-      h += panel("👣 CO TĚ TEĎ NEJVÍC ZLEVNÍ <span style=\"color:var(--text-dim)\">(každý krok sám o sobě proti tomu, co je nastavené teď)</span>", sh, ";font-size:0.58rem");
-      h += panel(`🧭 NEJLEVNĚJŠÍ CESTY DO ${targetLabel.toUpperCase()}`, fh, ";font-size:0.58rem");
-
-      // ── ladder: the leveling-ladder widget (widgets/leveling-ladder.mjs), pinnable; a row click sets the target ──
+      // ── the widgets, on the page's own state; a ladder row click sets the target ──
       window._wRerender = _lvlRender; window._wRefresh = renderLeveling;
-      h += typeof __widgets === "undefined" ? _wMissing("Po ascenzích") : __widgets.renderPage("leveling-ladder", { data: { farm: L.farm }, ctx: { plan, cfg: c, free, rowClick: true },
-        fresh: __wFresh(__store.peek({ res: "leveling", farm: FARM_ID })) });
-
-      // ── items × ascensions ──
-      const cols = ladder.map((r) => ({ a: r.ascension, xp: r.xpEnd }));
-      const pts = tickedSkillPoints(L.farm, c.ticked);
-      const cell = (v) => `<td style="text-align:right;${!Number.isFinite(v) || Math.abs(v) < 0.5 ? "color:var(--text-dim)" : v < 0 ? "color:var(--green)" : "color:var(--red)"}">${Math.abs(v) < 0.5 ? "0" : lvlK(v)}</td>`;
-      let th = `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:4px">
-          <label><input type="checkbox"${chk(c.resell)} onchange="_lvlChange((c)=>{c.resell=this.checked})"> NFT po cíli prodám (počítá se jen ztráta při prodeji)</label>
-          <label><input type="checkbox"${chk(L.showAll)} onchange="_lvlShowAll(this.checked)"> ukázat i položky bez dopadu</label>
-          ${pts ? `<span>skilly za <b>${pts}</b> b., volných ${free}${pts > free ? ` <span style="color:var(--red)">⚠ zbytek od ${lvlAL(pointsReachedAt(L.farm, pts - free))}</span>` : ""}</span>` : ""}</div>
-        <details style="color:var(--text-dim);margin-bottom:4px"><summary style="cursor:pointer">? co znamenají čísla</summary>
-          Buňka = o kolik ${S} vyjde cesta do konce té ascenze s položkou oproti bez ní (zelená = ušetří, červená = prodělá): provoz (vaření, pruty, hrábě, sůl) + ${c.resell ? "ztráta při prodeji NFT (cena − nejvyšší nabídka, bez nabídky 15 %)" : "celá cena NFT"}. Každý řádek je změna proti tomu, co je zaškrtnuté teď. Σ nahoře = všechno zaškrtnuté dohromady proti ničemu — položky se navzájem ovlivňují (třeba víc ryb nepomůže, když chybí sůl), takže Σ není součet řádků. „Vyplatí se od" = první level, od kterého položka ušetří. Najetím na název uvidíš, co dělá a jak mění den.</details>
-        <div style="overflow-x:auto"><table class="roi-table lvl-t" style="width:100%;border-collapse:collapse">
-        <tr><th></th><th style="text-align:left">položka</th><th>cena</th><th>vyplatí se od</th>${cols.map((k) => `<th${k.a === c.target.ascension ? ' style="color:var(--sunpetal)"' : ""}>A${k.a}</th>`).join("")}<th>body</th></tr>
-        <tr style="font-weight:bold"><td></td><td style="text-align:left">Σ zaškrtnuté (${c.ticked.length})</td><td style="text-align:right">${plan.oneOff > 0 ? lvlFmt(plan.oneOff) : ""}</td><td></td>${cols.map((k) => cell(tickedAt(L.farm, plan, bare, k.xp))).join("")}<td>${pts || ""}</td></tr>`;
-      const key = (r) => (Number.isFinite(r.dFlower) ? r.dFlower : 0);
-      for (const [g, label] of lvlGroups) {
-        const rows = impacts.filter((r) => r.group === g).map((r) => ({ r, vals: cols.map((k) => impactAt(L.farm, r, k.xp)) }))
-          // No effect on the day (XP and running cost unchanged) = only its price: hidden unless asked.
-          .filter(({ r }) => L.showAll || r.ticked || Math.abs(r.dXpPerDay) >= 1 || !(Math.abs(r.dRunning) < 0.5))
-          .sort((a, b) => key(a.r) - key(b.r));
-        if (!rows.length) continue;
-        th += `<tr><td colspan="${5 + cols.length}" class="pixel-font" style="padding-top:6px;color:var(--sunpetal);text-align:left">${label}</td></tr>`;
-        for (const { r, vals } of rows) {
-          const bk = (L.book || {})[r.name] || {};
-          const price = r.kind === "skill" ? `<span style="color:var(--text-dim)">body</span>`
-            : r.priceKnown ? `<span title="nejvyšší nabídka ${bk.b > 0 ? lvlFmt(bk.b) : "—"} · poslední obchod ${bk.ls > 0 ? lvlFmt(bk.ls) : "—"} · ztráta při prodeji ${lvlFmt(r.loss)}">${lvlFmt(r.price)}</span>`
-            : r.tradeable ? `<span style="color:var(--red)" title="na trhu teď není nabídka — počítá se jako zdarma">cena ?</span>` : `<span style="color:var(--text-dim)" title="teď se nedá koupit">nelze</span>`;
-          let be = r.ticked ? "" : lvlAL(breakEven(L.farm, r, 10));
-          if (r.kind === "skill" && r.pointCost > free) be += `<div style="color:var(--text-dim)">body od ${lvlAL(pointsReachedAt(L.farm, r.pointCost - free))}</div>`;
-          const tip = `${r.boost} · XP/den ${r.dXpPerDay > 0 ? "+" : ""}${lvlFmt(r.dXpPerDay)} · do cíle ${Number.isFinite(r.dDays) ? `${r.dDays > 0 ? "+" : ""}${lvlFmt(r.dDays)} dní` : "z nikdy"} · provoz ${lvlK(r.dRunning)} FLOWER`;
-          th += `<tr class="roi-row"${r.ticked ? ' style="background:rgba(120,200,120,0.1)"' : ""}>
-            <td><input type="checkbox"${chk(r.ticked)} data-n="${escHTML(r.name)}" onchange="_lvlTick(this.dataset.n,this.checked)"></td>
-            <td style="text-align:left;white-space:nowrap" title="${escHTML(tip)}">${escHTML(r.name)}</td>
-            <td style="text-align:right">${price}</td><td style="white-space:nowrap">${be}</td>
-            ${vals.map(cell).join("")}<td>${r.pointCost || ""}</td></tr>`;
-        }
+      const state = { farm: L.farm, inputs: L.inputs, book: L.book, cfg: c, free, plan, bare, impacts, ladder, steps: L.steps, front: L.front, showAll: L.showAll };
+      const fresh = __wFresh(__store.peek({ res: "leveling", farm: FARM_ID }));
+      const wctx = { state, interactive: true, icon: _wIcon };
+      const w = (type) => __widgets.renderPage(type, { data: { farm: L.farm }, ctx: wctx, fresh });
+      let h = `<div class="w-card v-lvl-set">${set}</div>`;
+      if (typeof __widgets === "undefined") h += _wMissing("Leveling");
+      else {
+        h += w("leveling-summary") + w("leveling-steps") + w("leveling-frontier");
+        h += __widgets.renderPage("leveling-ladder", { data: { farm: L.farm }, ctx: { plan, cfg: c, free, rowClick: true }, fresh });
+        h += w("leveling-matrix");
       }
-      h += panel("🧮 CO NEMÁŠ: ČISTĚ ZA AŽ DO KONCE ASCENZE", th + `</table></div>`, ";font-size:0.56rem");
-      body.innerHTML = `<style>#lvl-body td,#lvl-body th{padding:1px 5px;vertical-align:top}#lvl-body .lvl-t td{text-align:right}#lvl-body .lvl-t th{font-weight:normal;color:var(--text-dim)}</style>` + h;
+      body.innerHTML = h;
       body.onclick = (e) => {
         const tr = e.target.closest('[data-frame="page:leveling-ladder"] tr[data-row]');
         if (tr) _lvlTarget(Number(tr.dataset.row.slice(1)));
