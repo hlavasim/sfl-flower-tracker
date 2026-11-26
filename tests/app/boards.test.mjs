@@ -121,3 +121,10 @@ test("several boards: add one (with seed items, once), remove one (never the las
   assert.strictEqual(pinTarget(d), "main");
   assert.strictEqual(removeBoard(d, "main"), d, "the last board stays");
 });
+
+test("synced summary mode and title are cleaned: known modes only, a short plain string", () => {
+  assert.deepStrictEqual(cleanSettings({ summary: "compact", title: "Dishes" }), { summary: "compact", title: "Dishes" });
+  const bad = cleanSettings({ summary: "big", title: { x: 1 } });
+  assert.ok(!("summary" in bad) && !("title" in bad));
+  assert.strictEqual(cleanSettings({ title: "y".repeat(100) }).title.length, 60);
+});

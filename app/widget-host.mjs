@@ -10,7 +10,7 @@ import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemS
   pageSettings, setPageSettings, pinnedCount, pinTarget, addBoard, removeBoard, setLastBoard } from "./boards.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "reset"]);
+const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "summary", "title", "reset"]);
 
 export function createHost({ registry, storage, onChange = () => {}, onRefresh = () => {} }) {
   let doc = loadBoards(storage);
@@ -28,7 +28,9 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     return out;
   };
   const withForce = (settings, force) => (force ? { ...settings, opts: { ...(settings.opts || {}), ...force } } : settings);
-  const titleOf = (widget, settings) => (typeof widget.titleFor === "function" ? widget.titleFor(settings.opts || {}) : widget.title);
+  const ownTitle = (widget, settings) => (typeof widget.titleFor === "function" ? widget.titleFor(settings.opts || {}) : widget.title);
+  // the copy's own name (Look → Title) wins over the widget's title
+  const titleOf = (widget, settings) => settings.title || ownTitle(widget, settings);
 
   function parse(frameId) {
     const s = String(frameId);
@@ -44,6 +46,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
     return { place: "board", boardId: m[1], item, type: item.type, widget: registry[item.type] || null };
   }
 
+  const summaryHtml = (html, mode) => (!html || mode === "off" ? "" : mode === "compact" ? `<div class="w-sum-compact">${html}</div>` : html);
   function body(widget, settings, data, ctx, tab, force = null) {
     try {
       if (widget.view) {
@@ -54,11 +57,12 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       const out = widget.build(data || {}, ctx || {}, settings.opts || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
       return {
-        // summary: trusted HTML from the widget above its table (tiles, a big bar)
-        html: (out.summary || "") + (out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
+        // summary: trusted HTML from the widget above its table (tiles, a big bar) — shown, compact or hidden
+        html: summaryHtml(out.summary, settings.summary) + (out.rows.length ? renderTable(widget.columns, out.rows, settings, opts) + (out.footer || "")
           : `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`),
         settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab,
-          options: (widget.options || []).filter((o) => !force || !(o.key in force)), optionsLabel: widget.optionsLabel }),
+          options: (widget.options || []).filter((o) => !force || !(o.key in force)), optionsLabel: widget.optionsLabel,
+          summary: !!out.summary, defaultTitle: ownTitle(widget, settings) }),
       };
     } catch (e) {
       // The cog still offers a reset, so a bad saved setting is never a dead end.

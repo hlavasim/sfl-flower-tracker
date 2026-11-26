@@ -23,7 +23,9 @@ const ROW_MODES = ["all", "top", "picked"];
 export function cleanSettings(raw) {
   if (!isObj(raw)) return {};
   const s = { ...raw };
-  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters; delete s.opts;
+  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters; delete s.opts; delete s.summary; delete s.title;
+  if (["full", "compact", "off"].includes(raw.summary)) s.summary = raw.summary;
+  if (typeof raw.title === "string" && raw.title.trim()) s.title = raw.title.trim().slice(0, 60);
   // a widget's own options: plain values and lists of strings only
   if (isObj(raw.opts)) {
     const plain = (v) => v === null || ["string", "number", "boolean"].includes(typeof v);

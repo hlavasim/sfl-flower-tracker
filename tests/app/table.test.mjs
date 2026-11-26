@@ -199,3 +199,20 @@ test("review #2: the settings panel never prints a raw settings value", () => {
   const html = tableSettingsPanel(COLS, { textSize: evil, rows: { mode: "top", top: evil, picked: null } }, { rows: ROWS, rowKey: key });
   assert.doesNotMatch(html, /<img/);
 });
+
+test("Look tab: summary shown / compact / hidden and a custom title, both saved in the settings", () => {
+  let s = applyTableAction(COLS, {}, "summary", "compact");
+  assert.strictEqual(s.summary, "compact");
+  s = applyTableAction(COLS, s, "summary", "off");
+  assert.strictEqual(s.summary, "off");
+  assert.strictEqual(applyTableAction(COLS, s, "summary", "nonsense").summary, "off", "an unknown value changes nothing");
+  s = applyTableAction(COLS, s, "title", "  My dishes  ");
+  assert.strictEqual(s.title, "My dishes");
+  assert.strictEqual(applyTableAction(COLS, s, "title", "x".repeat(200)).title.length, 60);
+  assert.ok(!("title" in applyTableAction(COLS, s, "title", "   ")), "blank = the widget's own title again");
+  const panel = tableSettingsPanel(COLS, { summary: "compact", title: "My <b>" }, { tab: "look", summary: true, defaultTitle: "🎯 Dishes to 5" });
+  assert.match(panel, /data-action="summary" data-value="compact"[^>]*class="w-seg on"|class="w-seg on"[^>]*data-action="summary" data-value="compact"/);
+  assert.match(panel, /<input type="text" data-action="title" value="My &lt;b&gt;" placeholder="🎯 Dishes to 5"/);
+  // no summary on this widget → no summary control
+  assert.doesNotMatch(tableSettingsPanel(COLS, {}, { tab: "look" }), /data-action="summary"/);
+});

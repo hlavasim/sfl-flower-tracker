@@ -276,3 +276,16 @@ test("a widget's summary (tiles, a big bar) renders above its table, also when e
   assert.ok(html.indexOf("<p class=s>SUM</p>") < html.indexOf("<table"));
   assert.match(h.renderPage("s", { data: { list: [] } }), /<p class=s>SUM<\/p><div class="w-empty-msg">none/);
 });
+
+test("the frame shows the custom title; the summary renders full, compact or not at all", () => {
+  const S = { ...T, title: "Own", build: ({ list }) => ({ rows: list || [], footer: "", empty: "none", summary: "<p class=s>SUM</p>" }) };
+  const h = createHost({ registry: { s: S }, storage: mem() });
+  h.handle("page:s", "title", "Renamed");
+  let html = h.renderPage("s", { data: DATA });
+  assert.match(html, /class="w-title">Renamed</);
+  h.handle("page:s", "summary", "compact");
+  html = h.renderPage("s", { data: DATA });
+  assert.match(html, /<div class="w-sum-compact"><p class=s>SUM<\/p><\/div>/);
+  h.handle("page:s", "summary", "off");
+  assert.doesNotMatch(h.renderPage("s", { data: DATA }), /SUM/);
+});

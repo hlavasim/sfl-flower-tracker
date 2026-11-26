@@ -151,6 +151,16 @@ export function applyTableAction(columns, settings = {}, action, value) {
     case "text-size":
       s.textSize = Math.min(TEXT_MAX, Math.max(TEXT_MIN, Math.round(Number(value)) || 100));
       return s;
+    case "summary":
+      // the widget's summary (tiles, big bar): shown, compact (one line) or hidden
+      if (["full", "compact", "off"].includes(value)) s.summary = value;
+      return s;
+    case "title": {
+      // a name of the owner's for this copy; blank = the widget's own title again
+      const t = String(value ?? "").trim().slice(0, TITLE_MAX);
+      if (t) s.title = t; else delete s.title;
+      return s;
+    }
     case "reset":
       return {};
     default:
@@ -214,7 +224,9 @@ function optionsHtml(options, opts) {
 // control carries data-action / data-value; the frame delegates the events (and the drag of a
 // column's grip, which reports col-move) and feeds them to applyTableAction.
 const TABS = [["cols", "Columns"], ["rows", "Rows"], ["filter", "Filter"], ["look", "Look"]];
-export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab, options = [], optionsLabel = "Options" } = {}) {
+export const TITLE_MAX = 60;
+export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey = (r) => r.key, rowLabel, tab, options = [], optionsLabel = "Options",
+  summary = false, defaultTitle = "" } = {}) {
   const filterCols = columns.filter((c) => c.filter);
   // the widget's own options, when it has any, come first and open by default
   const tabsHere = [...(options.length ? [["opts", optionsLabel]] : []), ...TABS.filter(([t]) => t !== "filter" || filterCols.length)];
@@ -258,7 +270,10 @@ export function tableSettingsPanel(columns, settings = {}, { rows = [], rowKey =
       (sel.mode === "top" ? `<label class="w-line">Count <input type="number" min="1" value="${sel.top}" data-action="rows-top"></label>` : "") +
       (sel.mode === "picked" ? `<div class="w-picks">${picks}</div>` : "")) +
     (filterCols.length ? section("filter", filters) : "") +
-    section("look", `<label class="w-line">Text size <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +
+    section("look", `<label class="w-line">Title <input type="text" data-action="title" value="${esc(settings.title || "")}" placeholder="${esc(defaultTitle)}" maxlength="${TITLE_MAX}"></label>` +
+      (summary ? `<div class="w-line">Summary <span class="w-segs">` + [["full", "Shown"], ["compact", "Compact"], ["off", "Hidden"]].map(([v, t]) =>
+        `<button type="button" class="w-seg${(settings.summary || "full") === v ? " on" : ""}" data-action="summary" data-value="${v}">${t}</button>`).join("") + `</span></div>` : "") +
+      `<label class="w-line">Text size <input type="range" min="${TEXT_MIN}" max="${TEXT_MAX}" step="10" value="${size}" data-action="text-size"> ${size} %</label>` +
       `<label class="w-line"><input type="checkbox" data-action="density" data-value="${settings.density === "compact" ? "normal" : "compact"}"${settings.density === "compact" ? " checked" : ""}> Compact rows</label>`) +
     `<div class="w-foot"><button type="button" class="w-link" data-action="reset" data-value="">Reset to defaults</button></div></div>`;
 }
