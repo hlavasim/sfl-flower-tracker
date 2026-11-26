@@ -35,6 +35,7 @@ export function computeFishYieldPerCast(farm, tier) {
   const has = (n) => findCollectible(farm, n).length > 0;
   // Always-on
   if (has("Walrus")) y += 1;
+  if (has("Dumbo Octopus")) y += 0.2;          // 20% chance +1 fish (collectibleItemBuffs.ts)
   // Seasonal +1 fish collectibles
   if (season === "spring" && has("Pink Dolphin")) y += 1;
   if (season === "summer" && has("Jellyfish")) y += 1;
