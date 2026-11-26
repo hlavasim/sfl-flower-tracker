@@ -92,7 +92,9 @@ const FLIP_SORTS = { score: "score", margin: "margin", spread: "spread_pct", liq
 // freeze date is visible) but never count as stale — the watchdog must not alarm on a stop
 // we chose. Drop the flag if the game reopens a server route and the collectors resume.
 const HEALTH_COLLECTORS = [
-  { table: "farm_snapshots", col: "captured_at", label: "Farm snapshots", staleH: 2 },
+  // run: the collector also records each run (collector_runs) — it skips unchanged farms, so a
+  // quiet night leaves farm_snapshots old while it runs fine.
+  { table: "farm_snapshots", col: "captured_at", label: "Farm snapshots", staleH: 2, run: "farm-snapshot" },
   // Prices + NFT values are sourced from sfl.world, not the game directly. When the game walled
   // its API on 2026-09-01, sfl.world's own scrape froze too — a third-party outage we can't fix,
   // that recovers on its own. The 48h threshold (was 12h) rides out such a hiccup silently and
@@ -166,11 +168,20 @@ async function handleHealth(pool, res) {
     try {
       const q = await pool.query(`SELECT MAX(${c.col}) AS last FROM ${c.table}`);
       const last = q.rows[0].last;
-      const ageH = last ? (Date.now() - new Date(last).getTime()) / 3600000 : null;
+      // The newer of the last insert and the last successful run (no collector_runs table yet →
+      // the insert alone, as before).
+      let run = null;
+      if (c.run) {
+        try { run = (await pool.query("SELECT last_run, last_ok, last_error FROM collector_runs WHERE name = $1", [c.run])).rows[0] || null; } catch { run = null; }
+      }
+      const t = (v) => (v ? new Date(v).getTime() : 0);
+      const fresh = Math.max(t(last), t(run && run.last_ok));
+      const ageH = fresh ? (Date.now() - fresh) / 3600000 : null;
       // A paused collector is never stale: it stopped by design (game API walled off), so it
       // reports its age for context but stays out of the staleCollectors alarm below.
       return { table: c.table, label: c.label, lastWrite: last, ageHours: ageH == null ? null : Math.round(ageH * 10) / 10,
-        stale: c.paused ? false : (ageH == null ? true : ageH > c.staleH), staleThresholdH: c.staleH, paused: !!c.paused };
+        stale: c.paused ? false : (ageH == null ? true : ageH > c.staleH), staleThresholdH: c.staleH, paused: !!c.paused,
+        ...(run ? { lastRun: run.last_run, lastOk: run.last_ok, lastError: run.last_error } : {}) };
     } catch (e) { return { table: c.table, label: c.label, lastWrite: null, ageHours: null, stale: !c.paused, paused: !!c.paused, error: String(e.message || e).slice(0, 80) }; }
   }));
   const staleCollectors = rows.filter((r) => r.stale).map((r) => r.label);
