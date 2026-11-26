@@ -1,7 +1,6 @@
 // DASH · weather protection: the four Weather Shop items and whether each protects right now.
 // The state per item (none / spent / partial / ok) is the DASH page's dashWeatherState
 // (ctx.weatherRows); this module turns it into rows and words.
-import { big, ring, rows } from "../ui/glance.mjs";
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const STATE = {
   ok: { mark: "✓ active", color: "var(--green)", tip: (p) => `Active — protects against ${p}.` },
@@ -40,16 +39,18 @@ export const weatherProtection = {
   },
 };
 
-// ── iPhone glance face: S = how many items protect now (ring) and what is uncovered; L = every item ──
+// ── iPhone glance model: the count protecting now (a ring) and every item with its state; the
+// layout engine (ui/glance.mjs) lays it out at every size and style ──
 const CHIP = { ok: ["active", "ok"], partial: ["partly used", "warn"], spent: ["used up", "bad"], none: ["missing", "bad"] };
-weatherProtection.sizes = ["s", "l"];
-weatherProtection.size = "s";
-weatherProtection.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+weatherProtection.size = "1x1";
+weatherProtection.glanceModel = (data = {}, ctx = {}) => {
   const out = weatherProtection.build(data, ctx);
   if (!out.rows.length) return { empty: out.empty };
   const n = out.rows.length, gaps = out.rows.filter((r) => missing(r.state));
-  const head = `<div class="g-corner">${ring(((n - gaps.length) / n) * 100, { tone: gaps.length ? "bad" : "ok" })}</div>` +
-    big(n - gaps.length, { unit: `/${n}`, tone: gaps.length ? "bad" : "ok", cap: gaps.length ? `uncovered: ${gaps.map((r) => r.prevents).join(", ")}` : "all protected" });
-  if (size === "s") return { html: head };
-  return { html: head + rows(out.rows.map((r) => { const c = CHIP[r.state] || CHIP.none; return { icon: r.iconHtml || "", name: r.name, sub: r.prevents, chip: { text: c[0], tone: c[1] } }; })) };
+  return {
+    head: { value: n - gaps.length, unit: `/${n}`, tone: gaps.length ? "bad" : "ok", ring: ((n - gaps.length) / n) * 100, ringTone: gaps.length ? "bad" : "ok",
+      cap: gaps.length ? `uncovered: ${gaps.map((r) => r.prevents).join(", ")}` : "all protected" },
+    items: out.rows.map((r) => { const c = CHIP[r.state] || CHIP.none; return { icon: r.iconHtml || "", name: r.name, sub: r.prevents, chip: { text: c[0], tone: c[1] } }; }),
+    tiles: [{ label: "protected", value: `${n - gaps.length}/${n}` }, { label: "uncovered", value: gaps.length }],
+  };
 };

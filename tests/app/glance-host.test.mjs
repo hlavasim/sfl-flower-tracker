@@ -59,7 +59,7 @@ test("⚙ Look offers the sizes on a board copy, not on the widget's page", () =
   h.handle(id(), "cog", "");
   h.handle(id(), "settings-tab", "look");
   const html = h.renderItem("main", item(h), { data: DATA });
-  for (const [v, t] of [["s", "Small"], ["m", "Medium"], ["full", "Full table"]]) {
+  for (const [v, t] of [["s", "Small"], ["m", "Wide"], ["full", "Full table"]]) {
     assert.match(html, new RegExp(`data-action="size" data-value="${v}">${t}<`));
   }
   assert.doesNotMatch(html, /data-value="l">Large</, "only the sizes the widget offers");

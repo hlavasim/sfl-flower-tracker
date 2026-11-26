@@ -6,6 +6,7 @@ import { weatherProtection } from "../../widgets/weather-protection.mjs";
 import { beehives } from "../../widgets/beehives.mjs";
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { createHost } from "../../app/widget-host.mjs";
+import { layout, variants } from "../../ui/glance.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { getTotalBumpkinLevel, _ascBaseline, _ascBandXp, BUMPKIN_XP_TABLE } from "../../core/engine/power-helpers.mjs";
 
@@ -126,19 +127,23 @@ test("📱 glance, bumpkin level: S = L<level> with a meter and the way to the n
   assert.match(bumpkinLevel.view({ farm: FARM }).html, /^<div class="w-tile"><div class="w-tile-big">LVL \d+<\/div>/);
 });
 
-test("📱 glance, weather: S = items protecting now with a ring and what is uncovered; L = every item with a state chip", () => {
-  assert.deepStrictEqual(weatherProtection.sizes, ["s", "l"]);
-  const s = weatherProtection.glance({ farm: FARM }, WCTX, {}, "s").html;
-  assert.match(s, /class="g-ring g-bad"/);
-  assert.match(s, /<div class="g-big g-bad">2<small>\/4<\/small><\/div><div class="g-cap">uncovered: tsunami, insect plague<\/div>/);
-  const l = weatherProtection.glance({ farm: FARM }, WCTX, {}, "l").html;
-  assert.strictEqual((l.match(/class="g-row"/g) || []).length, 4);
-  assert.match(l, /<div class="g-n">Mangrove<div>tsunami<\/div><\/div><span class="g-chip g-bad">used up<\/span>/);
-  assert.match(l, /<div class="g-n">Thermal Stone<div>great freeze<\/div><\/div><span class="g-chip g-warn">partly used<\/span>/);
-  const all = weatherProtection.glance({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, state: "ok" })) }, {}, "s").html;
-  assert.match(all, /<div class="g-big g-ok">4<small>\/4<\/small><\/div><div class="g-cap">all protected<\/div>/);
-  assert.match(weatherProtection.glance({ farm: FARM }, { weatherRows: () => [] }, {}, "s").empty, /No weather items/);
-  assert.match(weatherProtection.glance({ farm: null }, WCTX, {}, "s").empty, /No farm data/);
+test("📱 glance model, weather: the count protecting now (ring) and every item with its state chip — every size × style", () => {
+  const m = weatherProtection.glanceModel({ farm: FARM }, WCTX);
+  assert.deepStrictEqual({ ...m.head, cap: m.head.cap }, { value: 2, unit: "/4", tone: "bad", ring: 50, ringTone: "bad", cap: "uncovered: tsunami, insect plague" });
+  assert.strictEqual(m.items.length, 4);
+  assert.deepStrictEqual(m.items[1], { icon: m.items[1].icon, name: "Mangrove", sub: "tsunami", chip: { text: "used up", tone: "bad" } });
+  assert.deepStrictEqual(m.items[2].chip, { text: "partly used", tone: "warn" });
+  // laid out by the engine: 1×1 icons shows all four with their state under each
+  const mi = weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, iconHtml: `<i>${r.name}</i>` })) });
+  const icons = layout(mi, "1x1", "icons");
+  assert.strictEqual((icons.match(/class="g-cell"/g) || []).length, 4);
+  assert.match(icons, /<small class="g-tag g-bad">used up<\/small>/);
+  assert.match(layout(m, "1x1", "number"), /<div class="g-big g-bad">2<small>\/4<\/small><\/div><div class="g-cap">uncovered: tsunami, insect plague<\/div>/);
+  assert.ok(variants(m).length >= 30, "dozens of ready-made looks");
+  const all = weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => WCTX.weatherRows().map((r) => ({ ...r, state: "ok" })) });
+  assert.strictEqual(all.head.cap, "all protected");
+  assert.match(weatherProtection.glanceModel({ farm: FARM }, { weatherRows: () => [] }).empty, /No weather items/);
+  assert.match(weatherProtection.glanceModel({ farm: null }, WCTX).empty, /No farm data/);
 });
 
 test("📱 glance, beehives: S = full hives with a ring and the swarm; M / L = the hives, full first, with a READY / countdown chip", () => {

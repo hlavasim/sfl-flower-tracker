@@ -6,12 +6,16 @@
 // changed, calls onChange(frameId) and returns whether it was handled.
 import { renderTable, tableSettingsPanel, optionsPanel, applyTableAction, applyOption } from "../ui/table.mjs";
 import { renderFrame, freshness } from "../ui/frame.mjs";
+import { layout, STYLES, SIZES, variants, dims } from "../ui/glance.mjs";
 import { loadBoards, saveBoards, pin, unpin, moveItemTo, resizeItem, updateItemSettings,
-  pageSettings, setPageSettings, pinnedCount, pinTarget, addBoard, removeBoard, setLastBoard } from "./boards.mjs";
+  pageSettings, setPageSettings, pinnedCount, pinTarget, addBoard, removeBoard, setLastBoard, setBoardCols, COLS_DEFAULT } from "./boards.mjs";
 
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "summary", "title", "size", "reset"]);
-const SIZE_LABEL = { s: "Small", m: "Medium", l: "Large", full: "Full table" };
+const TABLE_ACTIONS = new Set(["col-toggle", "col-move", "sort", "rows-mode", "rows-top", "pick", "density", "text-size", "summary", "title", "size", "style", "reset"]);
+const SIZE_LABEL = { s: "Small", m: "Wide", t: "Tall", l: "Large", full: "Full table",
+  ...Object.fromEntries(SIZES.map((s) => [s, s.replace("x", "×")])) };
+const STYLE_LABEL = { number: "Number", rows: "Rows", compact: "Compact", icons: "Icons", tiles: "Tiles", bars: "Bars", chart: "Chart", hero: "Hero" };
+const ALIAS = { s: "1x1", m: "2x1", t: "1x2", l: "2x2" };
 
 export function createHost({ registry, storage, onChange = () => {}, onRefresh = () => {} }) {
   let doc = loadBoards(storage);
@@ -36,25 +40,45 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
 
   // iPhone-style sizes: a widget with a glance face offers widget.sizes (S / M / L) and starts at
   // widget.size; a copy's settings.size picks one, "full" = the table. No glance = always the table.
-  const sizesOf = (type) => { const w = registry[type]; return w && typeof w.glance === "function" ? w.sizes || [w.size || "s"] : []; };
-  const naturalSize = (type) => { const w = registry[type], s = sizesOf(type); return s.includes(w && w.size) ? w.size : s[0] || "full"; };
+  // A widget with a glanceModel (a headline + items) gets every size and style from ui/glance's layout();
+  // an older hand-written glance() keeps the sizes it lists.
+  const hasModel = (w) => !!w && typeof w.glanceModel === "function";
+  const sizesOf = (type) => { const w = registry[type]; return hasModel(w) ? SIZES : w && typeof w.glance === "function" ? w.sizes || [w.size || "s"] : []; };
+  // a model widget reads the old S / M / T / L names as their W×H cells
+  const norm = (type, size) => (hasModel(registry[type]) && ALIAS[size] ? ALIAS[size] : size);
+  const stylesOf = (type) => (hasModel(registry[type]) ? STYLES : []);
+  const styleOf = (type, settings = {}) => { const w = registry[type]; return STYLES.includes(settings.style) ? settings.style : (w && w.glanceStyle) || "number"; };
+  const styleChoices = (type, settings) => stylesOf(type).map((v) => [v, STYLE_LABEL[v], v === styleOf(type, settings)]);
+  const naturalSize = (type) => { const w = registry[type], s = sizesOf(type), n = norm(type, w && w.size); return s.includes(n) ? n : s[0] || "full"; };
   const sizeOf = (type, settings = {}) => {
-    const s = sizesOf(type);
-    if (!s.length || settings.size === "full") return "full";
-    return s.includes(settings.size) ? settings.size : naturalSize(type);
+    const s = sizesOf(type), want = norm(type, settings.size);
+    if (!s.length || want === "full") return "full";
+    return s.includes(want) ? want : naturalSize(type);
   };
+  // the model a model widget's glance is laid out from ({ error } when it threw)
+  function modelOf(widget, settings, data, ctx) {
+    try { return widget.glanceModel(data || {}, ctx || {}, settings.opts || {}) || {}; } catch (e) { return { error: (e && e.message) || String(e) }; }
+  }
+  const lastVariants = new Map();   // board frame → the variants its model offered at the last render
   const sizeChoices = (type, settings) => {
     const s = sizesOf(type), cur = sizeOf(type, settings);
     return s.length ? [...s, "full"].map((v) => [v, SIZE_LABEL[v], v === cur]) : [];
   };
-  function glanceBody(widget, settings, data, ctx, size) {
+  function glanceBody(widget, settings, data, ctx, size, model = null) {
     try {
+      if (hasModel(widget)) {
+        const m = model || modelOf(widget, settings, data, ctx);
+        if (m.error) return `<div class="w-error">The widget failed: ${esc(m.error)}</div>`;
+        return m.empty ? `<div class="w-empty-msg">${esc(m.empty)}</div>` : layout(m, size, styleOf(widget.type, settings));
+      }
       const out = widget.glance(data || {}, ctx || {}, settings.opts || {}, size) || {};
       return out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`;
     } catch (e) {
       return `<div class="w-error">The widget failed: ${esc((e && e.message) || e)}</div>`;
     }
   }
+
+  const colsOf = (boardId) => { const b = doc.boards.find((x) => x.id === boardId); return (b && b.cols) || COLS_DEFAULT; };
 
   function parse(frameId) {
     const s = String(frameId);
@@ -71,14 +95,14 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
   }
 
   const summaryHtml = (html, mode) => (!html || mode === "off" ? "" : mode === "compact" ? `<div class="w-sum-compact">${html}</div>` : html);
-  function body(widget, settings, data, ctx, tab, force = null, sizes = []) {
+  function body(widget, settings, data, ctx, tab, force = null, sizes = [], styles = []) {
     try {
       if (widget.view) {
         // a tile or a chart: its own HTML, no table settings; its own options (if any) are the panel
         const out = widget.view(data || {}, ctx || {}, settings.opts || {}) || {};
         return { html: out.html || `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`,
           settingsHtml: tableSettingsPanel([], settings, { tab, view: true, options: (widget.options || []).filter((o) => !force || !(o.key in force)),
-            optionsLabel: widget.optionsLabel, defaultTitle: ownTitle(widget, settings), sizes }) };
+            optionsLabel: widget.optionsLabel, defaultTitle: ownTitle(widget, settings), sizes, styles }) };
       }
       const out = widget.build(data || {}, ctx || {}, settings.opts || {});
       const opts = { rowKey: widget.rowKey, rowLabel: widget.rowLabel, rowClass: widget.rowClass, keepRow: widget.keepRow };
@@ -88,7 +112,7 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
           : `<div class="w-empty-msg">${esc(out.empty || "Nothing to show.")}</div>`),
         settingsHtml: tableSettingsPanel(widget.columns, settings, { rows: out.rows, ...opts, tab,
           options: (widget.options || []).filter((o) => !force || !(o.key in force)), optionsLabel: widget.optionsLabel,
-          summary: !!out.summary, defaultTitle: ownTitle(widget, settings), sizes }),
+          summary: !!out.summary, defaultTitle: ownTitle(widget, settings), sizes, styles }),
       };
     } catch (e) {
       // The cog still offers a reset, so a bad saved setting is never a dead end.
@@ -115,19 +139,32 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       return renderFrame({ id, title: item.type, place: "board", w: item.w, h: item.h, body: `<div class="w-error">This widget no longer exists — remove it.</div>` });
     }
     const settings = effective(widget, item.settings);
-    const size = sizeOf(item.type, settings), sizes = sizeChoices(item.type, settings);
+    const size = sizeOf(item.type, settings), sizes = sizeChoices(item.type, settings), styles = size === "full" ? [] : styleChoices(item.type, settings);
     const loading = `<div class="w-fresh">Loading…</div>`;
-    const b = pending ? { html: loading, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id), null, sizes);
+    const b = pending ? { html: loading, settingsHtml: "" } : body(widget, settings, data, ctx, open.get(id), null, sizes, styles);
     const title = titleOf(widget, settings);
     if (size === "full") {
       expanded.delete(id);
-      return renderFrame({ id, title, place: "board", w: item.w, h: item.h, body: b.html, fresh, cog: true,
+      // w is the share of 12 the table was given; on a board of N columns it spans that share of N
+      const cols = colsOf(boardId);
+      return renderFrame({ id, title, place: "board", w: Math.max(1, Math.round((item.w * cols) / 12)), h: item.h, body: b.html, fresh, cog: true,
         settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
     }
     // the glance face; open, the full widget in a sheet over the board (the ⚙ then lives in the sheet)
     const isOpen = expanded.has(id);
-    const face = renderFrame({ id, title, place: "board", glance: size, body: pending ? loading : glanceBody(widget, settings, data, ctx, size), fresh, cog: true,
-      settingsHtml: b.settingsHtml, settingsOpen: !isOpen && open.has(id) });
+    // a model widget: ◀ n / total ▶ walks the ready-made size × style variants its data can fill
+    let model = null, nav = null;
+    if (hasModel(widget) && !pending) {
+      model = modelOf(widget, settings, data, ctx);
+      const list = model.error || model.empty ? [] : variants(model);
+      lastVariants.set(id, list);
+      const at = list.findIndex((v) => v.size === size && v.style === styleOf(item.type, settings));
+      if (list.length) nav = { n: at + 1, total: list.length };
+    }
+    const { w, h } = dims(size);   // the old S / M / L names read as 1×1 / 2×1 / 2×2
+    const face = renderFrame({ id, title, place: "board", glance: size, body: pending ? loading : glanceBody(widget, settings, data, ctx, size, model), fresh, cog: true,
+      settingsHtml: b.settingsHtml, settingsOpen: !isOpen && open.has(id), variant: nav,
+      ...(w ? { gw: Math.min(w, colsOf(boardId)), gh: h } : {}) });
     if (!isOpen) return face;
     const sheet = renderFrame({ id, title, place: "sheet", body: b.html, fresh, cog: true, settingsHtml: b.settingsHtml, settingsOpen: open.has(id) });
     return face.slice(0, -"</section>".length) +
@@ -142,6 +179,15 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       return true;
     }
     if (action === "noop") return true;   // a click inside an open sheet that is not on a control
+    if (action === "variant" && f.place === "board") {
+      // ◀ ▶: the previous / next ready-made variant (wrapping), from the list the last render offered
+      const list = lastVariants.get(frameId) || [];
+      if (!list.length) return false;
+      const cur = effective(f.widget, f.item.settings);
+      const at = list.findIndex((v) => v.size === sizeOf(f.type, cur) && v.style === styleOf(f.type, cur));
+      const next = list[(((at < 0 ? 0 : at) + (Number(value) < 0 ? -1 : 1)) % list.length + list.length) % list.length];
+      return save(updateItemSettings(doc, f.boardId, f.item.i, { ...cur, size: next.size, style: next.style }), frameId);
+    }
     if (action === "expand" || action === "collapse") {
       if (f.place !== "board") return false;
       if (action === "expand") expanded.add(frameId); else if (!expanded.delete(frameId)) return false;
@@ -182,7 +228,8 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
       try { v = value ? JSON.parse(value) : null; } catch { v = null; }
       if (!v || typeof v !== "object" || Array.isArray(v)) v = {};
       if (v.opts && typeof v.opts === "object" && !Array.isArray(v.opts)) settings.opts = { ...(settings.opts || {}), ...v.opts };
-      if (["s", "m", "l", "full"].includes(v.size)) settings.size = v.size;   // the size picked in the gallery
+      if (["s", "m", "t", "l", "full", ...SIZES].includes(v.size)) settings.size = v.size;   // the size and style picked in the gallery
+      if (STYLES.includes(v.style)) settings.style = v.style;
       // the chosen board, else the one visited last, else the first (a synced document may have no "main")
       const board = typeof v.board === "string" && doc.boards.some((b) => b.id === v.board) ? v.board : pinTarget(doc);
       return save(pin(doc, { type: f.type, settings }, board), frameId);
@@ -195,8 +242,11 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
         return save(moveItemTo(doc, f.boardId, f.item.i, t.item.i), frameId);
       }
       if (action === "resize") {
+        // the drag reports columns of this board; a table keeps its width as a share of 12
         const [w, h] = String(value).split("|");
-        return save(resizeItem(doc, f.boardId, f.item.i, { w, h: h === undefined ? undefined : h }), frameId);
+        const cols = colsOf(f.boardId);
+        const w12 = Math.round((Math.min(cols, Math.max(1, Number(w) || 1)) * 12) / cols);
+        return save(resizeItem(doc, f.boardId, f.item.i, { w: w12, h: h === undefined ? undefined : h }), frameId);
       }
     }
     return false;
@@ -253,15 +303,25 @@ export function createHost({ registry, storage, onChange = () => {}, onRefresh =
 
   // The gallery's preview: the widget's body with its defaults (plus opts), no frame or controls.
   // size: S / M / L shows the glance face (default: the widget's natural size), "full" the table.
-  function preview(type, { data, ctx, opts = null, size = "" } = {}) {
+  function preview(type, { data, ctx, opts = null, size = "", style = "" } = {}) {
     const widget = registry[type];
     if (!widget) return "";
-    const settings = withForce(effective(widget, {}), opts);
+    const settings = { ...withForce(effective(widget, {}), opts), ...(style ? { style } : {}) };
     const sz = size ? sizeOf(type, { size }) : naturalSize(type);
+    if (hasModel(widget) && style) settings.style = style;
     return sz === "full" ? body(widget, settings, data, ctx, null).html : glanceBody(widget, settings, data, ctx, sz);
   }
 
   return { doc: () => doc, update, preview, optsFor, pageOpts, itemOpts, sizesOf, sizeOf: (type, settings) => sizeOf(type, settings),
+    stylesOf, styleOf: (type, settings) => styleOf(type, settings), colsOf,
+    // the gallery: the ready-made size × style variants a model widget's data can fill ([] for others)
+    variantsOf: (type, { data, ctx, opts = null } = {}) => {
+      const w = registry[type];
+      if (!hasModel(w)) return [];
+      const m = modelOf(w, withForce(effective(w, {}), opts), data, ctx);
+      return m.error || m.empty ? [] : variants(m);
+    },
+    naturalOf: (type) => ({ size: naturalSize(type), style: styleOf(type, {}) }), setBoardCols: (id, n) => update((d) => setBoardCols(d, id, n)),
     addBoard: (b) => update((d) => addBoard(d, b)), removeBoard: (id) => update((d) => removeBoard(d, id)),
     visit: (id) => update((d) => setLastBoard(d, id)), reload: () => { doc = loadBoards(storage); }, registry, renderPage, renderItem, handle,
     needsOf, loadData, peekData, freshOf };

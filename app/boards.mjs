@@ -16,6 +16,8 @@ const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
 const num = (v, dflt) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.round(Number(v)) : dflt);
 const clampW = (w) => Math.min(12, Math.max(1, num(w, W_DEFAULT)));
 const clampH = (h) => Math.min(24, Math.max(0, num(h, 0)));
+export const COLS_DEFAULT = 6;
+const clampCols = (c) => Math.min(12, Math.max(2, num(c, COLS_DEFAULT)));
 
 // Table settings arrive from other devices (prefs sync): the keys the table reads are checked and
 // coerced, a wrong one is dropped; keys it does not know are kept for widgets that add their own.
@@ -23,9 +25,10 @@ const ROW_MODES = ["all", "top", "picked"];
 export function cleanSettings(raw) {
   if (!isObj(raw)) return {};
   const s = { ...raw };
-  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters; delete s.opts; delete s.summary; delete s.title; delete s.size;
+  delete s.columns; delete s.sort; delete s.rows; delete s.density; delete s.textSize; delete s.filters; delete s.opts; delete s.summary; delete s.title; delete s.size; delete s.style;
   if (["full", "compact", "off"].includes(raw.summary)) s.summary = raw.summary;
-  if (["s", "m", "l", "full"].includes(raw.size)) s.size = raw.size;   // a board copy's size: S / M / L glance, or the full table
+  if (["s", "m", "t", "l", "full"].includes(raw.size) || /^[124]x[124]$/.test(raw.size)) s.size = raw.size;
+  if (["number", "rows", "compact", "icons", "tiles", "bars", "chart", "hero"].includes(raw.style)) s.style = raw.style;   // how a glance shows its model   // a board copy's size: S / M / L glance, or the full table
   if (typeof raw.title === "string" && raw.title.trim()) s.title = raw.title.trim().slice(0, 60);
   // a widget's own options: plain values and lists of strings only
   if (isObj(raw.opts)) {
@@ -67,6 +70,7 @@ export function parseBoards(raw) {
     id: b.id,
     name: typeof b.name === "string" && b.name ? b.name : "Dashboard",
     items: (Array.isArray(b.items) ? b.items : []).map(cleanItem).filter(Boolean),
+    ...(Number.isFinite(Number(b.cols)) && b.cols !== null && b.cols !== "" ? { cols: clampCols(b.cols) } : {}),
   }));
   const page = Object.fromEntries(Object.entries(isObj(d.page) ? d.page : {}).filter(([, v]) => isObj(v)).map(([k, v]) => [k, cleanSettings(v)]));
   const out = { schema: 1, boards: boards.length ? boards : emptyBoards().boards, page };
@@ -106,6 +110,11 @@ export function moveItemTo(doc, boardId, i, target) {
 export function resizeItem(doc, boardId, i, { w, h }) {
   return withBoard(doc, boardId, (items) => items.map((x) => (x.i === i
     ? { ...x, w: w === undefined ? x.w : clampW(w), h: h === undefined ? x.h : clampH(h) } : x)));
+}
+
+// How many small widgets fit side by side on this board (2-12); a full table spans its share.
+export function setBoardCols(doc, boardId, cols) {
+  return { ...doc, boards: doc.boards.map((b) => (b.id === boardId ? { ...b, cols: clampCols(cols) } : b)) };
 }
 
 export function updateItemSettings(doc, boardId, i, settings) {

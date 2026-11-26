@@ -3266,16 +3266,16 @@
     .w-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; touch-action: none;
       background: linear-gradient(135deg, transparent 50%, var(--border-brown) 50%, var(--border-brown) 60%, transparent 60%, transparent 75%, var(--border-brown) 75%); }
     .w-resize:hover { background: linear-gradient(135deg, transparent 50%, var(--sunpetal) 50%, var(--sunpetal) 60%, transparent 60%, transparent 75%, var(--sunpetal) 75%); }
-    @media (max-width: 700px) { .w-board > .w-frame:not(.w-glance) { grid-column: span 12 !important; } .w-resize { display: none; } }
-    /* ── iPhone-style widgets: a board copy at S / M / L (its glance face, ui/glance.mjs) ──
-       The board is a 12-column grid of 8 px rows; every item's row span is fitted to its height
-       (_wFitBoard), so small widgets pack beside large ones the way an iPhone home screen does. */
-    .w-board { grid-auto-rows: 8px; row-gap: 0; column-gap: 16px; grid-auto-flow: row dense; align-items: start; }
+    @media (max-width: 700px) { .w-board > .w-frame:not(.w-glance) { grid-column: 1 / -1 !important; } .w-resize { display: none; } }
+    /* ── iPhone-style widgets: a board copy at W×H cells (its glance face, ui/glance.mjs) ──
+       The board has --cols columns (per board, 2-12) and 8 px rows; a glance spans --gw columns and is
+       --gh cells tall (--cell = one column's width, set by _wFitBoard), every item's row span is fitted
+       to its height, so small widgets pack beside large ones the way an iPhone home screen does. */
+    .w-board { grid-template-columns: repeat(var(--cols, 6), minmax(0, 1fr)) !important; grid-auto-rows: 8px; row-gap: 0; column-gap: 16px;
+      grid-auto-flow: row dense; align-items: start; }
     .w-board > .w-frame { align-self: start; }
-    .w-board > .w-glance { grid-column: span 3; aspect-ratio: 1 / 1; }
-    .w-board > .w-g-m { grid-column: span 6; aspect-ratio: 2.06 / 1; }
-    .w-board > .w-g-l { grid-column: span 6; aspect-ratio: 1.03 / 1; }
-    @media (max-width: 700px) { .w-board > .w-glance { grid-column: span 6 !important; } .w-board > .w-g-m, .w-board > .w-g-l { grid-column: span 12 !important; } }
+    .w-board > .w-glance { grid-column: span var(--gw, 1); height: calc(var(--gh, 1) * var(--cell, 170px) + (var(--gh, 1) - 1) * 16px); }
+    @media (max-width: 700px) { .w-board { --cols: 2 !important; } }
     .w-glance.pixel-panel { border-radius: 22px; padding: 13px 15px 15px; overflow: hidden; border: 1px solid rgba(255,255,255,0.07);
       background: linear-gradient(160deg, rgba(255,255,255,0.075), rgba(255,255,255,0.025)), var(--c-card); box-shadow: 0 10px 28px rgba(0,0,0,0.28);
       transition: box-shadow 0.15s, border-color 0.15s; }
@@ -3336,6 +3336,55 @@
     .g-stack i { display: block; height: 100%; }
     .g-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--c-muted); margin-top: 6px; }
     .g-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+    /* the glance styles (ui/glance.mjs layout): rows in columns, icons, dense lines, bars, tiles, hero */
+    .g-head-top { position: relative; flex: none; }
+    .g-head-top .g-big { margin-top: 0; }
+    .g-head-top + .g-rows, .g-head-top + .g-spark { margin-top: 10px; }
+    .g-split-wide { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+    .g-split-wide .g-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+    .g-rows.g-cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+    .g-icons { display: grid; grid-template-columns: repeat(var(--gc, 2), minmax(0, 1fr)); gap: 6px; align-content: space-evenly; flex: 1; min-height: 0; }
+    .g-cell { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px; min-width: 0; padding-top: 2px; }
+    .g-cell .g-ic { width: clamp(28px, 26cqw, 56px); height: clamp(28px, 26cqw, 56px); border-radius: 12px; }
+    .g-icons[style*="--gc:4"] .g-cell .g-ic, .g-icons[style*="--gc:8"] .g-cell .g-ic { width: clamp(26px, 9cqw, 38px); height: clamp(26px, 9cqw, 38px); }
+    .g-cell .g-ic img { width: 72% !important; height: 72% !important; }
+    .g-tag { font-size: 10.5px; font-weight: 600; color: var(--c-muted); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .g-tag.g-ok { color: #30d158; } .g-tag.g-info { color: #64b5ff; } .g-tag.g-warn { color: #ff9f0a; } .g-tag.g-bad { color: #ff6961; }
+    .g-cell.g-more { justify-content: center; font-weight: 700; color: var(--c-muted); background: rgba(255,255,255,0.05); border-radius: 11px; font-size: 13px; }
+    .g-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+    .g-lines.g-cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+    .g-line { display: flex; gap: 8px; justify-content: space-between; min-width: 0; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 3px; }
+    .g-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--c-text); }
+    .g-line b { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 600; }
+    .g-bars { display: flex; flex-direction: column; gap: 8px; }
+    .g-bar-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .g-bar-main { flex: 1; min-width: 0; }
+    .g-bar-main .g-meter { margin-top: 3px; height: 5px; }
+    .g-bar-top { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+    .g-bar-top span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .g-bar-top b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .g-ic.g-ic-s { width: 24px; height: 24px; border-radius: 7px; }
+    .g-ic.g-ic-s img { width: 18px !important; height: 18px !important; }
+    .g-tgrid { display: grid; grid-template-columns: repeat(var(--gc, 2), minmax(0, 1fr)); gap: 8px; align-content: start; }
+    .g-tgrid > div { background: rgba(255,255,255,0.05); border-radius: 14px; padding: 8px 10px; min-width: 0; }
+    .g-tgrid span, .g-tgrid small { display: block; font-size: 11px; color: var(--c-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .g-tgrid small { color: var(--c-dim); }
+    .g-tgrid b { display: block; font-size: clamp(14px, 9cqw, 20px); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--c-text); }
+    .g-heroline { display: flex; align-items: center; gap: 12px; margin-top: auto; }
+    .g-hero-xl img { width: clamp(40px, 34cqw, 72px) !important; height: clamp(40px, 34cqw, 72px) !important; object-fit: contain; image-rendering: pixelated; margin: 0 !important; }
+    .g-heroline .g-big { margin-top: 0; }
+    .w-var-n { font: 600 11px var(--c-font); color: var(--c-muted); white-space: nowrap; padding: 0 2px; }
+    .w-cols-ctl { display: inline-flex; align-items: center; gap: 4px; font: 13px var(--c-font); color: var(--c-muted); background: var(--c-card); border: 1px solid var(--c-line);
+      border-radius: 999px; padding: 2px 4px 2px 12px; }
+    .w-cols-ctl button { border: none; background: none; color: var(--c-text); font-size: 15px; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; }
+    .w-cols-ctl button:hover { background: var(--c-card2); }
+    .w-cols-ctl b { color: var(--c-text); min-width: 16px; text-align: center; }
+    .w-gal-nav { display: inline-flex; align-items: center; gap: 2px; background: var(--c-card2); border-radius: 999px; padding: 2px; flex: none; }
+    .w-gal-nav button { border: none; background: none; color: var(--c-text); font-size: 12px; width: 24px; height: 22px; border-radius: 999px; cursor: pointer; }
+    .w-gal-nav button:hover { background: var(--c-line); }
+    .w-gal-nav span { font: 600 11px var(--c-font); color: var(--c-muted); min-width: 44px; text-align: center; }
+    .w-gal-nav .w-gal-tbl.on { background: var(--c-text); color: var(--c-bg); }
+
     /* the full widget, opened from a glance, over the board */
     .w-sheet { position: fixed; inset: 0; z-index: 950; background: rgba(0,0,0,0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
       display: flex; align-items: flex-start; justify-content: center; padding: 6vh 16px 24px; overflow: auto; cursor: default; animation: w-sheet-in 0.18s ease-out; }
@@ -3377,6 +3426,11 @@
     .w-gal-card.added .w-gal-add { background: #30d158; }
     .w-gal-card.added .w-gal-add::after { content: ""; }
     @media (max-width: 560px) { .w-gal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+    /* a gallery card at a variant's W×H: --gw columns of the gallery grid, --gh cells tall */
+    .w-gal-card.w-gal-v { grid-column: span min(var(--gw, 1), 4); }
+    .w-gal-v .w-gal-face { aspect-ratio: auto; height: calc(var(--gh, 1) * 170px + (var(--gh, 1) - 1) * 18px); container-type: inline-size; }
+    @media (max-width: 560px) { .w-gal-card.w-gal-v { grid-column: span min(var(--gw, 1), 2); } }
+
 
     @media (prefers-reduced-motion: reduce) { .w-sheet { animation: none; } }
 
@@ -16191,7 +16245,12 @@
       const g = document.createElement("div");
       g.id = "w-gallery";
       g.className = "w-gallery";
+      // a model widget: ◀ n / total ▶ through its ready-made variants (size × style) and ▦ for the table
+      const model = items.map((it) => __widgets.stylesOf(it.type).length > 0);
+      const vlist = items.map(() => []), vat = items.map(() => 0), asTable = items.map(() => false);
       const chips = (it, k) => {
+        if (model[k]) return `<span class="w-gal-nav"><button type="button" data-nav="-1" title="previous look">◀</button><span class="w-gal-n">…</span>` +
+          `<button type="button" data-nav="1" title="next look">▶</button><button type="button" class="w-gal-tbl" data-nav="t" title="the full table">▦</button></span>`;
         const sizes = __widgets.sizesOf(it.type);
         return sizes.length ? `<span class="w-gal-sizes">` + [...sizes, "full"].map((sz) =>
           `<button type="button" class="w-gal-size${size[k] === sz ? " on" : ""}" data-size="${sz}" title="${sz === "full" ? "the full table" : "size " + sizeLabel[sz]}">${sizeLabel[sz]}</button>`).join("") + `</span>` : "";
@@ -16225,6 +16284,16 @@
       const paint = (k) => {
         const el = document.getElementById("w-gal-prev-" + k), it = items[k];
         if (!el || !data.has(k)) return;
+        if (model[k]) {
+          const c = el.closest(".w-gal-card"), list = vlist[k], v = list[vat[k]];
+          const full = asTable[k] || !v;
+          c.className = `w-gal-card ${full ? "w-gal-full" : "w-gal-v"}`;
+          if (v && !full) { const [gw, gh] = v.size.split("x").map(Number); c.style.setProperty("--gw", gw); c.style.setProperty("--gh", gh); }
+          c.querySelector(".w-gal-n").textContent = list.length ? `${vat[k] + 1} / ${list.length}` : "—";
+          c.querySelector(".w-gal-tbl").classList.toggle("on", full);
+          el.innerHTML = __widgets.preview(it.type, { data: data.get(k), ctx: _wCtx(it.type), opts: it.opts, ...(full ? { size: "full" } : { size: v.size, style: v.style }) });
+          return;
+        }
         el.innerHTML = __widgets.preview(it.type, { data: data.get(k), ctx: _wCtx(it.type), opts: it.opts, size: size[k] });
       };
       g.addEventListener("click", (e) => {
@@ -16232,6 +16301,13 @@
         const c = e.target.closest && e.target.closest(".w-gal-card");
         if (!c) return;
         const k = Number(c.dataset.k), it = items[k];
+        const nav = e.target.closest("[data-nav]");
+        if (nav) {
+          if (nav.dataset.nav === "t") asTable[k] = !asTable[k];
+          else if (vlist[k].length) { asTable[k] = false; vat[k] = (vat[k] + Number(nav.dataset.nav) + vlist[k].length) % vlist[k].length; }
+          paint(k);
+          return;
+        }
         const sz = e.target.closest(".w-gal-size");
         if (sz) {
           size[k] = sz.dataset.size;
@@ -16241,7 +16317,9 @@
           return;
         }
         if (!e.target.closest(".w-gal-add, .w-gal-face")) return;
-        __widgets.handle("page:" + it.type, "pin", JSON.stringify({ board: boardId, opts: it.opts, ...(sizeOf(it) !== "full" ? { size: size[k] } : {}) }));
+        const v = model[k] && !asTable[k] ? vlist[k][vat[k]] : null;
+        const look = model[k] ? (v ? { size: v.size, style: v.style } : { size: "full" }) : sizeOf(it) !== "full" ? { size: size[k] } : {};
+        __widgets.handle("page:" + it.type, "pin", JSON.stringify({ board: boardId, opts: it.opts, ...look }));
         _wToast(`Added “${_wGalleryTitle(it)}”`);
         c.classList.add("added");
         if (getPage() === "board" && window._wRerender) window._wRerender();
@@ -16259,6 +16337,12 @@
           running++;
           __widgets.loadData(it.type, FARM_ID, __store, __widgets.optsFor(it.type, { opts: it.opts || {} })).then((got) => {
             data.set(k, got.data);
+            if (model[k]) {
+              // start at the widget's natural look
+              vlist[k] = __widgets.variantsOf(it.type, { data: got.data, ctx: _wCtx(it.type), opts: it.opts });
+              const nat = __widgets.naturalOf(it.type);
+              vat[k] = Math.max(0, vlist[k].findIndex((v) => v.size === nat.size && v.style === nat.style));
+            }
             paint(k);
           }).catch((err) => {
             const el = document.getElementById("w-gal-prev-" + k);
@@ -16305,6 +16389,13 @@
       _wOpenBoard(__widgets.doc().boards[0].id);
     };
     let _boardSeq = 0;
+    // − / ＋ Columns on a board: how many small widgets fit side by side (2-12), kept per board
+    window._wSetCols = (d) => {
+      const doc = __widgets.doc(), want = new URLSearchParams(window.location.search).get("board") || doc.last;
+      const b = doc.boards.find((x) => x.id === want) || doc.boards[0];
+      __widgets.setBoardCols(b.id, __widgets.colsOf(b.id) + d);
+      renderBoard();
+    };
     /*
      * The board's rows are 8 px: each item spans as many as its height needs (plus the 16 px gap), so
      * a column of small widgets packs beside a large one. A glance's height comes from its width
@@ -16315,9 +16406,14 @@
       const want = "span " + Math.max(1, Math.ceil((el.getBoundingClientRect().height + 16) / 8));
       if (el.style.gridRowEnd !== want) el.style.gridRowEnd = want;
     }
-    function _wFitBoard(grid) {
+    function _wFitBoard(grid, cols) {
       if (!grid || !grid.children) return;
+      if (cols) grid.style.setProperty("--cols", cols);
+      const n = (getComputedStyle(grid).gridTemplateColumns || "").split(" ").filter(Boolean).length || cols || 6;
+      grid.style.setProperty("--cell", Math.max(60, (grid.getBoundingClientRect().width - (n - 1) * 16) / n) + "px");
       for (const el of grid.children) {
+        const gw = Number(el.style.getPropertyValue("--gw")) || 0;
+        el.style.gridColumn = gw > n ? `span ${n}` : "";
         _wFitOne(el);
         if (_wFitRO && !el._wFit) { el._wFit = true; _wFitRO.observe(el); }
       }
@@ -16336,7 +16432,9 @@
       const boardId = board.id;
       __widgets.visit(boardId);   // the 📌 menu lists this board first next time
       const head = '<div class="w-page-head"><h1>📌 ' + escHTML(board.name) + '</h1><div class="sub">Farm #' + escHTML(FARM_ID) +
-          ' · your widgets, each with its own ⚙ settings</div>' + _wBoardSwitcher(boardId, `<button class="dash-toggle-btn w-add-btn" data-board="${escHTML(boardId)}" onclick="_wGallery(this.dataset.board)">＋ Add widget</button>`) + '</div>';
+          ' · your widgets, each with its own ⚙ settings</div>' + _wBoardSwitcher(boardId, `<span class="w-cols-ctl" title="how many small widgets fit side by side on this board">Columns ` +
+          `<button type="button" onclick="_wSetCols(-1)" aria-label="fewer columns">−</button><b>${__widgets.colsOf(boardId)}</b><button type="button" onclick="_wSetCols(1)" aria-label="more columns">＋</button></span>` +
+          `<button class="dash-toggle-btn w-add-btn" data-board="${escHTML(boardId)}" onclick="_wGallery(this.dataset.board)">＋ Add widget</button>`) + '</div>';
       if (!FARM_ID) { app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem">Enter your Farm ID above.</div>'; return; }
       if (!board.items.length) {
         app.innerHTML = head + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;line-height:1.7">Nothing here yet. ' +
@@ -16368,11 +16466,11 @@
           grid = app.querySelector && app.querySelector(":scope > .w-board");
           if (grid) frames.forEach((f, k) => { if (grid.children[k]) grid.children[k]._wHtml = f.html; });
         } else if (app._wHead !== head) {
-          const h = app.querySelector(":scope > .header");
+          const h = app.querySelector(":scope > .w-page-head");   // the head (the board switcher, its Columns count)
           if (h) h.outerHTML = head;
         }
         app._wHead = head;
-        _wFitBoard(grid);
+        _wFitBoard(grid, __widgets.colsOf(board.id));
         if (focusAt) __wRefocus(app, focusAt);
       };
       paint();

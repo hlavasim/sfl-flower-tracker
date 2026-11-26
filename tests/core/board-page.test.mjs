@@ -73,7 +73,7 @@ test("a pinned widget renders in the grid with its own settings and board contro
   const { html, win } = await renderBoardWith(boards);
   assert.match(html, /class="w-board"/);
   assert.match(html, /data-frame="b:main:w1"/);
-  assert.match(html, /grid-column:span 8/);
+  assert.match(html, /grid-column:span 4/, "8/12 of the default 6 columns");
   assert.match(html, /data-action="remove"/);
   assert.strictEqual((html.match(/<tr data-row=/g) || []).length, 3);
   assert.doesNotMatch(html, />proč</);
@@ -181,7 +181,9 @@ test("📌 asks which board (the boards, or a new one); ＋ Add widget shows eve
   // the gallery: categories by page, the target list once per category, previews through the store
   assert.match(SRC, /for \(const cat of \["dolls", "crabs", "flowers", "foods"\]\) out\.push/);
   assert.match(SRC, /el\.innerHTML = __widgets\.preview\(it\.type, \{ data: data\.get\(k\), ctx: _wCtx\(it\.type\), opts: it\.opts, size: size\[k\] \}\);/);
-  assert.match(SRC, /__widgets\.handle\("page:" \+ it\.type, "pin", JSON\.stringify\(\{ board: boardId, opts: it\.opts, \.\.\.\(sizeOf\(it\) !== "full" \? \{ size: size\[k\] \} : \{\}\) \}\)\);/);
+  assert.match(SRC, /__widgets\.handle\("page:" \+ it\.type, "pin", JSON\.stringify\(\{ board: boardId, opts: it\.opts, \.\.\.look \}\)\);/);
+  // a model widget: ◀ n / total ▶ through its variants, ▦ for the table
+  assert.match(SRC, /vlist\[k\] = __widgets\.variantsOf\(it\.type, \{ data: got\.data, ctx: _wCtx\(it\.type\), opts: it\.opts \}\);/);
   // each card at its own size, S / M / L / Table switchable, a glance widget first in its section
   assert.match(SRC, /const card = \(it, label\) => `<div class="w-gal-card w-gal-\$\{size\[it\.k\]\}"/);
   assert.match(SRC, /data-size="\$\{sz\}"/);

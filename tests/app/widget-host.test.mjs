@@ -73,9 +73,12 @@ test("board controls: resize by the corner, move by dropping onto another widget
   h.handle("page:t", "pin", "");
   h.handle("page:t", "pin", "");
   const [a, b, c] = h.doc().boards[0].items;
+  // the board has 6 columns by default: a drag to all 6 (or past them) is the whole width, kept as 12/12
   h.handle(`b:main:${a.i}`, "resize", "12|10");
   assert.deepStrictEqual([h.doc().boards[0].items[0].w, h.doc().boards[0].items[0].h], [12, 10]);
-  assert.match(h.renderItem("main", h.doc().boards[0].items[0], { data: DATA }), /grid-column:span 12[^"]*height:400px/);
+  assert.match(h.renderItem("main", h.doc().boards[0].items[0], { data: DATA }), /grid-column:span 6[^"]*height:400px/);
+  h.handle(`b:main:${a.i}`, "resize", "3|10");
+  assert.strictEqual(h.doc().boards[0].items[0].w, 6, "half of 6 columns = 6/12");
   h.handle(`b:main:${c.i}`, "move-to", `b:main:${a.i}`);
   assert.deepStrictEqual(h.doc().boards[0].items.map((x) => x.i), [c.i, a.i, b.i]);
   h.handle(`b:main:${c.i}`, "move-to", `b:main:${b.i}`);
