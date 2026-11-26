@@ -2731,6 +2731,10 @@
     .w-gal-panel { background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 16px; font-family: var(--c-font); font-size: 13px; padding: 18px 20px; }
     .w-gal-head { color: var(--c-text); font-size: 17px; }
     .w-gal-cat { font-family: var(--c-font); font-size: 12px; font-weight: 700; letter-spacing: 0.8px; color: var(--c-muted); }
+    .w-gal-search { width: 100%; margin: 6px 0 10px; background: var(--c-card); color: var(--c-text); border: 1px solid var(--c-line); border-radius: 10px;
+      padding: 9px 12px; font: inherit; font-size: 14px; outline: none; }
+    .w-gal-search:focus { border-color: var(--c-accent); }
+    .w-gal-card[hidden], .w-gal-sec[hidden] { display: none; }
     .w-gal-card { background: var(--c-card); border: 1px solid var(--c-line); border-radius: 12px; padding: 12px; }
     .w-gal-card:hover { border-color: var(--c-accent); }
     .w-gal-title { color: var(--c-text); font-size: 14px; }
@@ -15748,15 +15752,26 @@
       g.className = "w-gallery";
       let html = `<div class="w-gal-panel"><div class="w-gal-head"><span>＋ Add a widget to “${escHTML(board.name)}”</span>` +
         `<button type="button" class="w-btn" onclick="_wGalleryClose()" title="close">✕</button></div>` +
+        `<input type="search" class="w-gal-search" placeholder="Search widgets — name or page…" autofocus>` +
         `<div class="w-dim" style="margin-bottom:8px">Previews use your farm. Add the same widget as often as you like — each copy keeps its own ⚙ settings.</div>`;
-      for (const [page, label] of _wGalleryCats) {
-        const here = items.map((it, k) => ({ ...it, k })).filter((it) => it.page === page);
+      // every page that has widgets gets a section; one this list does not know yet goes under OTHER
+      const known = new Set(_wGalleryCats.map(([p]) => p));
+      for (const [page, label] of [..._wGalleryCats, ["", "OTHER"]]) {
+        const here = items.map((it, k) => ({ ...it, k })).filter((it) => (page ? it.page === page : !known.has(it.page)));
         if (!here.length) continue;
-        html += `<div class="w-gal-cat">${escHTML(label)}</div><div class="w-gal-grid">` + here.map((it) =>
-          `<button type="button" class="w-gal-card" data-k="${it.k}"><div class="w-gal-title">${escHTML(_wGalleryTitle(it))}</div>` +
-          `<div class="w-gal-prev" id="w-gal-prev-${it.k}">Loading…</div><div class="w-gal-add">＋ Add</div></button>`).join("") + `</div>`;
+        html += `<section class="w-gal-sec"><div class="w-gal-cat">${escHTML(label)}</div><div class="w-gal-grid">` + here.map((it) =>
+          `<button type="button" class="w-gal-card" data-k="${it.k}" data-search="${escHTML((_wGalleryTitle(it) + " " + label + " " + it.type).toLowerCase())}">` +
+          `<div class="w-gal-title">${escHTML(_wGalleryTitle(it))}</div>` +
+          `<div class="w-gal-prev" id="w-gal-prev-${it.k}">Loading…</div><div class="w-gal-add">＋ Add</div></button>`).join("") + `</div></section>`;
       }
       g.innerHTML = html + "</div>";
+      // search: hide the cards that do not match and the sections left empty
+      const search = g.querySelector(".w-gal-search");
+      search.addEventListener("input", () => {
+        const q = search.value.trim().toLowerCase();
+        g.querySelectorAll(".w-gal-card").forEach((c) => { c.hidden = !!q && !c.dataset.search.includes(q); });
+        g.querySelectorAll(".w-gal-sec").forEach((sec) => { sec.hidden = !sec.querySelector(".w-gal-card:not([hidden])"); });
+      });
       g.addEventListener("click", (e) => {
         if (e.target === g) { window._wGalleryClose(); return; }
         const card = e.target.closest && e.target.closest(".w-gal-card");
@@ -15768,17 +15783,34 @@
         if (getPage() === "board" && window._wRerender) window._wRerender();
       });
       document.body.appendChild(g);
-      // the previews, each as its data arrives (the store shares and caches the fetches)
+      // The previews: a card loads its data only once it scrolls into view, and at most two loads
+      // run at a time — 130 widgets at once would fire dozens of heavy compute sections together
+      // (and exhaust the database's connections). The store shares and caches what they fetch.
       if (items.some((it) => it.type === "dash-actions") && Object.keys(dashP2P).length === 0) dashFetchP2P().catch(() => {});
-      items.forEach((it, k) => {
-        __widgets.loadData(it.type, FARM_ID, __store, __widgets.optsFor(it.type, { opts: it.opts || {} })).then(({ data }) => {
-          const el = document.getElementById("w-gal-prev-" + k);
-          if (el) el.innerHTML = __widgets.preview(it.type, { data, ctx: _wCtx(it.type), opts: it.opts });
-        }).catch((err) => {
-          const el = document.getElementById("w-gal-prev-" + k);
-          if (el) el.textContent = "No preview: " + ((err && err.message) || err);
-        });
-      });
+      const queue = [];
+      let running = 0;
+      const pump = () => {
+        while (running < 2 && queue.length) {
+          const k = queue.shift(), it = items[k];
+          running++;
+          __widgets.loadData(it.type, FARM_ID, __store, __widgets.optsFor(it.type, { opts: it.opts || {} })).then(({ data }) => {
+            const el = document.getElementById("w-gal-prev-" + k);
+            if (el) el.innerHTML = __widgets.preview(it.type, { data, ctx: _wCtx(it.type), opts: it.opts });
+          }).catch((err) => {
+            const el = document.getElementById("w-gal-prev-" + k);
+            if (el) el.textContent = "No preview: " + ((err && err.message) || err);
+          }).finally(() => { running--; pump(); });
+        }
+      };
+      const seen = new Set();
+      const want = (k) => { if (!seen.has(k)) { seen.add(k); queue.push(k); pump(); } };
+      if (typeof IntersectionObserver === "undefined") items.forEach((_, k) => want(k));
+      else {
+        const io = new IntersectionObserver((list) => {
+          for (const e of list) if (e.isIntersecting) { want(Number(e.target.dataset.k)); io.unobserve(e.target); }
+        }, { root: g, rootMargin: "300px" });
+        g.querySelectorAll(".w-gal-card").forEach((c) => io.observe(c));
+      }
     };
 
     // One button per board, a new one, and deleting one of your own.

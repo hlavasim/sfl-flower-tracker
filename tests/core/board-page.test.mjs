@@ -183,3 +183,15 @@ test("📌 asks which board (the boards, or a new one); ＋ Add widget shows eve
   assert.match(SRC, /el\.innerHTML = __widgets\.preview\(it\.type, \{ data, ctx: _wCtx\(it\.type\), opts: it\.opts \}\);/);
   assert.match(SRC, /__widgets\.handle\("page:" \+ it\.type, "pin", JSON\.stringify\(\{ board: boardId, opts: it\.opts \}\)\);/);
 });
+
+test("the gallery loads a preview only when its card scrolls into view, two at a time", () => {
+  assert.match(SRC, /while \(running < 2 && queue\.length\) \{/);
+  assert.match(SRC, /new IntersectionObserver\(\(list\) => \{/);
+  assert.match(SRC, /g\.querySelectorAll\("\.w-gal-card"\)\.forEach\(\(c\) => io\.observe\(c\)\);/);
+});
+
+test("the gallery has a search over title, page and type; pages it does not list go under OTHER", () => {
+  assert.match(SRC, /<input type="search" class="w-gal-search"/);
+  assert.match(SRC, /c\.hidden = !!q && !c\.dataset\.search\.includes\(q\);/);
+  assert.match(SRC, /\[\.\.\._wGalleryCats, \["", "OTHER"\]\]/);
+});
