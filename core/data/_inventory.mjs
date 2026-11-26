@@ -282,10 +282,6 @@ export const TABLE_INVENTORY = [
     "lines": 17
   },
   {
-    "name": "KEY_CHEST",
-    "lines": 5
-  },
-  {
     "name": "LAVA_PIT_REQUIREMENTS",
     "lines": 28
   },
@@ -456,10 +452,6 @@ export const TABLE_INVENTORY = [
   {
     "name": "TREASURY_CAT_COLORS",
     "lines": 9
-  },
-  {
-    "name": "TREE_COLOR",
-    "lines": 2
   },
   {
     "name": "WEARABLE_IDS",

@@ -403,9 +403,12 @@ export const roadmapProfit = {
     }
     const shown = rows.filter((r) => (!opts.group || r.group === opts.group) && (!opts.paying || r.net > 0.001));
     const paying = rows.filter((r) => r.net > 0.001).length, losing = rows.filter((r) => r.net < -0.001).length;
+    const cm = (pf.groups || []).find((g) => g.id === "cropMachine");
+    const notes = [cm && cm.note ? esc(cm.note) : "", (pf.groups || []).some((g) => g.id === "mine" && g.rows.length)
+      ? "Mining runs in chain order, Wood to Crimstone (Oil last): each net is what you make stopping and selling at that resource." : ""].filter(Boolean);
     return { rows: shown, sellTotal, empty: rows.length ? "Nothing matches this filter." : "Nothing to farm on this farm yet.",
       footer: `<div class="v-dim">${paying} pay · ${losing} lose FLOWER${sellTotal > 0 ? ` · for sale now in total ~${fmtFlower(sellTotal)} ${fl(ctx)} (each resource once)` : ""}. ` +
-        `gives = a day's production at its sale value; costs = tools, seeds, feed and sickness; net at your harvest efficiency${pf.coinsFree ? ` · coins count as free (you hold ${Number(pf.coins || 0).toLocaleString("en-US")})` : ""}.</div>` };
+        (notes.length ? notes.join(" ") + " " : "") + `gives = a day's production at its sale value; costs = tools, seeds, feed and sickness; net at your harvest efficiency${pf.coinsFree ? ` · coins count as free (you hold ${Number(pf.coins || 0).toLocaleString("en-US")})` : ""}.</div>` };
   },
 };
 roadmapProfit.look = "number-list-t";

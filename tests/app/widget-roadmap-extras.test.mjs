@@ -128,7 +128,7 @@ test("expired: the page's rows (roadmapExpiredRows over the board's power payloa
   // the page: the rows are one function shared by the old panel and the widget; the widget replaces the panel
   assert.match(SRC, /function roadmapExpiredRows\(ps, owned\)/);
   assert.match(SRC, /h \+= _w\("roadmap-expired"\);/);
-  assert.doesNotMatch(SRC, /h \+= roadmapPeriodicHtml\(\);/);
+  assert.ok(!SRC.includes("function roadmapPeriodicHtml("), "the old panel is gone");
 });
 
 test("skills: every skill valued server-side (the buy path's breakdown), take / reset verdicts, Show filters, the glance's best pick", () => {
@@ -168,7 +168,7 @@ test("what to farm: the server's profitability rows by group, net = gives − co
   const best = out.rows.filter((r) => !r.unvalued).sort((a, b) => b.net - a.net)[0];
   assert.match(m.head.cap, new RegExp(`^best: ${best.label}`));
   assert.ok(looksFor(m).length >= 3);
-  assert.match(SRC, /h \+= roadmapProfitabilityHtml\(settings, true\) \+ _w\("roadmap-profit"\);/);
+  assert.match(SRC, /h \+= roadmapProfitabilityHtml\(settings\) \+ _w\("roadmap-profit"\);/);
 });
 
 test("sell now: the inventory at p2p less the fee; animals count both products; Obsidian only what this week still allows", () => {

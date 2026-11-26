@@ -27,26 +27,22 @@ test("JSON and DIFF: clean heads, no retro panels or pixel type", () => {
   for (const b of [json, diff]) assert.doesNotMatch(b, /pixel-panel|pixel-font|Press Start/);
 });
 
-test("ROADMAP: WHAT TO FARM / MINE NOW, Expired — renew, the scenario bar/table and the skills by tree are clean, with item icons", () => {
+test("ROADMAP: the what-to-farm controls, the mining detail and the scenario bar/table are clean; the tables are widgets now", () => {
   const legacy = /pixel-font|Press Start|#161009|#2a1410|#20190f|var\(--border-brown\)|var\(--sunpetal\)|var\(--lily\)|font-size:0\.\d/;
-  const prof = body("        function roadmapProfitabilityHtml(settings, headOnly = false) {", "\n    function ");
+  const prof = body("        function roadmapProfitabilityHtml(settings) {", "\n    function ");
   const detail = body("    function roadmapMiningDetail(c, r, f) {", "\n        function ");
   const bar = body("    function roadmapScenarioBarHtml() {", "\n    function ");
   const scen = body("    function roadmapScenarioTableHtml(plan) {", "\n    function ");
-  const per = body("    function roadmapPeriodicHtml() {", "\n    function ");
-  const sk = body("    function roadmapSkillsViewHtml(settings) {", "\n    function ");
-  for (const b of [prof, detail, bar, scen, per, sk]) assert.doesNotMatch(b, legacy);
-  for (const b of [prof, scen, per]) assert.doesNotMatch(b, /pixel-panel/);
+  for (const b of [prof, detail, bar, scen]) assert.doesNotMatch(b, legacy);
+  for (const b of [prof, scen]) assert.doesNotMatch(b, /pixel-panel/);
   assert.match(prof, /<div class="w-card v-rmf-panel">/);
-  assert.match(prof, /<table class="w-table v-rmf-t">/);
-  assert.match(prof, /<img src="\$\{getItemIcon\(r\.icon\)\}"/);
   assert.match(prof, /onchange="_roadmapToggleCat\('\$\{key\}',this\.checked\)">\$\{_dashIcon\(icon\)\}/);
-  assert.match(per, /<img src="\$\{getItemIcon\(r\.icon\)\}"/);
-  assert.match(sk, /<div class="v-rmf-sk\$\{c\.has \? " v-rmf-own" : ""\}">\$\{_dashIcon\(/);
-  // the restyled summary and ladder stay as they were
-  assert.match(sk, /<div class="pixel-panel v-sk-sum">/);
+  assert.doesNotMatch(prof, /<table/, "the table is the roadmap-profit widget");
+  // the panels that became widgets are gone from the page
+  for (const f of ["roadmapGiftsHtml", "roadmapDeliveriesHtml", "roadmapAnimalFeedHtml", "roadmapAnimalLifecycleHtml", "roadmapPeriodicHtml", "roadmapSkillsViewHtml"])
+    assert.ok(!SRC.includes(`function ${f}(`), f);
   // all text in English
-  for (const b of [prof, bar, per]) assert.doesNotMatch(b, /`(Obnovit|Postavit|Koupit) |nelze rozjet|po poplatku|PRO EXPANZE/);
+  for (const b of [prof, bar]) assert.doesNotMatch(b, /`(Obnovit|Postavit|Koupit) |nelze rozjet|po poplatku|PRO EXPANZE/);
 });
 
 test("DIFF investment panels (tracker, repay plan, balance sheet, ledger, insights): clean style, English text", () => {

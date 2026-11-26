@@ -13789,244 +13789,10 @@
       oil:       { chain: { trees: 20, iron: 9 },  mat: { Leather: 10 }, coins: 100 },
     };
 
-    // "What should I farm/mine now" — net FLOWER/day per activity at full activity, green/red.
-    // Rough key values (chest EV is backend data) — labeled estimates the user can mentally adjust.
-    // Average chest payout per key (game source chests.ts). Coins dominate but are free when you hold a
-    // big pile, so the real value is mostly gems + sunstone + the odd item. Valued live.
-    const KEY_CHEST = {
-      "Treasure Key": { gems: 2, coins: 3000, sunstone: 0, misc: 0.3 },
-      "Rare Key": { gems: 6, coins: 6000, sunstone: 0.05, misc: 0.6 },
-      "Luxury Key": { gems: 16, coins: 9000, sunstone: 0.1, misc: 1.2 },
-    };
-    // Deliveries + bounties: reward value (SFL/coins/tickets/marks/keys) minus the items you give.
-    function roadmapDeliveriesHtml(settings) {
-      const { farm, p2pPrices, exchangeRates } = powerState;
-      const now = Date.now();
-      const cFree = roadmapCoinsFree(settings);
-      const estItem = (name) => roadmapItemCost(name);
-      let chapter = {}; try { chapter = dashGetCurrentChapter(now) || {}; } catch {}
-      const ticketName = chapter.ticket || "";
-      const TV = (typeof settings.ticketValueSfl === "number" ? settings.ticketValueSfl : 0);
-      const coinSfl = (c) => (c > 0 && exchangeRates.coinsPerSFL > 0) ? c / exchangeRates.coinsPerSFL : 0;
 
-      const dels = [];
-      for (const o of ((farm.delivery && farm.delivery.orders) || [])) {
-        if (o.completedAt) continue;
-        let cost = 0; for (const [it, q] of Object.entries(o.items || {})) cost += (it === "coins") ? (cFree ? 0 : coinSfl(q)) : estItem(it) * q;
-        const r = o.reward || {};
-        let rv = (r.sfl || 0) + coinSfl(r.coins || 0);
-        let tickets = 0; try { tickets = dashCalculateDeliveryTickets(o.from, farm, now) || 0; } catch {}
-        rv += tickets * TV;
-        for (const [it, q] of Object.entries(r.items || {})) { if (it === ticketName) continue; rv += (KEY_CHEST[it] ? roadmapKeyValue(it) : (p2pPrices[it] || estItem(it) || 0)) * q; }
-        dels.push({ from: o.from, needs: Object.entries(o.items || {}).map(([i, q]) => i === "coins" ? (_dashIcon("coins") + q.toLocaleString() + " coins") : (q + "× " + _dashIcon(i) + escHTML(i))).join(", "), cost, tickets, rv, net: rv - cost });
-      }
-      dels.sort((a, b) => b.net - a.net);
 
-      const completed = new Set(((farm.bounties && farm.bounties.completed) || []).map(x => typeof x === "string" ? x : (x && x.id)));
-      const bos = [];
-      for (const req of ((farm.bounties && farm.bounties.requests) || [])) {
-        if (completed.has(req.id)) continue;
-        let rv = coinSfl(req.coins || 0), tickets = 0, marks = 0;
-        for (const [it, q] of Object.entries(req.items || {})) {
-          if (it === ticketName) { tickets += q; rv += q * TV; }
-          else if (it === "Mark") { marks += q; rv += marksToSfl(q); }
-          else rv += (KEY_CHEST[it] ? roadmapKeyValue(it) : (p2pPrices[it] || estItem(it) || 0)) * q;
-        }
-        const cost = estItem(req.name) || 0;
-        bos.push({ name: req.name, rv, cost, tickets, marks, net: rv - cost });
-      }
-      bos.sort((a, b) => b.net - a.net);
-      if (!dels.length && !bos.length) return "";
 
-      const fmtNet = (n) => { const pos = n > 0.001, neg = n < -0.001; return `<span class="${pos ? "v-rms-pos" : (neg ? "v-rms-neg" : "v-dim")}">${(pos ? "+" : (neg ? "−" : "")) + roadmapFmtFlower(Math.abs(n))}</span>`; };
-      const fmtCost = (c) => c > 0.001 ? `<span class="v-rms-neg">−${roadmapFmtFlower(c)}</span>` : `<span class="v-dim">0</span>`;
-      const fmtTk = (t) => t ? `<span class="v-rms-tk">${ticketName ? _dashIcon(ticketName) : ""}${t}</span>` : "";
-      const worth = dels.filter(d => d.net > 0.001).length + bos.filter(b => b.net > 0.001).length;
-      let h = `<div class="v-rms">`;
-      h += `<div class="v-kpis"><div class="v-kpi"><b>${dels.length}</b><span>deliveries pending</span></div><div class="v-kpi"><b>${bos.length}</b><span>bounties open</span></div><div class="v-kpi"><b class="v-done">${worth}</b><span>worth doing (net &gt; 0)</span></div><div class="v-kpi"><b>${TV} ${sflIcon()}</b><span>value per ticket</span></div></div>`;
-      h += `<p class="v-rms-intro">Net = reward (SFL + coins + marks/keys + tickets×value) − the items you hand over. <span class="v-rms-pos">Green = worth doing</span>, <span class="v-rms-neg">red = the items are worth more than the reward</span>. <b class="v-rms-warn">Tickets can’t be sold and have no FLOWER price.</b> Checked the game source (Megastore): this chapter’s ${escHTML(ticketName || "tickets")} buy only <b>temporary Hourglasses</b> (Gourmet 100, Blossom 150, Timber/Orchard 200, Ore 400), <b>cosmetics</b> (Dino Egg Trophy 250, Crystal Altar 3k, background 6k, Bubble Aura 10k) and the Spa ticket-boost set — <b>no permanent FLOWER-yield boost</b>. So a ticket is worth ~0 FLOWER for ROI and they count as <b>${TV} ${sflIcon()}</b> here. Delivering for tickets is for season collection / temporary boosts, not FLOWER. Raise “Ticket value” if you value the season items. Tickets earned shown per row.</p>`;
-      if (dels.length) {
-        h += `<div class="v-rms-h">🚚 Deliveries <span class="v-dim">${dels.length} pending</span></div>`;
-        h += `<div class="v-rms-scroll"><table class="w-table"><thead><tr><th>from</th><th>give</th><th class="r">reward</th><th class="r">cost</th><th class="r">tickets</th><th class="r">net</th></tr></thead><tbody>`;
-        for (const d of dels.slice(0, 14)) h += `<tr><td class="nw"><div class="v-name"><img src="${getNpcIcon(d.from)}" onerror="this.style.display='none'" alt=""><b>${escHTML(d.from)}</b></div></td><td class="v-rms-give">${d.needs}</td><td class="r nw v-rms-gain">${roadmapFmtFlower(d.rv)}</td><td class="r nw">${fmtCost(d.cost)}</td><td class="r nw">${fmtTk(d.tickets)}</td><td class="r nw">${fmtNet(d.net)}</td></tr>`;
-        h += `</tbody></table></div>`;
-      }
-      if (bos.length) {
-        h += `<div class="v-rms-h">📋 Bounty board <span class="v-dim">${bos.length} open</span></div>`;
-        h += `<div class="v-rms-scroll"><table class="w-table"><thead><tr><th>give</th><th class="r">reward</th><th class="r">cost</th><th class="r">tickets</th><th class="r">marks</th><th class="r">net</th></tr></thead><tbody>`;
-        for (const b of bos.slice(0, 14)) h += `<tr><td class="nw"><div class="v-name">${_dashIcon(b.name)}<b>${escHTML(b.name)}</b></div></td><td class="r nw v-rms-gain">${roadmapFmtFlower(b.rv)}</td><td class="r nw">${fmtCost(b.cost)}</td><td class="r nw">${fmtTk(b.tickets)}</td><td class="r nw v-dim">${b.marks || ""}</td><td class="r nw">${fmtNet(b.net)}</td></tr>`;
-        h += `</tbody></table></div>`;
-      }
-      h += `<div class="v-rms-foot">Ticket value is an estimate (${TV} ${sflIcon()}) — tickets buy season boosts whose worth varies. Bounty item cost uses the same pricing as the dashboard; animals/some items may read 0 if not priceable.</div>`;
-      h += `</div>`;
-      return h;
-    }
 
-    // Flowers -> NPC gifts -> keys: steady FLOWER/day from gifting each NPC daily, and feasibility.
-    function roadmapGiftsHtml(settings) {
-      const { farm, capacity } = powerState;
-      const skills = (farm.bumpkin && farm.bumpkin.skills) || {};
-      const hasBB = !!skills["Blossom Bonding"];
-      const nftFloor = (name) => { const nd = powerState.nftData || {}; for (const tk of ["collectibles", "wearables"]) for (const it of (nd[tk] || [])) if (it.name === name) return parseFloat(it.floor) || 0; return 0; };
-      const flowers = Object.keys(DEFAULT_FLOWER_POINTS);
-      const growH = {}; for (const f of flowers) { let hrs = 0; try { hrs = getFlowerChainHours(f); } catch {} growH[f] = hrs > 0 ? hrs : 24; }
-      const rows = [];
-      for (const [npc, data] of Object.entries(BUMPKIN_GIFTS_DATA)) {
-        if (!data.repeats) continue;
-        let best = null;
-        for (const f of flowers) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); const eff = pts / days; if (!best || eff > best.eff) best = { f, pts, days, eff }; }
-        const bonusMap = (typeof BUMPKIN_FLOWER_BONUSES !== "undefined" && BUMPKIN_FLOWER_BONUSES[npc]) || {};
-        let liked = null; for (const f of Object.keys(bonusMap)) { const pts = getFlowerGiftPoints(npc, f, hasBB); const days = Math.max(1, growH[f] / 24); const eff = pts / days; if (!liked || eff > liked.eff) liked = { f, pts, days, eff }; }
-        const repu = data.repeats;
-        const repVal = roadmapGiftRewardValue(repu, nftFloor);
-        const perGift = repu.fp > 0 ? repVal * best.pts / repu.fp : 0;
-        const daysToReward = best.eff > 0 ? repu.fp / best.eff : Infinity;
-        const perDay = (repVal > 0 && isFinite(daysToReward) && daysToReward > 0) ? repVal / daysToReward : 0;
-        rows.push({ npc, flower: best.f, pts: best.pts, growDays: best.days, liked, repVal, repLabel: roadmapGiftRewardLabel(repu), perGift, daysToReward, perDay });
-      }
-      if (!rows.length) return "";
-      rows.sort((a, b) => b.perDay - a.perDay);
-      const beds = getCapacityCount("flowers", capacity) || 0;
-      const keyKpi = (k) => `<div class="v-kpi"><b>~${roadmapFmtFlower(roadmapKeyValue(k))} ${sflIcon()}</b><span>${_dashIcon(k)}${k}</span></div>`;
-      let h = `<div class="v-rms">`;
-      h += `<div class="v-kpis"><div class="v-kpi"><b>${beds}</b><span>flower bed${beds === 1 ? "" : "s"} → gift the top ${beds}</span></div>${keyKpi("Treasure Key")}${keyKpi("Rare Key")}${keyKpi("Luxury Key")}</div>`;
-      h += `<p class="v-rms-intro">Gift each NPC once a day. <b>Best flower</b> = most friendship points per grow-day (1 bed grows 1 flower per its full chain time — Pansy 1d, Primula 14d). <b>Likes</b> = the flower this NPC bonuses (more points, usually slower). <b>/gift</b> = value one gift adds toward the key (key value × points ÷ threshold). Key value = the live average chest payout (mostly gems + sunstone for you, coins are free): Treasure ~${roadmapFmtFlower(roadmapKeyValue("Treasure Key"))} / Rare ~${roadmapFmtFlower(roadmapKeyValue("Rare Key"))} / Luxury ~${roadmapFmtFlower(roadmapKeyValue("Luxury Key"))} ${sflIcon()}. You have <b>${beds} bed${beds === 1 ? "" : "s"}</b> → gift the top ${beds} (✓), one bed each.</p>`;
-      h += `<div class="v-rms-scroll"><table class="w-table"><thead><tr><th>NPC</th><th>best flower</th><th>likes</th><th>repeat reward</th><th class="r">value</th><th class="r">/gift</th><th class="r">days/key</th><th class="r">FL/day</th><th class="c">bed</th></tr></thead><tbody>`;
-      rows.forEach((r, i) => {
-        const within = i < beds; const pos = r.perDay > 0.02;
-        h += `<tr${within ? "" : ' class="v-rms-off"'}>
-          <td class="nw"><div class="v-name"><img src="${getNpcIcon(r.npc)}" onerror="this.style.display='none'" alt=""><b>${escHTML(r.npc)}</b></div></td>
-          <td class="nw">${_dashIcon(r.flower)}${escHTML(r.flower)} <span class="v-dim">${r.pts}pt·${r.growDays.toFixed(0)}d</span></td>
-          <td class="nw v-dim">${r.liked ? _dashIcon(r.liked.f) + escHTML(r.liked.f) + " " + r.liked.pts + "pt·" + r.liked.days.toFixed(0) + "d" : "—"}</td>
-          <td class="v-dim">${escHTML(r.repLabel)}</td>
-          <td class="r nw">${roadmapFmtFlower(r.repVal)}</td>
-          <td class="r nw v-dim">+${roadmapFmtFlower(r.perGift)}</td>
-          <td class="r nw v-dim">${isFinite(r.daysToReward) ? Math.ceil(r.daysToReward) : "—"}</td>
-          <td class="r nw ${pos ? "v-rms-pos" : "v-dim"}">${r.perDay > 0.0001 ? "+" + roadmapFmtFlower(r.perDay) : "0"}</td>
-          <td class="c">${within ? '<span class="v-done">✓</span>' : '<span class="v-dim">—</span>'}</td>
-        </tr>`;
-      });
-      h += `</tbody></table></div>`;
-      h += `<div class="v-rms-foot">days/key uses 1 bed per NPC at its grow rate. The NPC’s liked flower gives more points but usually grows slower, so the best points-per-grow-day flower (often a 1-day Pansy/Cosmos) reaches the key faster. Keys are random chest opens — value shown is the average.</div>`;
-      h += `</div>`;
-      return h;
-    }
-
-    // XP a specific food grants at a given animal level (FEED_XP_TABLE) — for the food comparison.
-    function feedFoodXpAtLevel(food, lvl) {
-      for (const row of FEED_XP_TABLE) if (lvl >= row.min && lvl <= row.max) return row.xp[food] || 0;
-      const last = FEED_XP_TABLE[FEED_XP_TABLE.length - 1];
-      return (last && last.xp[food]) || 0;
-    }
-
-    // Animal feeding advisor: per pen, is it net-positive to feed-and-sell? Food only changes the FEED
-    // cost (produce is level-based), so we show every food's net/day and star the cheapest; if even the
-    // best is red, the pen loses FLOWER and shouldn't be run.
-    function roadmapAnimalFeedHtml(settings) {
-      const { capacity, p2pPrices, stockMods } = powerState;
-      const skills = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
-      const cats = [["chickens", "Chicken"], ["cows", "Cow"], ["sheep", "Sheep"]];
-      const blocks = [];
-      for (const [cat, animalType] of cats) {
-        const animals = (capacity.animalDetails && capacity.animalDetails[cat]) || [];
-        if (!animals.length) continue;
-        const oeff = roadmapOwnedEffects(cat);
-        const produce = (getAnimalCatSfl(cat, capacity, oeff, p2pPrices).totalSfl) || 0;
-        const sick = (calcSicknessCost(cat, capacity, p2pPrices, powerState.boostItems, skills).costPerDay) || 0;
-        const fc = calcAnimalFeedCost(cat, capacity, p2pPrices, oeff, stockMods);
-        const cyclesPerDay = fc.cyclesPerDay || 0, effFeedQty = fc.effectiveFeedQty || (FEED_QTY[animalType] || 1);
-        const lvls = ANIMAL_LEVELS[animalType];
-        const golden = !!fc.isGolden;
-        const rows = [];
-        for (const food of Object.keys(FEED_RECIPES)) {
-          let costCycle = 0;
-          for (const a of animals) {
-            const lvl = a.level;
-            const xpPerCycle = lvl >= 15 ? (lvls[15] - lvls[14]) : ((lvls[lvl + 1] || lvls[15]) - lvls[lvl]);
-            const foodXp = feedFoodXpAtLevel(food, lvl) || 1;
-            const noOfFeed = Math.max(1, Math.ceil(xpPerCycle / foodXp));
-            costCycle += noOfFeed * effFeedQty * getFeedCostPerUnit(food, p2pPrices, stockMods);
-          }
-          const feedDay = golden ? 0 : costCycle * cyclesPerDay;
-          rows.push({ food, feedDay, net: produce - sick - feedDay });
-        }
-        rows.sort((a, b) => b.net - a.net);
-        blocks.push({ animalType, count: animals.length, produce, sick, golden, rows, best: rows[0] });
-      }
-      if (!blocks.length) return "";
-      let h = `<div class="v-rms">`;
-      h += `<p class="v-rms-intro">Produce sold at p2p minus feed minus sickness, per day. Food changes only the FEED cost (produce is level-based), so the cheapest food for your animals’ levels wins. <span class="v-rms-pos">Green = feeding is net-positive</span>; <span class="v-rms-neg">red = you lose FLOWER feeding them, don’t bother</span>. ★ = best food.</p>`;
-      for (const b of blocks) {
-        const verdict = b.best.net > 0.001
-          ? `<span class="v-pill v-ok">feed ${escHTML(b.best.food)} → +${roadmapFmtFlower(b.best.net)}/d</span>`
-          : `<span class="v-pill v-bad">loss-making — best is ${roadmapFmtFlower(b.best.net)}/d, don’t feed</span>`;
-        h += `<div class="v-rms-h">${_dashIcon(b.animalType)}${b.animalType}${b.animalType === "Sheep" ? "" : "s"} <span class="v-dim">×${b.count}${b.golden ? " (golden — free feed)" : ""}</span> ${verdict}</div>`;
-        h += `<div class="v-rms-sub">produce <span class="v-rms-gain">+${roadmapFmtFlower(b.produce)}/d</span> · sickness <span class="v-rms-neg">−${roadmapFmtFlower(b.sick)}/d</span></div>`;
-        h += `<table class="w-table w-compact"><thead><tr><th>food</th><th class="r">feed/d</th><th class="r">net/d</th></tr></thead><tbody>`;
-        for (const r of b.rows) {
-          const pos = r.net > 0.001, neg = r.net < -0.001;
-          const ncls = pos ? "v-rms-pos" : (neg ? "v-rms-neg" : "v-dim");
-          const isBest = r.food === b.best.food;
-          h += `<tr${isBest ? ' class="v-rms-best"' : ""}>
-            <td class="nw">${_dashIcon(r.food)}${escHTML(r.food)}${isBest ? ' <span class="v-done">★</span>' : ""}</td>
-            <td class="r nw">${r.feedDay > 0.001 ? '<span class="v-rms-neg">−' + roadmapFmtFlower(r.feedDay) + "</span>" : '<span class="v-dim">0</span>'}</td>
-            <td class="r nw ${ncls}">${(pos ? "+" : (neg ? "−" : "")) + roadmapFmtFlower(Math.abs(r.net))}</td>
-          </tr>`;
-        }
-        h += `</tbody></table>`;
-      }
-      h += `<div class="v-rms-foot">Feed cost scales with animal level (higher levels eat more per cycle). Sickness = expected Barn Delight cure cost/day. Produce includes both drops (egg+feather / milk+leather / wool+merino) at your boosts.</div>`;
-      h += `</div>`;
-      return h;
-    }
-
-    // Net FLOWER/day for ONE animal at each level — reuses the exact per-animal helpers on a synthetic
-    // single-animal capacity. Shows where feeding stops paying ("feed up to level X then it goes red").
-    function roadmapAnimalLifecycleHtml(settings) {
-      const { capacity, p2pPrices, stockMods } = powerState;
-      const skills = (powerState.farm.bumpkin && powerState.farm.bumpkin.skills) || {};
-      const cats = [["chickens", "Chicken"], ["cows", "Cow"], ["sheep", "Sheep"]];
-      const blocks = [];
-      for (const [cat, animalType] of cats) {
-        const have = (capacity.animalDetails && capacity.animalDetails[cat]) || [];
-        if (!have.length) continue;
-        const oeff = roadmapOwnedEffects(cat);
-        const per = [];
-        for (let L = 1; L <= 15; L++) {
-          const fakeCap = Object.assign({}, capacity, { animalDetails: Object.assign({}, capacity.animalDetails, { [cat]: [{ level: L, experience: 0 }] }) });
-          let produce = 0, feed = 0, sick = 0;
-          try { produce = (getAnimalCatSfl(cat, fakeCap, oeff, p2pPrices).totalSfl) || 0; } catch {}
-          try { feed = (calcAnimalFeedCost(cat, fakeCap, p2pPrices, oeff, stockMods).costPerDay) || 0; } catch {}
-          try { sick = (calcSicknessCost(cat, fakeCap, p2pPrices, powerState.boostItems, skills).costPerDay) || 0; } catch {}
-          per.push({ L, net: produce - feed - sick });
-        }
-        let peak = per[0], lastPos = 0;
-        for (const p of per) { if (p.net > peak.net) peak = p; if (p.net > 0.0001) lastPos = p.L; }
-        const avgL = Math.round(have.reduce((s, a) => s + (a.level || 0), 0) / have.length);
-        blocks.push({ animalType, per, peak, lastPos, avgL });
-      }
-      if (!blocks.length) return "";
-      let h = `<div class="v-rms">`;
-      h += `<p class="v-rms-intro">Net FLOWER/day for a SINGLE animal at each level (produce − feed − sickness, your boosts). Feed scales with level faster than produce, so net usually peaks then turns negative — ★ marks the peak. If your animals are past the break-even level and red, feeding them loses FLOWER; consider running them only to that level (or replacing leveled animals with fresh ones if you want the produce cycle to stay profitable).</p>`;
-      for (const b of blocks) {
-        const verdict = b.lastPos > 0
-          ? `<span class="v-pill v-ok">profitable to L${b.lastPos}</span> <span class="v-dim">peak L${b.peak.L} (+${roadmapFmtFlower(b.peak.net)}/d)</span>`
-          : `<span class="v-pill v-bad">never net-positive at any level</span>`;
-        h += `<div class="v-rms-h">${_dashIcon(b.animalType)}${b.animalType} <span class="v-dim">your avg level ${b.avgL}</span> ${verdict}</div>`;
-        h += `<div class="v-rms-levels">`;
-        for (const p of b.per) {
-          const pos = p.net > 0.0001, neg = p.net < -0.0001;
-          const cls = pos ? "v-rms-pos" : (neg ? "v-rms-neg" : "v-dim");
-          const star = p.L === b.peak.L;
-          const cur = p.L === b.avgL;
-          h += `<div title="Level ${p.L}: ${p.net >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(p.net))}/day" class="v-rms-lvl${star ? " v-rms-peak" : ""}${cur ? " v-rms-cur" : ""}"><small>${star ? "★ " : ""}L${p.L}</small><b class="${cls}">${p.net >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(p.net))}</b></div>`;
-        }
-        h += `</div>`;
-      }
-      h += `<div class="v-rms-foot">Orange border = your current average level. Per single animal; multiply by your pen size. Note SFL doesn’t let you un-level an animal — this shows where the produce cycle stops being worth the feed.</div>`;
-      h += `</div>`;
-      return h;
-    }
 
     function roadmapEffFmtH(x) {
       if (!isFinite(x)) return "never";
@@ -14086,35 +13852,16 @@
       h += `</div>`;
       return h;
     }
-        function roadmapProfitabilityHtml(settings, headOnly = false) {
+        function roadmapProfitabilityHtml(settings) {
       const cf = roadmapCoinsFree(settings);
       const _excl = (c) => (settings.excludeCats || []).indexOf(c) >= 0;
       const coins = Math.round(parseFloat(powerState.farm && powerState.farm.coins) || 0);
       const er = cf ? Object.assign({}, powerState.exchangeRates, { coinsPerSFL: Infinity }) : powerState.exchangeRates;
       const cap = powerState.capacity;
-      // Rows — MIGRATED: computed by section=roadmap's profitability block (same loops,
-      // in core). This function keeps only presentation: titles/notes, badges, expand
-      // detail html and the group rendering below.
+      // the served profitability (section=roadmap): its mining chain drives the verdict below
       const _pf = (_roadmapServer && _roadmapServer.profitability) || { groups: [], miningChain: { byCat: {} } };
-      const _pfMap = {}; for (const g of _pf.groups) _pfMap[g.id] = g;
-      const groups = [];
-      const mk = (id, title) => { const src = _pfMap[id] || { rows: [] }; const g = { title, rows: src.rows.map(r => Object.assign({}, r)), keepOrder: src.keepOrder }; groups.push(g); return g; };
-      const gMine = mk("mine", "⛏️ MINING & TREES"); gMine.keepOrder = true; gMine.note = "Chain order Wood to Crimstone (Oil last). <b>net/d = what you net if you STOP and sell at that resource</b> - alternative stopping points, not additive: pick the best one (the intermediate steps lose alone but are paid back by it). <b>solo</b> = if you instead BUY its direct inputs at market (not self-mining the chain).";
-      const gAni = mk("animals", "🐮 ANIMALS");
-      const gCrop = mk("crops", "🌾 CROPS — net if all plots grow this one");
-      const gGh = mk("greenhouse", "🏠 GREENHOUSE");
-      const gFruit = mk("fruits", "🍎 FRUITS");
-      const gCm = mk("cropMachine", "⚙️ CROP MACHINE — your crops sharing its queue");
-      if (_pfMap.cropMachine && _pfMap.cropMachine.note) gCm.note = escHTML(_pfMap.cropMachine.note);
-      const gOther = mk("other", "✨ OTHER");
-      for (const row of gMine.rows) {
-        const VB = { sell: ["SELL", "v-ok"], step: ["STEP", "v-idle"], skip: ["SKIP", "v-bad"], input: ["INPUT", "v-run"] }[row.verdict] || ["", "v-idle"];
-        row.badge = `${VB[0] ? `<span class="v-pill ${VB[1]}">${VB[0]}${row.verdict === "step" && row.feeds ? ("→" + escHTML(MINE_RES[row.feeds] || row.feeds)) : ""}</span>` : ""}${row.isPeak ? '<span class="v-rmf-peak">★ best stop</span>' : ""}`;
-        try { row.expandHtml = roadmapMiningDetail(row.cat, row.chain, row.eff); } catch {}
-      }
 
       let h = `<div class="w-card v-rmf-panel">`;
-      if (!headOnly) h += `<h3>WHAT TO FARM / MINE NOW</h3>`;   // the widget under it has the title
       h += `<div class="v-rmf-intro">Per-day economics: <span class="v-sk-pos">gives</span> minus <span class="v-rm-neg">costs</span> = net. Scaled by your real harvest efficiency (mining/animals/fruits/greenhouse \u2014 see the efficiency line above); crops &amp; crop machine capped to your ${settings.restocksPerDay}\u00d7 daily restocks. Out-of-season crops faded. ${cf ? `Coins are FREE (you hold ${coins.toLocaleString()} &gt; 10k) so coin-priced tools/seeds cost 0 \u2014 only real resource costs count (animal feed &amp; sickness, salt wood, crop-machine oil).` : `Coin costs at Betty rate (you hold ${coins.toLocaleString()}).`} Obsidian sells ~1/week.</div>`;
       {
         const _single = [["Mining & Trees", [["trees","Wood"],["stone","Stone"],["iron","Iron"],["gold","Gold"],["crimstone","Crimstone"],["oil","Oil"]]],
@@ -14166,67 +13913,8 @@
       else _verdict = "<b class=\"v-rm-neg\">No ore beats just selling your Wood</b> — every chain eats more Wood than the ore sells for. Just sell the Wood.";
       h += `<div class="v-rmf-ctl"><span>cost basis:</span><button class="dash-toggle-btn${_mc.mode === "market" ? " on" : ""}" onclick="_roadmapSetMineMode('market')" title="Opportunity cost: a tool's inputs cost their marketplace sell value, no matter how cheap they were to mine (Quarry-correct).">Market price</button><button class="dash-toggle-btn${_mc.mode === "production" ? " on" : ""}" onclick="_roadmapSetMineMode('production')" title="Self-mine: an ore costs the Wood baked into its whole chain (climb to the best stop).">Self-mine chain</button>${_mc.mode === "market" ? ` <label title="Marketplace fee on sales. Scales income; doesn’t change which ores are worth mining.">fee <input type="number" value="${settings.marketFee != null ? settings.marketFee : 10}" min="0" max="50" step="0.5" onchange="_roadmapSetMarketFee(this.value)">%</label>` : ``}</div>`;
       if (_verdict) h += `<div class="v-rmf-verdict">${_verdict}</div>`;
-      // the page shows these controls over the roadmap-profit widget, which has the table
-      if (headOnly) return h + `</div>`;
-      // SELL column: what the row's resource in your inventory fetches right now (p2p less the fee).
-      const _inv = (powerState.farm && powerState.farm.inventory) || {}, _p2p = powerState.p2pPrices || {};
-      const _keep = 1 - (settings.marketFee != null ? settings.marketFee : 10) / 100;
-      const _SELL_ITEMS = { Egg: ["Egg", "Feather"], Milk: ["Milk", "Leather"], Wool: ["Wool", "Merino Wool"] };
-      /*
-       * Obsidian is a limited trade: one sale a week (Tradeable.tsx MAX_LIMITED_SALES, less this
-       * week's sales and open listings; weeks start Monday 00:00 UTC from 2024-06-24, getWeekKey).
-       */
-      const _trades = (powerState.farm && powerState.farm.trades) || {};
-      const _weekKey = (() => { const s = Date.UTC(2024, 5, 24), d = new Date(); d.setUTCHours(0, 0, 0, 0); return new Date(s + Math.floor((d - s) / 864e5 / 7) * 7 * 864e5).toISOString().slice(0, 10); })();
-      const _limitedLeft = (it) => Math.max(0, 1 - (((_trades.weeklySales || {})[_weekKey] || {})[it] || 0)
-        - Object.values(_trades.listings || {}).filter((l) => l && l.items && l.items[it]).length);
-      const _LIMITED = { Obsidian: true };
-      const _sold = new Set();
-      let _sellTotal = 0;
-      const _sellCell = (r) => {
-        const parts = (_SELL_ITEMS[r.icon] || [r.icon]).map((it) => {
-          const have = parseFloat(_inv[it]) || 0;
-          return { it, have, q: _LIMITED[it] ? Math.min(have, _limitedLeft(it)) : have, p: _p2p[it] || 0 };
-        }).filter((x) => x.have >= 1 && x.p > 0);
-        if (!parts.length) return "";
-        const v = parts.reduce((t, x) => t + x.q * x.p * _keep, 0);
-        // The same crop shows in CROPS and CROP MACHINE: the total counts it once.
-        for (const x of parts) if (!_sold.has(x.it)) { _sold.add(x.it); _sellTotal += x.q * x.p * _keep; }
-        const qty = parts.map((x) => Math.floor(x.q).toLocaleString("cs-CZ")).join(" + ");
-        const tip = parts.map((x) => `${x.it}: ${Math.floor(x.q)} × ${x.p} = ${roadmapFmtFlower(x.q * x.p * _keep)} after the fee`
-          + (_LIMITED[x.it] ? ` (you have ${Math.floor(x.have)}, 1 a week can be sold${x.q < 1 ? " — already sold this week" : ""})` : "")).join(" · ");
-        const lim = parts.some((x) => _LIMITED[x.it]) ? `<small class="v-rmf-sub">${parts.some((x) => _LIMITED[x.it] && x.q < 1) ? "sold this week" : "limit 1/week"}</small>` : "";
-        // Two products (Wool + Merino Wool) do not fit the column on one line: their counts go above.
-        const q = parts.length > 1 ? `<small class="v-rmf-sub">${qty}</small>` : `<span class="v-dim">${qty}</span> `;
-        return `<span title="${escHTML(tip)}">${q}~<b class="v-rmf-sell">${roadmapFmtFlower(v)}</b>${sflIcon()}${lim}</span>`;
-      };
-      for (const g of groups) {
-        if (!g.rows.length) continue;
-        if (!g.keepOrder) g.rows.sort((a, b) => ((a.fade ? 1 : 0) - (b.fade ? 1 : 0)) || (b.net - a.net));
-        h += `<div class="v-rmf-gt">${g.title}</div>`;
-        if (g.note) h += `<div class="v-rmf-gnote">${g.note}</div>`;
-        h += `<div class="v-rmf-scroll"><table class="w-table v-rmf-t"><colgroup><col style="width:auto"><col style="width:84px"><col style="width:84px"><col style="width:84px"><col style="width:120px"></colgroup><thead><tr><th></th><th class="r">gives/d</th><th class="r">cost/d</th><th class="r">net/d</th><th class="r" title="What you hold in the inventory ~ the FLOWER you would get selling it now (p2p price after the fee).">sell</th></tr></thead><tbody>`;
-        for (const r of g.rows) {
-          const pos = r.net > 0.001, neg = r.net < -0.001;
-          const ncls = pos ? "v-sk-pos" : (neg ? "v-rm-neg" : "v-dim");
-          const nt = (pos ? "+" : (neg ? "−" : "")) + roadmapFmtFlower(Math.abs(r.net));
-          const cls = (r.expandHtml ? "w-row-click" : "") + (r.fade ? " v-rmf-fade" : "");
-          const clk = r.expandHtml ? ` onclick="var d=this.nextElementSibling;d.style.display=d.style.display==='none'?'table-row':'none';"` : "";
-          h += `<tr${cls.trim() ? ` class="${cls.trim()}"` : ""}${clk}>
-            <td><div class="v-name">${r.expandHtml ? '<span class="v-rmf-caret">▸</span>' : ''}<img src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt=""><div><b>${escHTML(r.label)}</b>${r.badge ? r.badge : ""}${r.sub ? ` <span class="v-dim">${r.sub}</span>` : ""}${r.detail ? `<small>${escHTML(r.detail)}</small>` : ""}</div></div></td>
-            <td class="r v-rmf-num v-rmf-gain">${roadmapFmtFlower(r.gross)}</td>
-            <td class="r v-rmf-num v-rmf-cost">${r.cost > 0.001 ? "−" + roadmapFmtFlower(r.cost) : "0"}</td>
-            <td class="r v-rmf-num"><b class="${ncls}">${nt}</b>${(r.soloNet !== undefined && Math.abs(r.soloNet - r.net) > 0.005) ? `<small class="v-rmf-sub">solo ${r.soloNet >= 0 ? "+" : "−"}${roadmapFmtFlower(Math.abs(r.soloNet))}</small>` : ""}</td>
-            <td class="r v-rmf-num">${_sellCell(r)}</td>
-          </tr>`;
-          if (r.expandHtml) h += `<tr class="v-rmf-detail" style="display:none"><td colspan="5">${r.expandHtml}</td></tr>`;
-        }
-        h += `</tbody></table></div>`;
-      }
-      if (_sellTotal > 0) h += `<div class="v-rmf-total">For sale now in total: <b>~${roadmapFmtFlower(_sellTotal)}</b>${sflIcon()} <span class="v-dim">(each resource once, Obsidian only what can be sold this week)</span></div>`;
-      h += `<div class="v-rmf-foot">sell = what you hold now ~ FLOWER if you sold it all today (p2p price less the ${Math.round((1 - _keep) * 100)} % fee; a big sale would move the price). gives = gross sale value of a day's production; cost = feed+sickness (animals) / oil+seeds (crop machine) / wood (salt) / tools+seeds (mining,crops — free when coins are free). At full activity (not scaled by your harvest frequency).</div>`;
-      h += `</div>`;
-      return h;
+      // the table itself is the roadmap-profit widget under these controls
+      return h + `</div>`;
     }
 
 
@@ -14640,119 +14328,6 @@
       rows.sort((a, b) => (b.gain || -Infinity) - (a.gain || -Infinity));
       return rows;
     }
-    function roadmapPeriodicHtml() {
-      const rows = roadmapExpiredRows(powerState, roadmapOwnedEffects);
-      if (!rows.length) return '';
-
-      let h = `<div class="w-card v-rmf-panel">`;
-      h += `<h3>\u23F3 Expired \u2014 renew</h3>`;
-      h += `<div class="v-rmf-intro">Only things that run out by themselves and stop working \u2014 shrines (7 days) and protection against weather events. The other periodic tasks were dropped from here: nobody used them.</div>`;
-      h += `<div class="v-rmf-scroll"><table class="w-table v-rmf-t v-rmf-auto"><thead><tr><th>to do</th><th class="r" title="FLOWER a day it earns back, where it has a value">FLOWER/day</th></tr></thead><tbody>`;
-      rows.forEach((r, i) => {
-        const val = r.gain != null && isFinite(r.gain)
-          ? `<b class="${r.gain > 0 ? 'v-sk-pos' : 'v-rm-neg'}">${r.gain > 0 ? '+' : ''}${roadmapFmtFlower(r.gain)}/d</b>`
-          : (r.unit ? `<b class="v-rmf-sell">${r.unit}</b>` : `<span class="v-dim">\u2014</span>`);
-        const mark = r.warn ? '<span class="v-rmf-warn">\u26A0</span> ' : (r.now ? '<span class="v-dim">\u25B8</span> ' : '');
-        h += `<tr><td><div class="v-name">${r.icon ? `<img src="${getItemIcon(r.icon)}" onerror="this.style.display='none'" alt="">` : ''}<div><b>${mark}${r.what}</b>${r.approx ? ' <span class="v-pill v-idle">approximate</span>' : ''}${r.unpriced ? ' <span class="v-pill v-run">no price</span>' : ''}<small>${r.note}</small></div></div></td>`;
-        h += `<td class="r v-rmf-num">${val}</td></tr>`;
-      });
-      h += `</tbody></table></div>`;
-      h += `</div>`;
-      return h;
-    }
-    function roadmapSkillsViewHtml(settings) {
-      const { byName, catBoostsW } = roadmapBuildClones();
-      const skills = Object.values(byName).filter(c => c.type === "Skill");
-      const EPS = 0.01;
-      const cps = (powerState.exchangeRates && powerState.exchangeRates.coinsPerSFL) || 0;
-      const effLbl = settings.effMode === "real" ? "your Last-7-days activity" : "100% theoretical";
-      const TREE_COLOR = { "Crops": "#7fe0a0", "Trees": "#b98a5a", "Mining": "#9aa6b2", "Cooking": "#e8a060", "Animals": "#e6c25a", "Fishing": "#6ab0e0", "Greenhouse": "#8fd98f", "Fruit Patch": "#e89a5a", "Bees & Flowers": "#e08fd0", "Machinery": "#c0a0e0", "Compost": "#9a8a6a", "Aging": "#d8c89a" };
-      const farm = powerState.farm, bumpkin = farm.bumpkin || {};
-      let info = {}; try { info = calcSkillPointCost(bumpkin, powerState.p2pPrices, farm) || {}; } catch (e) {}
-      const ascLvl = (farm.island && farm.island.ascensionLevel) || 0;
-      const level = info.level || (typeof getTotalBumpkinLevel === "function" ? getTotalBumpkinLevel(bumpkin.experience || 0, ascLvl) : 1);
-      const sflPerPt = info.sflPerPoint || 0;
-      // Game: available = getTotalBumpkinLevel − usedPoints (1 point per level, NOT level−1), rank-ups
-      // included — served once by section=power so this view and the buy path cannot disagree.
-      const autoFree = Math.max(0, (powerState.skillCostInfo && powerState.skillCostInfo.freePoints) || 0);
-      const freePts = (settings.skillPts != null && isFinite(settings.skillPts)) ? Math.max(0, settings.skillPts) : autoFree;
-      const rows = skills.map(c => {
-        const bd = roadmapSkillBreakdown(c, catBoostsW, settings);
-        const ex = roadmapSkillExtraFlow(c, settings);
-        const net = bd.net + ex.flow.reduce((s, f) => s + f.delta, 0);
-        return { c, net, allParts: bd.parts.concat(ex.flow), cond: bd.cond || [], tags: ex.tags || [] };
-      });
-      const resetList = rows.filter(r => r.c.has && r.net < -EPS).sort((a, b) => a.net - b.net);
-      const picks = rows.filter(r => !r.c.has && r.net > EPS).sort((a, b) => b.net - a.net).slice(0, 8);
-      const valTag = (r) => {
-        if (r.net > EPS) return `<b class="v-sk-pos">+${roadmapFmtFlower(r.net)}/d</b>`;
-        if (r.net < -EPS) return `<b class="v-rm-neg">−${roadmapFmtFlower(-r.net)}/d</b>${r.c.has ? `<small class="v-rmf-sub v-rmf-warn">reset?</small>` : ""}`;
-        const sitMin = (r.cond || []).filter(c => c.mining && c.sit > EPS);
-        if (sitMin.length) return `<span class="v-rmf-warn">+${roadmapFmtFlower(sitMin.reduce((a, c) => a + c.sit, 0))}/d <small>if mined</small></span>`;
-        const coinT = r.tags.find(t => t.group === "coins");
-        if (coinT) return `<span class="v-rmf-coin">coins${coinT.ref ? " ≈+" + roadmapFmtFlower(coinT.ref) + "/1k" : ""}</span>`;
-        if (r.tags.length) { const g = r.tags[0].group; return `<span class="v-dim">${g === "xp" ? "XP" : g === "speed" ? "faster" : g === "limit" ? "limit+" : "minor"}</span>`; }
-        return `<span class="v-dim">—</span>`;
-      };
-      const chip = (p) => { const cls = p.kind === "cost" ? "v-rm-cond" : p.kind === "coin" ? "v-rmf-coin" : (p.delta >= 0 ? "v-sk-pos" : "v-rm-neg"); const sign = (p.kind === "cost" || p.kind === "coin") ? "+" : (p.delta >= 0 ? "+" : "−"); return `<span class="${cls}">${escHTML(p.label)} ${sign}${roadmapFmtFlower(Math.abs(p.delta))}/d</span>`; };
-      const skillRow = (r) => {
-        const c = r.c, pts = c.skillPoints || 1, sfl = sflPerPt * pts;
-        const ps = r.allParts.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-        let condNote = "";
-        if (r.cond && r.cond.length) {
-          const mn = r.cond.filter(c => c.mining), an = r.cond.filter(c => !c.mining), bits = [];
-          if (mn.length) bits.push(mn.map(c => `${escHTML(c.label)} isn't worth mining solo on your farm — worth +${roadmapFmtFlower(c.sit)}/d once you mine ${escHTML(c.label)} profitably (a +1 ${escHTML(c.label)} keystone flips it)`).join("; "));
-          if (an.length) bits.push(escHTML(an.map(c => c.label).join(", ")) + " still loss-making");
-          condNote = `<div class="v-rmf-cond">⚠ ${bits.join(" · ")}</div>`;
-        }
-        return `<div class="v-rmf-sk${c.has ? " v-rmf-own" : ""}">${_dashIcon(String(c.name).replace(/\s*→\s*Level\s*\d+$/, ""))}
-          <div class="v-rmf-skm${c.has ? "" : " v-rmf-unowned"}">
-            <div><b>${escHTML(c.name)}</b> <small class="v-dim v-rmf-num">${pts}pt${sfl > 0 ? " · " + roadmapFmtFlower(sfl) + " SFL" : ""}</small>${c.has ? `<span class="v-pill v-ok">✓ owned</span>` : (r.net > EPS ? `<span class="v-pill v-run">take</span>` : "")}</div>
-            <div class="v-rmf-boost">${escHTML((c.boost || "").split("\n").join(" · "))}</div>
-            ${ps.length ? `<div class="v-rmf-chips">${ps.map(chip).join("")}</div>` : ""}
-            ${condNote}
-          </div>
-          <div class="v-rmf-val">${valTag(r)}</div>
-        </div>`;
-      };
-      let h = "";
-      // One chip per skill in the TOP TO TAKE / CONSIDER RESETTING lists: icon, name, FLOWER/day, points · tree.
-      const sumChip = (r, cls, val) => `<span class="v-sk-chip" title="${r.c.skillPoints || 1}pt, ${escHTML(r.c.skillTree || "")}">${_dashIcon(String(r.c.name).replace(/\s*→\s*Level\s*\d+$/, ""))}${escHTML(r.c.name)} <b class="${cls}">${val}</b> <small>${r.c.skillPoints || 1}pt · ${escHTML(r.c.skillTree || "")}</small></span>`;
-      h += `<div class="pixel-panel v-sk-sum">`;
-      h += `<div class="v-kpis"><div class="v-kpi"><b>${level}</b><span>level</span></div><div class="v-kpi"><b class="v-sk-pos">≈${freePts}</b><span>free skill point${freePts === 1 ? "" : "s"} · set: <input type="number" min="0" placeholder="auto" value="${settings.skillPts != null ? settings.skillPts : ''}" onchange="_roadmapSetSkillPts(this.value)" title="Override the free-points estimate (it can read high if you own Salt / Fish-Smoking skills this tool doesn't track)."></span></div>${sflPerPt > 0 ? `<div class="v-kpi"><b>${roadmapFmtFlower(sflPerPt)}</b><span>SFL of XP per point</span></div>` : ""}</div>`;
-      if (resetList.length) {
-        const loss = resetList.reduce((s, r) => s - r.net, 0), freed = resetList.reduce((s, r) => s + (r.c.skillPoints || 1), 0);
-        h += `<div class="v-sk-sub">◆ Consider resetting (${resetList.length}) <small class="v-dim">— owned skills hurting your FLOWER/day</small></div>`;
-        h += `<div class="v-sk-chips">${resetList.map(r => sumChip(r, "v-rm-neg", `${roadmapFmtFlower(r.net)}/d`)).join("")}</div>`;
-        h += `<div class="v-rm-note v-dim">Removing all of them stops a <b class="v-sk-pos">${roadmapFmtFlower(loss)}/d</b> loss and frees ${freed} points. (In-game resets cost SFL &amp; have a cooldown.)</div>`;
-      }
-      if (picks.length) {
-        h += `<div class="v-sk-sub">⭐ Top to take <small class="v-dim">— best FLOWER/day you don't own</small></div>`;
-        h += `<div class="v-sk-chips">${picks.map(r => sumChip(r, "v-sk-pos", `+${roadmapFmtFlower(r.net)}/d`)).join("")}</div>`;
-      }
-      h += `</div>`;
-      h += `<div id="skill-all-upgrades" style="margin-bottom:10px">${roadmapAllUpgradesHtml(settings)}</div>`;
-      h += `<div class="v-rmf-intro">All skills by tree &amp; tier (like the in-game tree). FLOWER/day each adds on <b>your</b> farm at <b>${effLbl}</b> efficiency; yield, cheaper costs &amp; coins are priced (${cps > 0 ? `coins at ${Math.round(cps)}/FLOWER` : "coins unpriced: no live rate"}), XP / speed / limits show their kind. Pts column = skill points (and the SFL of XP to earn them). <a href="https://sfl.world/tools/skills/" target="_blank">skill tree ↗</a></div>`;
-      const byTree = {};
-      for (const r of rows) { const tr = r.c.skillTree || "Other"; (byTree[tr] = byTree[tr] || []).push(r); }
-      const treeNames = Object.keys(byTree).sort((a, b) => {
-        const va = byTree[a].reduce((m, r) => (!r.c.has && r.net > m) ? r.net : m, 0);
-        const vb = byTree[b].reduce((m, r) => (!r.c.has && r.net > m) ? r.net : m, 0);
-        return vb - va || a.localeCompare(b);
-      });
-      for (const tr of treeNames) {
-        const trows = byTree[tr], ownedN = trows.filter(r => r.c.has).length, col = TREE_COLOR[tr] || "#8a7a5a";
-        h += `<div class="v-rmf-tree"><div class="v-rmf-treeh" style="--tc:${col}">${escHTML(tr)} <small>· ${ownedN}/${trows.length} owned</small></div>`;
-        const tiers = Array.from(new Set(trows.map(r => Number(r.c.skillTier) || 1))).sort((a, b) => a - b);
-        for (const ti of tiers) {
-          const tier = trows.filter(r => (Number(r.c.skillTier) || 1) === ti).sort((a, b) => b.net - a.net);
-          h += `<div class="v-rmf-tier">TIER ${ti}</div>`;
-          h += `<div class="v-rmf-list">${tier.map(skillRow).join("")}</div>`;
-        }
-        h += `</div>`;
-      }
-      return h;
-    }
 
 
 
@@ -14973,8 +14548,7 @@
       h += _w("roadmap-income");
 
       // ── What to farm / mine now (per-category profitability) ──
-      const _rmCollapse = (title, inner) => inner ? `<details class="v-rm-sec"><summary>${title}</summary><div>${inner}</div></details>` : "";
-      h += roadmapProfitabilityHtml(settings, true) + _w("roadmap-profit");
+      h += roadmapProfitabilityHtml(settings) + _w("roadmap-profit");
       // ── Buy path: Table or Skills (toggle) ──
       h += `<div class="v-rm-buy">`;
       h += _w("roadmap-expired");
