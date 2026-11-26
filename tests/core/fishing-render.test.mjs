@@ -113,6 +113,7 @@ function renderPage(farmOverride, sharedStore) {
        setPieces: (m, n) => window._fishSetPieces(m, n),
        plan: (k, on) => window._fishPlanToggle(k, on),
        getPage: typeof getPage === "function" ? getPage : null,
+       icon: typeof _wIcon === "function" ? _wIcon : null,
      };`
   );
 
@@ -137,12 +138,12 @@ test("the FISHING page renders without an argument and without throwing", () => 
 test("every section is present, including the ones that replaced the wrong model", () => {
   const { html } = renderPage();
   for (const marker of [
-    "WHAT FISHING HAS ACTUALLY COST YOU",
-    "WHAT EACH FISH COST YOU",
-    "GUARANTEED CATCH",
-    "FISH MARKET BAIT",
-    "MARINE MARVEL PLANNER",
-    "TREASURE",
+    "What fishing has actually cost you",
+    "What each fish cost you",
+    "Guaranteed catch",
+    "Fish Market bait",
+    "Marine Marvel planner",
+    "Treasure",
   ]) assert.ok(html.includes(marker), `section present: ${marker}`);
   // The v5.37 model is gone, not merely hidden.
   assert.ok(!html.includes("a guaranteed TIER"), "the tier-average chum model is removed");
@@ -168,9 +169,9 @@ test("bait is priced from its recipe, not from a market value it does not have",
    */
   const idx = html.indexOf("Fish Stick");
   assert.ok(idx > 0, "Fish Stick appears");
-  const block = html.slice(idx, idx + 900);
-  assert.ok(/6×<\/b> Red Snapper|<b>6×<\/b> Red Snapper/.test(block.replace(/&times;/g, "×")),
-    "the autumn recipe is expanded into the row");
+  // the parts line, as text (each ingredient carries its icon now)
+  const block = html.slice(idx, idx + 4000).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.ok(/6× Red Snapper/.test(block), "the autumn recipe is expanded into the row");
   // Ingredients are costed from the community dump, naming the bait and the sample behind it.
   assert.ok(/casts on (Earthworm|Grub|Red Wiggler|Fishing Lure)/.test(block),
     "each ingredient is costed at a community rate, and says on which bait");
@@ -189,7 +190,8 @@ test("the Radiant Ray decision comes out on the side the odds and the bait actua
   assert.ok(start > 0, "Radiant Ray is listed");
   // A card runs ~2.8k with the shopping list expanded; the next Marvel bounds it exactly.
   const block = html.slice(start, html.indexOf("Phantom Barracuda"));
-  assert.ok(block.length > 1000 && block.length < 6000, `card is bounded (${block.length} chars)`);
+  // (every fish, bait and chum carries its icon, so the card's markup is longer than it was)
+  assert.ok(block.length > 1000 && block.length < 25000, `card is bounded (${block.length} chars)`);
   const hh = block.indexOf("Hammerhead shark");
   const tr = block.indexOf("Trout");
   assert.ok(hh > 0 && tr > 0, "both sources are shown, not just the winner");
@@ -356,7 +358,7 @@ test("a pot ingredient whose chum is itself a crafted bait is priced, not zeroed
    * And it must reach the price. In the FISH MARKET BAIT panel Crab Stick is one line: with the
    * Fish Stick inside the Oyster counted it is several FLOWER, without it a few hundredths.
    */
-  const panel = plain.slice(plain.indexOf("FISH MARKET BAIT"), plain.indexOf("MARINE MARVEL"));
+  const panel = plain.slice(plain.indexOf("Fish Market bait"), plain.indexOf("Marine Marvel"));
   const m = panel.match(/Crab Stick (\d+)h per batch ~?([\d.]+)/);
   assert.ok(m, `Crab Stick is priced in the bait panel: ${panel.slice(0, 200)}`);
   assert.ok(parseFloat(m[2]) > 1,
@@ -378,7 +380,7 @@ test("piece counts and ticked routes survive a reload", () => {
 
   const reloaded = renderPage(WINTER_FARM, store);   // fresh page, same browser storage
   assert.ok(/5 to go/.test(reloaded.html), "the piece count came back after the reload");
-  const order = reloaded.html.slice(reloaded.html.indexOf("YOUR ORDER"));
+  const order = reloaded.html.slice(reloaded.html.indexOf("Your order"));
   assert.ok(/Radiant Ray/.test(order) && /via Trout/.test(order),
     "and so did the ticked route, still in the order");
   assert.ok(/checked/.test(reloaded.html), "its checkbox is drawn ticked");
@@ -399,13 +401,13 @@ test("the order sums shared ingredients once and recurses through sub-recipes", 
   const page = renderPage(WINTER_FARM, store);
   page.api.plan("Twilight Anglerfish|Parrotfish|bait:Crab Stick", true);
   const plain = page.app.innerHTML.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  const order = plain.slice(plain.indexOf("YOUR ORDER"));
+  const order = plain.slice(plain.indexOf("Your order"));
   for (const line of ["Fish Stick 86", "Red Snapper 516", "Oyster 43"])
     assert.ok(new RegExp(line).test(order), `the rollup reaches ${line}: ${order.slice(0, 400)}`);
   // Craft time counts the sub-recipe too: 86x2h + 43x4h.
-  assert.ok(/CRAFTING 344 h/.test(order), `craft hours include the nested bait: ${order.slice(0, 300)}`);
+  assert.ok(/344 h crafting/.test(order), `craft hours include the nested bait: ${order.slice(0, 300)}`);
   // And the planner's route line quotes the same cast total as the order.
-  const m = order.match(/TOTAL CASTS ([\d,]+)/);
+  const m = order.match(/([\d,]+) total casts/);
   assert.ok(m, "the order reports total casts");
   assert.ok(new RegExp(m[1].replace(/,/g, ",") + " casts").test(plain),
     `the planner route line quotes the same total (${m[1]})`);
@@ -414,7 +416,7 @@ test("the order sums shared ingredients once and recurses through sub-recipes", 
 test("every bait is priced in all four seasons, with the stock it already covers", () => {
   const { html } = renderPage(WINTER_FARM);
   const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  const panel = plain.slice(plain.indexOf("FISH MARKET BAIT"), plain.indexOf("MARINE MARVEL"));
+  const panel = plain.slice(plain.indexOf("Fish Market bait"), plain.indexOf("Marine Marvel"));
   /*
    * A recipe changes with the season and its cost with it, so "what does this bait cost" has four
    * answers and only one of them is today's. Waiting for a cheaper season is a real decision and
@@ -432,7 +434,7 @@ test("every bait is priced in all four seasons, with the stock it already covers
 test("a season priced off unknown ingredients is a floor, and cannot win", () => {
   const { html } = renderPage(WINTER_FARM);
   const plain = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-  const panel = plain.slice(plain.indexOf("FISH MARKET BAIT"), plain.indexOf("MARINE MARVEL"));
+  const panel = plain.slice(plain.indexOf("Fish Market bait"), plain.indexOf("Marine Marvel"));
   /*
    * Summer's Crab Stick is baited with Moonfur and Chewed Bone, neither of which the value engine
    * prices. Treating a missing price as zero made summer read 0.11 against winter's 5.51 and would
@@ -448,7 +450,7 @@ test("a season priced off unknown ingredients is a floor, and cannot win", () =>
   // the sole complete one for Crab Stick, so summer's ≥0.11 must not be the winner.
   const html2 = html.slice(html.indexOf("Crab Stick"));
   const summerTile = html2.slice(html2.indexOf(">summer<"), html2.indexOf(">summer<") + 400);
-  assert.ok(!/var\(--green\)[^<]*>≥/.test(summerTile),
+  assert.ok(!/v-good[^<]*>≥/.test(summerTile),
     "the unpriced summer figure is not crowned cheapest");
 });
 
@@ -485,11 +487,11 @@ const AGING_FARM = {
 
 // The whole section is one panel, and the divider splits its single table in two.
 const agingPanel = (html) => {
-  const from = html.indexOf("SAFE TO AGE");
-  const to = html.indexOf("MARINE MARVEL PLANNER");
+  const from = html.indexOf("Safe to age");
+  const to = html.indexOf("Marine Marvel planner");
   assert.ok(from > 0 && to > from, "the aging panel is present, before the planner");
   const panel = html.slice(from, to);
-  const cut = panel.indexOf("A RECIPE WANTS THESE");
+  const cut = panel.indexOf("A recipe wants these");
   assert.ok(cut > 0, "the panel carries the divider row");
   assert.ok(!panel.includes("FREE THIS SEASON"), "there is no second, season-scoped answer");
   return { panel, free: panel.slice(0, cut), taken: panel.slice(cut) };
@@ -502,7 +504,7 @@ test("above the divider is exactly the fish no Fish Market recipe wants, in any 
                    "Horse Mackerel", "Saw Shark", "Whale Shark", "Trout", "Coelacanth",
                    "Ray", "Squid", "Barred Knifejaw"])
     assert.ok(free.includes(">" + f + "<"), `free to age: ${f}`);
-  assert.equal((free.match(/border-top:1px solid #20190f/g) || []).length, 12,
+  assert.equal((free.match(/class="v-age-row"/g) || []).length, 12,
     "exactly 12 rows above the line — no more, no fewer");
   /*
    * The failure that matters: ageing a fish a recipe eats. Anchovy, Red Snapper and Tuna are in
@@ -514,12 +516,13 @@ test("above the divider is exactly the fish no Fish Market recipe wants, in any 
     assert.ok(taken.includes(">" + f + "<"), `${f} is still listed, below the line`);
   }
   // Complete: every fish the shed takes is in the one table.
-  const rows = (agingPanel(renderPage(AGING_FARM).html).panel.match(/border-top:1px solid #20190f/g) || []).length;
+  const rows = (agingPanel(renderPage(AGING_FARM).html).panel.match(/class="v-age-row"/g) || []).length;
   assert.equal(rows, 38, `all 38 agable fish are in the table, got ${rows}`);
 });
 
 test("stock is the live inventory, matched through the game's own spelling", () => {
-  const { panel, free, taken } = agingPanel(renderPage(AGING_FARM).html);
+  const { html: page, api } = renderPage(AGING_FARM);
+  const { panel, free, taken } = agingPanel(page);
   /*
    * The inventory says "Hammerhead shark" and "Football fish"; FISH_BASE_XP says "Hammerhead
    * Shark" and "Football Fish". A case-sensitive lookup reads every one of those as zero held —
@@ -528,8 +531,8 @@ test("stock is the live inventory, matched through the game's own spelling", () 
   const hh = free.slice(free.indexOf(">Hammerhead Shark<"));
   assert.ok(/>2</.test(hh.slice(0, 400)), "the 2 Hammerheads in the inventory are counted");
   // And its icon comes from the game's spelling, which is the one the icon map holds.
-  assert.ok(panel.includes('alt="Hammerhead shark"'), "the icon resolves via the game's spelling");
-  assert.ok(/<img [^>]*alt="Rock Blackfish"/.test(free), "every row carries its fish icon");
+  assert.ok(panel.includes(api.icon("Hammerhead shark")), "the icon resolves via the game's spelling");
+  assert.ok(free.includes(api.icon("Rock Blackfish")), "every row carries its fish icon");
   // Below the line reads the same inventory.
   assert.ok(taken.slice(taken.indexOf(">Halibut<"), taken.indexOf(">Halibut<") + 400).includes(">5<"),
     "the 5 Halibut are counted below the line too");
@@ -571,7 +574,7 @@ test("the totals are the free stock, its XP, and the salt it would burn", () => 
   assert.ok(panel.indexOf(">Rock Blackfish<") < panel.indexOf(">Saw Shark<"),
     "and 0 held goes last even at 10,291 a piece");
   // Same rule below the divider, applied to its own half.
-  const taken2 = panel.slice(panel.indexOf("A RECIPE WANTS THESE"));
+  const taken2 = panel.slice(panel.indexOf("A recipe wants these"));
   assert.ok(taken2.indexOf(">Angelfish<") < taken2.indexOf(">Halibut<"),
     "below the line too: Angelfish 1,072 above Halibut 943");
   assert.ok(taken2.indexOf(">Halibut<") < taken2.indexOf(">Cobia<"),

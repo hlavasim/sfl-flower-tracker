@@ -40,7 +40,7 @@ export function levelingState(farm, leveling, book, saved) {
   const free = inputs.freePoints || 0;
   const plan = levelingPlan(farm, inputs, cfg);
   const impacts = itemImpacts(farm, inputs, cfg);
-  const out = { farm, inputs, book: items, cfg, free, plan, impacts, front: null, showAll: false,
+  const out = { farm, inputs, book: items, cfg, free, plan, impacts, front: null,
     bare: levelingPlan(farm, inputs, { ...cfg, ticked: [] }), ladder: levelingLadder(farm, plan, 10, free),
     steps: levelingSteps(farm, inputs, cfg, impacts, 3) };
   last = { farm, leveling, book, savedKey, out };
@@ -174,8 +174,9 @@ export const levelingMatrix = {
   page: "leveling",
   needs,
   optional: ["book"],
-  // ctx: { state?, interactive? (tick boxes, resell and show-all switches), icon? }
-  view(data, ctx = {}) {
+  options: [{ key: "showAll", label: "Show items with no effect too", kind: "bool" }],
+  // ctx: { state?, interactive? (the tick boxes), icon? }; opts: { showAll }
+  view(data, ctx = {}, opts = {}) {
     const { st, empty } = stateOf(data, ctx);
     if (!st) return { empty };
     const { farm, cfg: c, plan, bare, impacts, ladder, free } = st, I = !!ctx.interactive, S = sflIcon();
@@ -184,9 +185,7 @@ export const levelingMatrix = {
     const pts = tickedSkillPoints(farm, c.ticked);
     const cell = (v) => `<td class="r ${!Number.isFinite(v) || Math.abs(v) < 0.5 ? "v-dim" : v < 0 ? "v-good" : "v-bad"}">${Math.abs(v) < 0.5 ? "0" : lvK(v)}</td>`;
     let h = `<div class="v-note" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">` +
-      (I ? `<label><input type="checkbox"${chk(c.resell)} onchange="_lvlChange((c)=>{c.resell=this.checked})"> I sell the NFTs after the target (only the resale loss counts)</label>
-        <label><input type="checkbox"${chk(st.showAll)} onchange="_lvlShowAll(this.checked)"> show items with no effect too</label>`
-        : `<span>${c.resell ? "NFTs resold after the target (the resale loss counts)" : "NFTs at full price"}</span>`) +
+      `<span>${c.resell ? "NFTs resold after the target (the resale loss counts)" : "NFTs at full price"}${opts.showAll ? " · items with no effect shown" : ""}</span>` +
       (pts ? `<span>skills for <b>${pts}</b> points, ${free} free${pts > free ? ` <span class="v-bad">⚠ the rest from ${lvAL(pointsReachedAt(farm, pts - free))}</span>` : ""}</span>` : "") + `</div>` +
       `<details class="v-note"><summary style="cursor:pointer">? what the numbers mean</summary>
         A cell = how much ${S} the route to the end of that ascension costs with the item against without it (green = saves, red = loses):
@@ -202,7 +201,7 @@ export const levelingMatrix = {
     for (const [g, label] of LV_GROUPS) {
       const rows = impacts.filter((r) => r.group === g).map((r) => ({ r, vals: cols.map((k) => impactAt(farm, r, k.xp)) }))
         // no effect on the day (XP and running cost unchanged) = only its price: hidden unless asked
-        .filter(({ r }) => st.showAll || r.ticked || Math.abs(r.dXpPerDay) >= 1 || !(Math.abs(r.dRunning) < 0.5))
+        .filter(({ r }) => opts.showAll || r.ticked || Math.abs(r.dXpPerDay) >= 1 || !(Math.abs(r.dRunning) < 0.5))
         .sort((a, b) => key(a.r) - key(b.r));
       if (!rows.length) continue;
       h += `<tr><td colspan="${5 + cols.length}" class="v-sub">${label}</td></tr>`;

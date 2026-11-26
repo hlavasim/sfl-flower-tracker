@@ -82,5 +82,9 @@ test("matrix: Σ ticked, a column per ascension left, item rows with icons; tick
   const shown = st.impacts.filter((r) => r.ticked || Math.abs(r.dXpPerDay) >= 1 || !(Math.abs(r.dRunning) < 0.5));
   if (shown.length) assert.match(board, new RegExp(`<i>${shown[0].name}</i>`));
   const page = levelingMatrix.view({ farm }, { state: st, interactive: true, icon: ICON }).html;
-  assert.match(page, /_lvlShowAll\(this\.checked\)/);
+  assert.match(page, /onchange="_lvlTick\(this\.dataset\.n,this\.checked\)"/);
+  // "show items with no effect" is the copy's ⚙ option: more rows with it on
+  assert.deepStrictEqual(levelingMatrix.options.map((o) => o.key), ["showAll"]);
+  const rowsOf = (h) => (h.match(/<tr/g) || []).length;
+  assert.ok(rowsOf(levelingMatrix.view({ farm }, { state: st }, { showAll: true }).html) >= rowsOf(levelingMatrix.view({ farm }, { state: st }, {}).html));
 });

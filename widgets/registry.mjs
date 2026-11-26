@@ -41,5 +41,6 @@ export const WIDGETS = {
 import { constantsCoverage, constantsTables } from "./constants.mjs";
 import { flowerGifts, flowerGiftCycle, petalBlessed, growPlanner } from "./flowers-plan.mjs";
 import { levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix } from "./leveling.mjs";
+import { FISHING_WIDGETS } from "./fishing.mjs";
 for (const w of [constantsCoverage, constantsTables, flowerGifts, flowerGiftCycle, petalBlessed, growPlanner,
-  levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix]) WIDGETS[w.type] = w;
+  levelingSummary, levelingStepsWidget, levelingFrontierWidget, levelingMatrix, ...FISHING_WIDGETS]) WIDGETS[w.type] = w;

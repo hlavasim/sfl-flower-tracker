@@ -2872,6 +2872,11 @@
     .v-lvl-kitchens { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 4px 14px; margin-top: 8px; }
     .v-lvl-set label { cursor: pointer; }
     .v-lvl-set img, .v-mini img, .v-note img { height: 1.2em; vertical-align: -0.25em; margin-right: 3px; }
+    .v-mvl-src { border-top: 1px solid var(--c-line); padding: 6px 0 4px; margin-top: 4px; }
+    .v-mvl-route { padding: 3px 6px; border-radius: 8px; }
+    .v-mvl-route.on { background: rgba(95,179,107,0.10); }
+    .v-mvl-route label { cursor: pointer; }
+    .v-mini tr.v-age-row td { white-space: normal; }
 
     .w-pinmenu { position: fixed; z-index: 1000; min-width: 220px; background: var(--bg-card); border: 2px solid var(--border-brown);
       box-shadow: 0 6px 18px rgba(0,0,0,0.6); padding: 4px; font-family: 'Courier New', monospace; font-size: 0.85rem; }
@@ -18363,6 +18368,8 @@
     let _fishData = null, _fishPrices = null, _fishErr = null, _fishLoading = false, _fishFarm = null;
     // The LEVELING plan inputs (compute?section=leveling) and which collapsed sections are open.
     let _fishLvl = null, _fishOpen = {};
+    // The old page switches (Full Moon, Deep Sea Helm, Guardian): now each Marvel widget copy's ⚙
+    // options; still read (and kept in sfl_fishing_ui) to seed the page copies.
     let _fishMoon = false, _fishHelm = false, _fishGuardian = false;
     /*
      * Pieces already held, per Marvel — typed in, because the community farm payload does not
@@ -18391,26 +18398,27 @@
           moon: _fishMoon, helm: _fishHelm, guardian: _fishGuardian, pieces: _fishPieces, plan: _fishPlan }));
       } catch (e) {}
     }
-    window._fishToggle = function (k, v) {
-      if (k === "moon") _fishMoon = v; else if (k === "helm") _fishHelm = v; else _fishGuardian = v;
-      _fishSaveUi();
-      renderFishing();
-    };
+    // A change repaints wherever the fishing widgets are: this page, or a board with pinned copies.
+    function _fishRerender() {
+      _fishMemo = null;
+      if (getPage() === "fishing") renderFishing();
+      else if (window._wRerender) window._wRerender();
+    }
     window._fishPlanToggle = function (key, on) {
       if (on) _fishPlan[key] = true; else delete _fishPlan[key];
       _fishSaveUi();
-      renderFishing();
+      _fishRerender();
     };
     window._fishPlanClear = function () {
       _fishPlan = {};
       _fishSaveUi();
-      renderFishing();
+      _fishRerender();
     };
     window._fishSetPieces = function (marvel, v) {
       const n = Math.max(0, Math.min(8, Math.floor(+v || 0)));   // 9 would mean it is already caught
       _fishPieces[marvel] = n;
       _fishSaveUi();
-      renderFishing();
+      _fishRerender();
     };
 
     // The LEVELING page's inputs, the same way it loads them: salt follows the recorded weeks if any.
@@ -18447,10 +18455,10 @@
            */
           __store.get({ res: "farm", farm: FARM_ID }).then((r) => (r.status === "ok" ? r.data : null)),
         ]);
-        // In the background, after the rest: the heaviest call, and only DNES needs it (null = loading,
+        // In the background, after the rest: the heaviest call, and only TODAY needs it (null = loading,
         // false = failed).
         _fishLvl = null;
-        _fishLvlFetch().then((lv) => { _fishLvl = lv || false; if (getPage() === "fishing") renderFishing(); });
+        _fishLvlFetch().then((lv) => { _fishLvl = lv || false; _fishRerender(); });
         _fishData = hist;
         _fishFarm = (farm && farm.farm) || null;
         const pd = (prices && (prices.data || prices)) || {};
@@ -18463,26 +18471,30 @@
         _fishErr = null;
       } catch (e) { _fishErr = String(e); }
       _fishLoading = false;
-      if (getPage() === "fishing") renderFishing();
+      _fishRerender();
     }
 
-    function renderFishing() {
-      const app = document.getElementById("app");
-      // `fmt` is a LOCAL const inside renderYakkamon, not a global — copying the idiom without
-      // the definition is what left this page throwing "fmt is not defined" after its header.
+    /*
+     * The FISHING model: everything the page's widgets (widgets/fishing.mjs) show, computed once per
+     * state from the fishing history, the prices, the farm and the LEVELING plan. Plain data, plus a
+     * few small HTML snippets (icons) where the text names items. null = still loading.
+     */
+    let _fishMemo = null;
+    // opts: a widget copy's { moon, helm, guardian } (the Marvel drop-chance boosts)
+    function _fishModelNow(opts = {}) {
+      if (!_fishData && !_fishErr && FARM_ID) _fishFetch();
+      if (_fishErr) return { error: _fishErr };
+      if (!_fishData) return null;
+      let savedLv = null;
+      try { savedLv = localStorage.getItem("sfl_leveling"); } catch (e) { savedLv = null; }
+      const mult = (opts.moon ? 2 : 1) * (opts.helm ? 2 : 1) * (opts.guardian ? 2 : 1);
+      const key = [_fishData, _fishPrices, _fishFarm, _fishLvl, savedLv];
+      _fishMemo = _fishMemo && _fishMemo.key.every((k, i) => k === key[i]) ? _fishMemo : { key, byMult: {} };
+      return _fishMemo.byMult[mult] || (_fishMemo.byMult[mult] = _fishModel(savedLv, mult, opts));
+    }
+    function _fishModel(savedLv, mult, opts) {
       const fmt = (n, d) => (+n).toLocaleString("en-US", { maximumFractionDigits: d === undefined ? 0 : d });
-      if (!_fishData && !_fishErr) _fishFetch();
-
-      let h = '<div class="header pixel-panel pixel-font"><h1>🎣 FISHING</h1><div class="farm-id">Farm #' + escHTML(FARM_ID) + "</div></div>";
-      if (_fishErr) {
-        app.innerHTML = h + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;color:var(--yellow)">Could not load fishing history (' + escHTML(_fishErr) + ").</div>";
-        return;
-      }
-      if (!_fishData) {
-        app.innerHTML = h + '<div class="pixel-panel" style="padding:12px;font-size:0.55rem;color:var(--text-dim)">Reading your fishing history from the raw snapshot diffs…</div>';
-        return;
-      }
-
+      const I = (n) => _wIcon(n);
       const P = (n) => (_fishPrices && _fishPrices[n]) || 0;
       const d = _fishData;
       const rodP = P("Rod");
@@ -18503,25 +18515,6 @@
       const costPerCast = rodP + baitAvg;
       const days = (d.firstAt && d.lastAt) ? Math.max(1, (new Date(d.lastAt) - new Date(d.firstAt)) / 86400000) : 0;
 
-      const tiles = [
-        ["RODS SPENT", fmt(d.rods), ""],
-        ["BAIT USED", fmt(d.baitTotal), (baitRatio * 100).toFixed(0) + "% of rods"],
-        ["FISH LANDED", fmt(d.fishTotal), ""],
-        ["FISH / CAST", fishPerCast.toFixed(2), ""],
-        ["COST / CAST", costPerCast > 0 ? costPerCast.toFixed(3) + " " + sflIcon() : "—",
-          rodP > 0 ? "rod " + rodP.toFixed(3) + " + bait " + baitAvg.toFixed(3) : "price feed down"],
-      ];
-      const _mHist0 = h.length;                               // history: cost tiles, per fish, guaranteed
-      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
-        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">📜 WHAT FISHING HAS ACTUALLY COST YOU</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Rebuilt from <b>' + d.diffs + '</b> raw snapshot diffs that consumed a rod, over ' + days.toFixed(0) + ' days. A diff is a whole session, not one cast — so only fish are counted here, because a species can only come out of a rod.</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:8px">' +
-        tiles.map((t) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">' +
-          '<div style="font-size:0.44rem;color:var(--text-dim)">' + t[0] + '</div>' +
-          '<div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">' + t[1] + '</div>' +
-          (t[2] ? '<div style="font-size:0.42rem;color:var(--text-dim)">' + t[2] + '</div>' : "") + "</div>").join("") +
-        '</div><div style="font-size:0.46rem;color:#e8a060;line-height:1.6">⚠ Deltas are <b>net</b>: bait or rods crafted inside the same window cancel against what was spent, which is why bait reads ' + (baitRatio * 100).toFixed(0) + '% of rods when a cast burns one of each. Casts scale to <b>bait</b>, the tighter of the two. Read cost/cast as a floor.</div></div>';
-
       /*
        * XP is measured through the AGING SHED, not off the raw fish.
        *
@@ -18541,6 +18534,7 @@
        */
       const agedXpMult = _fishFarm ? computeFoodXP("Aged Fish", { xp: 1, usesHoney: false }, "Aging Shed", detectCookingBoosts(_fishFarm)) : primeFactor;
       const agedBoostNote = agedXpMult > primeFactor + 1e-9 ? ", × " + (agedXpMult / primeFactor).toFixed(3) + " from your fish XP boosts" : "";
+      const primeChance = getAgingPrimeChance(_fishFarm);
       const _baseXpOf = (n) => FISH_BASE_XP[n] || FISH_BASE_XP[_fishCanon(n)] || ITEM_XP_VALUES[n] || 0;
       const rows = Object.entries(d.fish || {}).map(([name, qty]) => {
         const perCast = casts > 0 ? qty / casts : 0;
@@ -18555,23 +18549,6 @@
                  xpPerSfl: agedCost > 0 ? agedXp / agedCost : 0 };
       }).filter((r) => r.qty >= 3).sort((a, b) => b.qty - a.qty);
 
-      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
-        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🐟 WHAT EACH FISH COST YOU — and what it paid back</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Your own catch rate, priced at the live cost per cast — then <b>through the Aging Shed</b>, which is where these actually go. Ageing returns 3×/4×/5× base XP (stepping at 200 and 330 base) for one fish plus <b>maxXP/50 salt</b>, so the cost column adds the salt and the ranking uses the aged figure. Prime-aged is folded in at your real chance (<b>' + (getAgingPrimeChance(_fishFarm) * 100).toFixed(0) + '%</b> → ×' + primeFactor.toFixed(3) + agedBoostNote + '). Species with fewer than 3 caught are hidden: the rate would be noise. <b style="color:#e8a060">A worm does not pick the fish</b> — the cost column is what one would cost if you fished for it alone, so it is a price, not a choice; which worm to cast is in ☀️ DNES. Rows run by how many you caught.</div>' +
-        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:600px">' +
-        '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">fish</td><td style="text-align:right;padding:0 6px 3px">caught</td><td style="text-align:right;padding:0 6px 3px">casts each</td><td style="text-align:right;padding:0 6px 3px">cost each</td><td style="text-align:right;padding:0 6px 3px">raw XP</td><td style="text-align:right;padding:0 6px 3px">aged XP</td><td style="text-align:right;padding:0 6px 3px">+ salt</td><td style="text-align:right;padding:0 6px 3px">aged XP / ' + sflIcon() + '</td><td style="text-align:right;padding:0 0 3px">engine value</td></tr>' +
-        rows.map((r) => '<tr style="border-top:1px solid #20190f">' +
-          '<td style="padding:3px 6px 3px 0">' + escHTML(r.name) + '</td>' +
-          '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + fmt(r.qty) + '</td>' +
-          '<td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">' + r.castsEach.toFixed(1) + '</td>' +
-          '<td style="text-align:right;padding:3px 6px;color:#e8a060">' + r.cost.toFixed(2) + '</td>' +
-          '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + (r.xp || "—") + '</td>' +
-          '<td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">' + (r.agedXp > 0 ? fmt(r.agedXp) : "—") + '</td>' +
-          '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + (r.salt || "—") + '</td>' +
-          '<td style="text-align:right;padding:3px 6px;color:var(--sunpetal);font-weight:bold">' + (r.xpPerSfl > 0 ? r.xpPerSfl.toFixed(1) : "—") + '</td>' +
-          '<td style="text-align:right;padding:3px 0;color:var(--green)">' + (r.value > 0 ? r.value.toFixed(2) : "—") + '</td></tr>').join("") +
-        "</table></div></div>";
-
       const gr = fishGuaranteed.map((g) => {
         const cost = rodP + P(g.bait) + P(g.chum) * g.qty;
         const base = _baseXpOf(g.fish);
@@ -18581,28 +18558,11 @@
         return Object.assign({}, g, { cost, xp, xpPerSfl: full > 0 ? xp / full : 0 });
       }).sort((a, b) => b.xpPerSfl - a.xpPerSfl);
       const bestRandom = rows.length ? rows[0] : null;
-      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
-        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🎯 GUARANTEED CATCH — is the special bait worth it?</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Bait + chum that guarantees a named fish: one cast, no luck. Cost is rod + bait + chum at live p2p, directly comparable with the random rates above.</div>' +
-        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:520px">' +
-        '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">bait + chum</td><td style="padding:0 6px 3px">guarantees</td><td style="text-align:right;padding:0 6px 3px">cost</td><td style="text-align:right;padding:0 6px 3px">aged XP</td><td style="text-align:right;padding:0 6px 3px">aged XP / ' + sflIcon() + '</td><td style="text-align:right;padding:0 0 3px">vs random</td></tr>' +
-        gr.map((g) => {
-          const rnd = rows.find((r) => r.name === g.fish);
-          const cmp = rnd ? (g.cost / rnd.cost - 1) * 100 : null;
-          return '<tr style="border-top:1px solid #20190f">' +
-            '<td style="padding:3px 6px 3px 0">' + escHTML(g.bait) + " + " + g.qty + "× " + escHTML(g.chum) + '</td>' +
-            '<td style="padding:3px 6px;color:var(--text-secondary)">' + escHTML(g.fish) + '</td>' +
-            '<td style="text-align:right;padding:3px 6px;color:#e8a060">' + g.cost.toFixed(2) + '</td>' +
-            '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + (g.xp > 0 ? fmt(g.xp) : "—") + '</td>' +
-            '<td style="text-align:right;padding:3px 6px;color:var(--sunpetal);font-weight:bold">' + (g.xpPerSfl > 0 ? g.xpPerSfl.toFixed(1) : "—") + '</td>' +
-            '<td style="text-align:right;padding:3px 0;color:' + (cmp === null ? "var(--text-dim)" : cmp <= 0 ? "var(--green)" : "var(--red)") + '">' +
-              (cmp === null ? "never caught" : (cmp >= 0 ? "+" : "") + cmp.toFixed(0) + "%") + "</td></tr>";
-        }).join("") +
-        '</table></div><div style="font-size:0.46rem;color:var(--text-dim);margin-top:6px;line-height:1.6">The last column is the whole question: <b>negative means the guaranteed route is CHEAPER</b> than fishing for it at random, because a rare fish costs many wasted casts.' +
-        (bestRandom ? ' Your most caught fish is <b>' + escHTML(bestRandom.name) + '</b> at ' + bestRandom.xpPerSfl.toFixed(1) + " XP/" + sflIcon() +
-          (gr[0] && gr[0].xpPerSfl > bestRandom.xpPerSfl
-            ? ', which <b style="color:var(--green)">' + escHTML(gr[0].bait) + " + " + escHTML(gr[0].chum) + '</b> beats at ' + gr[0].xpPerSfl.toFixed(1) + "."
-            : ", which no guaranteed route beats.") : "") + "</div></div>";
+      // vs random: negative = the guaranteed route is cheaper than fishing for it at random
+      for (const g of gr) {
+        const rnd = rows.find((r) => r.name === g.fish);
+        g.vsRandom = rnd ? (g.cost / rnd.cost - 1) * 100 : null;
+      }
 
       /*
        * Fish Market bait. Each bait is priced by EXPANDING its seasonal recipe into ingredients
@@ -18620,7 +18580,7 @@
       if (_fishLvl && _fishLvl.inputs && _fishFarm) {
         try {
           let saved = null;
-          try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
+          try { saved = JSON.parse(savedLv || "null"); } catch (e) { saved = null; }
           const lin = Object.assign({}, _fishLvl.inputs);
           lvCfg = levelingInit(_fishFarm, lin, saved).cfg;
           lvPlan = levelingPlan(_fishFarm, lin, lvCfg);
@@ -18689,6 +18649,7 @@
         if (!seen) _baitCost[ck] = c;
         return c;
       }
+      // how: HTML (the bait and chum named with their icons)
       function ingredientCost(name, seen, sn) {
         sn = sn || season;
         const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
@@ -18708,7 +18669,7 @@
           const unit = cc.made ? craftedBaitCost(cc.made.name, seen, sn) : chumQty > 0 ? cc.chum.cost / chumQty : 0;
           return { cost: cc.potCost + chumQty * unit, casts: 0, est: false, pot: cc.pot,
                    chum: chumName, chumQty, chumCrafted: !!cc.made,
-                   how: cc.pot + " " + cc.potCost.toFixed(2) + (chumName ? " + " + chumQty + "× " + chumName +
+                   how: I(cc.pot) + escHTML(cc.pot) + " " + cc.potCost.toFixed(2) + (chumName ? " + " + chumQty + "× " + I(chumName) + escHTML(chumName) +
                         (cc.made ? " (crafted, " + unit.toFixed(2) + " each)" : "") : " · no chum") };
         }
         const com = fishBestBait(name, sn);
@@ -18719,7 +18680,7 @@
           const casts = com.per / (fishPerCast > 0 ? fishPerCast : 1);
           const drift = mine && mine.castsEach > 0 ? mine.castsEach / casts : null;
           return { cost: casts * costPerCast, casts, est: false,
-                   how: casts.toFixed(1) + " casts on " + com.bait + ", n=" + fmt(com.sample) +
+                   how: casts.toFixed(1) + " casts on " + I(com.bait) + escHTML(com.bait) + ", n=" + fmt(com.sample) +
                         (drift && (drift > 1.6 || drift < 0.6) ? " · yours says " + mine.castsEach.toFixed(0) : "") };
         }
         // In-season but absent from the dump, or out of season entirely: fall back to this farm's
@@ -18779,14 +18740,15 @@
           const missing = hard.length ? entries.filter(([ing]) => ing === common)
             .map(([ing, q]) => ({ ing, n: Math.max(0, canMake * q - (+(ownedNow[ing] || 0))) })).filter((m) => m.n > 0)
             .map((m) => Object.assign(m, { casts: m.n * (ingredientCost(m.ing, null, sn).casts || 0) })) : [];
-          bySeason[sn] = { cost: c, ok, canMake, missing, unpriced,
-                           recipe: entries.map(([i, q]) => q + "× " + i).join(" + ") };
+          bySeason[sn] = { cost: c, ok, canMake, missing, unpriced: [...new Set(unpriced)], recipe: entries };
         }
-        return { bait, parts, cost, hours: fishBaitHours[bait] || 0, bySeason,
+        // A season priced off unknown ingredients cannot win the comparison — it is a floor, not a total.
+        const solid = (x) => x.ok && !x.unpriced.length;
+        for (const bs of Object.values(bySeason)) bs.cheapest = solid(bs) && Object.values(bySeason).filter(solid).every((x) => bs.cost <= x.cost + 1e-9);
+        return { bait, parts, cost, hours: fishBaitHours[bait] || 0, bySeason, forces: FISH_BAIT_CATCH[bait],
                  est: parts.some((p) => p.est),
                  complete: parts.length > 0 && parts.every((p) => isFinite(p.unit)) };
       }).sort((a, b) => a.cost - b.cost);
-      const approx = (b, n) => (b.est ? "~" : "") + fmt(n, n < 100 ? 2 : 0);
 
       /*
        * Casts buried inside ONE of an item, all the way down.
@@ -18813,55 +18775,6 @@
         const mine = rowOf(name);
         return mine ? mine.castsEach : 0;
       }
-
-      const _mHist1 = h.length;
-      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
-        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🎣 FISH MARKET BAIT — what one costs to make</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">These four are <b>bait, not chum</b>: they replace the worm, and the game refuses a cast that carries chum as well. You then <b>pick the fish yourself</b> out of the list — the catch is not random, so there is no “average XP of a tier” to speak of. The breakdown is the <b>' + escHTML(season) + '</b> recipe, expanded into what each ingredient really costs you; the four tiles under it price the <b>same bait in every season</b> at that season’s recipe and rates, with how many your current stock already covers. Cheapest season is green — waiting for it is a real strategy, since the same bait can differ several-fold.</div>' +
-        baits.map((b) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px;margin-bottom:6px">' +
-          '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">' +
-            '<div style="font-size:0.58rem;color:var(--sunpetal);font-weight:bold">' + escHTML(b.bait) +
-              ' <span style="color:var(--text-dim);font-size:0.44rem;font-weight:normal">' + b.hours + 'h per batch</span></div>' +
-            '<div style="font-size:0.58rem;color:#e8a060;font-weight:bold">' + (b.complete ? approx(b, b.cost) + " " + sflIcon() : "—") +
-              ' <span style="color:var(--text-dim);font-size:0.44rem;font-weight:normal">+ rod = ' + (b.complete ? approx(b, b.cost + rodP) : "—") + ' per fish</span></div></div>' +
-          '<div style="font-size:0.46rem;color:var(--text-secondary);margin-top:4px;line-height:1.7">' +
-            b.parts.map((p) => '<b>' + p.q + '×</b> ' + escHTML(p.ing) +
-              ' <span style="color:' + (p.est ? "#e8a060" : "var(--text-dim)") + '">(' + escHTML(p.how) + ' → ' + (isFinite(p.total) ? p.total.toFixed(2) : "?") + ')</span>').join(" &nbsp;+&nbsp; ") +
-          '</div>' +
-          /*
-           * All four seasons side by side. The recipe changes with the season and the cost with
-           * it — autumn's Fish Stick is Moray Eel and Napoleanfish, winter's is Walleye and
-           * Angelfish — so the useful question is not only "what does this cost" but "when is it
-           * cheap", and whether the stock on hand already covers a few.
-           */
-          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(122px,1fr));gap:4px;margin-top:6px">' +
-            ["winter", "spring", "summer", "autumn"].map((sn) => {
-              const bs = b.bySeason[sn];
-              if (!bs) return "";
-              const now = sn === season;
-              // A season priced off unknown ingredients cannot win the comparison — it is a floor,
-              // not a total, and crowning it would be the whole reason the check exists.
-              const solid = (x) => x.ok && !x.unpriced.length;
-              const cheapest = solid(bs) && Object.values(b.bySeason).filter(solid)
-                .every((x) => bs.cost <= x.cost + 1e-9);
-              return '<div style="border:1px solid ' + (now ? "var(--sunpetal)" : "#20190f") + ';border-radius:5px;padding:4px 5px;background:' + (now ? "#1d1608" : "#12100c") + '">' +
-                '<div style="font-size:0.42rem;color:' + (now ? "var(--sunpetal)" : "var(--text-dim)") + '">' + sn + (now ? " · now" : "") + '</div>' +
-                '<div style="font-size:0.58rem;color:' + (cheapest ? "var(--green)" : bs.unpriced.length ? "var(--text-dim)" : "#e8a060") + ';font-weight:bold">' +
-                  (bs.ok ? (bs.unpriced.length ? "≥" : "") + fmt(bs.cost, bs.cost < 100 ? 2 : 0) : "—") + '</div>' +
-                (bs.unpriced.length
-                  ? '<div style="font-size:0.38rem;color:#e8a060;line-height:1.4">no price for ' + escHTML([...new Set(bs.unpriced)].join(", ")) + '</div>'
-                  : "") +
-                '<div style="font-size:0.4rem;color:' + (bs.canMake > 0 ? "var(--green)" : "var(--text-dim)") + '">can make ' + fmt(bs.canMake) + '</div>' +
-                (bs.missing.length ? '<div style="font-size:0.38rem;color:#e8a060">missing ' + bs.missing.map((m) => fmt(m.n) + "× " + escHTML(m.ing) + (m.casts > 0 ? " ≈ " + fmt(m.casts) + " casts" : "")).join(", ") + '</div>' : "") +
-                '<div style="font-size:0.38rem;color:var(--text-dim);line-height:1.5">' + escHTML(bs.recipe) + '</div></div>';
-            }).join("") +
-          '</div>' +
-          '<div style="font-size:0.44rem;color:var(--text-dim);margin-top:4px;line-height:1.6">forces: ' +
-            FISH_BAIT_CATCH[b.bait].map(escHTML).join(" · ") + '</div></div>').join("") +
-        '<div style="font-size:0.46rem;color:#e8a060;line-height:1.6">⚠ For XP a bait pays only when the shed is held back by slots or fish, not by salt — per salt every fish ages to about the same XP, and a bait burns ~10 fish plus a cast for one. ' +
-          (lvPlan ? 'Your LEVELING plan: <b>' + lvlBaitLine(lvPlan) + '</b>.' : "") + ' Otherwise a bait is for reaching a fish that will not turn up on its own, or a map piece.' +
-        (baits.some((b) => b.est) ? ' A <b style="color:#e8a060">~</b> means an ingredient you have never caught, priced at the median rate of its tier — an estimate, but never a reason to drop the route.' : "") +
-        (rows.some((r) => r.qty < 20) ? ' Rates from small samples carry their catch count, because a fish landed 10 times sets its own price to within a factor of two at best.' : "") + '</div></div>';
 
       /*
        * WHAT MAY GO IN THE AGING SHED.
@@ -18922,7 +18835,7 @@
         const qty = ownedLc[name.toLowerCase()] || 0;
         const agedXp = getAgingMaxXP(base) * agedXpMult;
         const saltEach = getAgingSaltCost(base);
-        return { name, base, qty, wants, agedXp, saltEach,
+        return { name, iconName: agingIconName[name] || name, base, qty, wants, agedXp, saltEach,
                  now: wants.filter((w) => w.sn === season),
                  tier: _tierOf(name) || "?",
                  dishes: agingDishes[name.toLowerCase()] || [],
@@ -18944,25 +18857,18 @@
       const agingFree = agingRows.filter((r) => !r.wants.length).sort(agingSort);
       const agingTaken = agingRows.filter((r) => r.wants.length).sort(agingSort);
       /*
-       * ONE list, every agable fish in it — not one table per season.
-       *
-       * A fish is either wanted by a recipe somewhere in the year or it is not, and only the
-       * second group is free in any lasting sense. A separate "free this season" table reads as
-       * a second answer to the same question, so the seasons belong in the row instead, beside
-       * the bait that wants the fish and marked when that season is the one running now.
+       * ONE list, every agable fish in it — not one table per season. A fish is either wanted by
+       * a recipe somewhere in the year or it is not, and only the second group is free in any
+       * lasting sense; the seasons belong in the row, beside the bait that wants the fish.
        */
-      const agingWantNote = (r) => {
-        const byBait = {};                                     // "4× Fish Flake" → [seasons]
+      for (const r of agingRows) {
+        const byBait = {};                                     // "4× Fish Flake" → {bait, qty, seasons}
         for (const w of r.wants) {
           const k = w.qty + "× " + w.bait;
-          (byBait[k] = byBait[k] || []).push(w.sn);
+          (byBait[k] = byBait[k] || { bait: w.bait, qty: w.qty, sns: [] }).sns.push(w.sn);
         }
-        const parts = Object.entries(byBait).map(([k, sns]) =>
-          escHTML(k) + " (" + escHTML(sns.length === 4 ? "all seasons" : sns.join("/")) + ")" +
-          (sns.includes(season) ? ' <span style="color:var(--sunpetal)">· now</span>' : ""));
-        if (r.dishes.length) parts.push(escHTML(r.dishes.join(", ")));
-        return parts.join(", ");
-      };
+        r.wantedBy = Object.values(byBait).map((b) => ({ ...b, all: b.sns.length === 4, now: b.sns.includes(season) }));
+      }
 
       // A finished job waits for the next visit (LEVELING's restarts a day), so each takes whole gaps.
       const agingGap = lvCfg && lvCfg.restarts > 0 ? 24 / lvCfg.restarts : 0;
@@ -18970,75 +18876,16 @@
       const agingSum = (list) => list.reduce((a, r) => ({
         fish: a.fish + r.qty, xp: a.xp + r.xpWait, salt: a.salt + r.saltWait, hours: a.hours + r.qty * agingCycle(r.hours),
       }), { fish: 0, xp: 0, salt: 0, hours: 0 });
-      const agingTot = agingSum(agingFree);
-      const agingAll = agingSum(agingRows);
       const agingShedState = (_fishFarm && _fishFarm.agingShed) || null;
-      const agingSlots = Math.min(Math.max((agingShedState && agingShedState.level) || 1, 1), 6);
-      const agingBusy = ((agingShedState && agingShedState.racks && agingShedState.racks.aging) || []).length;
       const saltHeld = ownedLc["salt"] || 0;
-      const agingTiles = [
-        ["FREE TO AGE", fmt(agingTot.fish), agingFree.length + " species no recipe wants"],
-        ["AGED XP WAITING", fmt(agingTot.xp), "in that stock, at your prime rate"],
-        ["SALT IT COSTS", fmt(agingTot.salt), "you hold " + fmt(saltHeld) +
-          (saltP > 0 ? " · " + fmt(agingTot.salt * saltP, 1) + " " + sflIcon() : "")],
-        ["RACK", agingBusy + " / " + agingSlots, "slots busy right now"],
-        ["TO CLEAR IT", formatCookTime((agingTot.hours * 3600) / agingSlots),
-          agingSlots + " slot" + (agingSlots === 1 ? "" : "s") + (agingGap > 0 ? ", a visit every " + agingGap.toFixed(1) + "h" : " running non-stop")],
-      ];
-      const agingHead = '<tr style="color:var(--text-dim);font-size:0.45rem">' +
-        '<td style="padding:0 6px 3px 0">fish</td><td style="padding:0 6px 3px">tier</td>' +
-        '<td style="text-align:right;padding:0 6px 3px">you hold</td>' +
-        '<td style="text-align:right;padding:0 6px 3px">raw XP</td>' +
-        '<td style="text-align:right;padding:0 6px 3px">aged XP each</td>' +
-        '<td style="text-align:right;padding:0 6px 3px">salt each</td>' +
-        '<td style="text-align:right;padding:0 6px 3px">ages in</td>' +
-        '<td style="text-align:right;padding:0 6px 3px">XP waiting</td>' +
-        '<td style="text-align:right;padding:0 6px 3px">salt needed</td>' +
-        '<td style="padding:0 0 3px">wanted by</td></tr>';
-      const agingRowHtml = (r, note) => '<tr style="border-top:1px solid #20190f">' +
-        '<td style="padding:3px 6px 3px 0;white-space:nowrap">' + _mIcon(agingIconName[r.name] || r.name, 14) +
-          ' <span style="color:' + (r.qty > 0 ? "var(--text-secondary)" : "var(--text-dim)") + '">' + escHTML(r.name) + '</span></td>' +
-        '<td style="padding:3px 6px;color:var(--text-dim);font-size:0.44rem">' + escHTML(r.tier) + '</td>' +
-        '<td style="text-align:right;padding:3px 6px;font-weight:bold;color:' + (r.qty > 0 ? "var(--sunpetal)" : "var(--text-dim)") + '">' + fmt(r.qty) + '</td>' +
-        '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + fmt(r.base) + '</td>' +
-        '<td style="text-align:right;padding:3px 6px;color:var(--text-secondary)">' + fmt(r.agedXp) + '</td>' +
-        '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + fmt(r.saltEach) + '</td>' +
-        '<td style="text-align:right;padding:3px 6px;color:var(--text-dim)">' + r.hours.toFixed(1) + 'h</td>' +
-        '<td style="text-align:right;padding:3px 6px;font-weight:bold;color:' + (r.xpWait > 0 ? "var(--green)" : "var(--text-dim)") + '">' + (r.xpWait > 0 ? fmt(r.xpWait) : "—") + '</td>' +
-        '<td style="text-align:right;padding:3px 6px;color:#e8a060">' + (r.saltWait > 0 ? fmt(r.saltWait) : "—") + '</td>' +
-        '<td style="padding:3px 0;font-size:0.44rem;color:' + (note ? "#e8a060" : "var(--text-dim)") + '">' + (note || "nothing") + '</td></tr>';
-
-      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
-        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🧂 SAFE TO AGE — the fish no bait recipe wants</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">The four baits above eat <b>sixteen</b> season-specific ingredient lists between them, and the <b>' + agingFree.length +
-        '</b> above the line are on <b>none</b> of the sixteen — no season, no bait, ever — so the shed costs you nothing but salt. Below the line is <b>every other fish the shed takes</b>, with the bait and the season that wants it, so the whole ' + agingRows.length +
-        ' are in one place rather than split into a second answer. <b>Crab Stick never competes</b>: it is all crustaceans, which the shed will not take. It does take <b>every fish in the game</b>, the three sharks included — an <b>Aged White Shark is ' +
-        fmt(getAgingMaxXP(FISH_BASE_XP["White Shark"]) * agedXpMult) + ' XP</b>, the biggest single item there is. ' + (agingBySalt ? 'Rows run by <b>XP gained over eating raw, per salt</b> — your LEVELING plan is held back by salt —' : 'Rows run by <b>aged XP per fish</b> — a rack slot is the scarce thing, so one White Shark beats a hundred Rock Blackfish —') + ' with anything you hold <b>none</b> of pushed to the bottom of its half. Stock is your live inventory; aged XP is on the same basis as the table further up (prime folded in at <b>' +
-        (getAgingPrimeChance(_fishFarm) * 100).toFixed(0) + '%</b> → ×' + primeFactor.toFixed(3) + agedBoostNote + '), and ageing times carry your Speedy Aging / Salt Sculpture boosts (×' + agingTimeMult.toFixed(2) + ').</div>' +
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px;margin-bottom:8px">' +
-        agingTiles.map((t) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">' +
-          '<div style="font-size:0.44rem;color:var(--text-dim)">' + t[0] + '</div>' +
-          '<div style="font-size:0.72rem;color:var(--sunpetal);font-weight:bold">' + t[1] + '</div>' +
-          '<div style="font-size:0.42rem;color:' + (t[0] === "SALT IT COSTS" && saltHeld < agingTot.salt ? "#e8a060" : "var(--text-dim)") + '">' + t[2] + '</div></div>').join("") +
-        '</div>' +
-        '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:660px">' + agingHead +
-        agingFree.map((r) => agingRowHtml(r, r.dishes.length ? r.dishes.map(escHTML).join(", ") : "")).join("") +
-        '<tr><td colspan="10" style="padding:9px 0 4px;border-top:1px solid var(--border-brown);font-size:0.44rem;color:var(--sunpetal)">' +
-          '↓ A RECIPE WANTS THESE — ageing one means catching it again before you can craft that bait. “· now” is the season you are in.' +
-          (lvPlan && !lvPlan.fish.baitsHelp && !Object.keys(_fishPlan).length ? ' <span style="color:var(--green)">Your LEVELING plan makes no baits and no Marvel route is ticked, so these may go in the shed too (☀️ DNES lists what to keep).</span>' : "") + '</td></tr>' +
-        agingTaken.map((r) => agingRowHtml(r, agingWantNote(r))).join("") +
-        '</table></div>' +
-        (saltHeld < agingTot.salt
-          ? '<div style="font-size:0.46rem;color:#e8a060;margin-top:6px;line-height:1.6">⚠ The free stock alone needs <b>' + fmt(agingTot.salt) + ' salt</b> and you hold <b>' + fmt(saltHeld) + '</b> — short by ' + fmt(agingTot.salt - saltHeld) + '. Salt is the binding input here, not the fish.</div>'
-          : "") +
-        (agingFree.some((r) => r.dishes.length)
-          ? '<div style="font-size:0.46rem;color:var(--text-dim);margin-top:6px;line-height:1.6">The honest caveat above the line: <b>no bait recipe</b> wants these, but a <b>dish</b> still can — ' +
-            agingFree.filter((r) => r.dishes.length).map((r) => escHTML(r.name) + " → " + escHTML(r.dishes.join(", "))).join(" · ") +
-            '. Age them freely if you do not cook those.</div>'
-          : "") +
-        '<div style="font-size:0.46rem;color:var(--text-dim);margin-top:6px;line-height:1.6">Everything the shed would take, both sides of the line together: <b>' +
-        fmt(agingAll.fish) + ' fish</b>, <b>' + fmt(agingAll.xp) + ' aged XP</b> and <b>' + fmt(agingAll.salt) +
-        ' salt</b> — but the fish below the line are bait, and a bait you have aged is a bait you have to fish for twice.</div></div>';
+      const aging = { rows: agingRows, free: agingFree, taken: agingTaken, tot: agingSum(agingFree), all: agingSum(agingRows),
+        timeMult: agingTimeMult, bySalt: agingBySalt, gap: agingGap, saltHeld,
+        slots: Math.min(Math.max((agingShedState && agingShedState.level) || 1, 1), 6),
+        busy: ((agingShedState && agingShedState.racks && agingShedState.racks.aging) || []).length,
+        whiteShark: getAgingMaxXP(FISH_BASE_XP["White Shark"]) * agedXpMult,
+        freeForAll: !!(lvPlan && !lvPlan.fish.baitsHelp && !Object.keys(_fishPlan).length) };
+      aging.clearHours = (aging.tot.hours * 3600) / aging.slots;
+      aging.clearText = formatCookTime(aging.clearHours);
 
       /*
        * MARINE MARVEL PLANNER.
@@ -19052,7 +18899,6 @@
        * rate, or forced (a worm+chum pair, or a Fish Market bait) — and the winner is whichever
        * total is smaller, expanded into the shopping list that produces it.
        */
-      const mult = (_fishMoon ? 2 : 1) * (_fishHelm ? 2 : 1) * (_fishGuardian ? 2 : 1);
       /*
        * Two paces, because one of them is a lie on its own.
        *
@@ -19085,20 +18931,15 @@
         if (com && p > 0) {
           const castsEach = com.per / (fishPerCast > 0 ? fishPerCast : 1);
           const castsPiece = castsEach / p;
-          const mine = rowOf(fish.name);
           out.push({ kind: "random", label: "fish normally", perPiece: castsPiece,
-                     unit: "casts", total: castsPiece * pieces * costPerCast, worm: com.bait,
-                     detail: castsEach.toFixed(1) + " casts per " + escHTML(fish.name) + " on <b>" + escHTML(com.bait) +
-                             "</b> × " + fmt(1 / p) + " per piece <span style=\"opacity:.7\">· community n=" + fmt(com.sample) +
-                             (mine ? ", your own log says " + mine.castsEach.toFixed(0) : "") + "</span>" });
+                     unit: "casts", total: castsPiece * pieces * costPerCast, worm: com.bait });
         }
         // Forced: a worm+chum pair, or a Fish Market bait. Both land the fish every single cast.
         const pair = gr.filter((g) => g.fish.toLowerCase() === fish.name.toLowerCase() && g.cost > 0)
                        .sort((a, b) => a.cost - b.cost)[0];
         if (pair && p > 0) {
           out.push({ kind: "pair", pair, label: pair.bait + " + " + pair.qty + "× " + pair.chum,
-                     perPiece: 1 / p, unit: "casts", total: (1 / p) * pieces * pair.cost,
-                     detail: pair.cost.toFixed(2) + " " + sflIcon() + " per guaranteed " + escHTML(fish.name) });
+                     perPiece: 1 / p, unit: "casts", total: (1 / p) * pieces * pair.cost });
         }
         // EVERY Fish Market bait that lists this fish, not merely the cheapest — a few fish appear
         // in two lists (Barred Knifejaw is in both Fish Oil and Crab Stick), and which of them is
@@ -19107,20 +18948,15 @@
           if (!(p > 0)) break;
           const per = fb.cost + rodP;
           out.push({ kind: "bait", label: fb.bait, bait: fb, perPiece: 1 / p, unit: fb.bait, est: fb.est,
-                     total: (1 / p) * pieces * per,
-                     detail: approx(fb, per) + " " + sflIcon() + " per guaranteed " + escHTML(fish.name) });
+                     total: (1 / p) * pieces * per });
         }
         return out.sort((a, b) => a.total - b.total);
       }
 
       let planTotal = 0, planKnown = true;
-      const chosen = [];          // routes the player ticked, collected while the cards render
+      const chosen = [];          // routes the player ticked
       const cards = active.map((m) => {
-        if (isOwned(m.marvel)) {
-          return '<div style="border:1px solid #20190f;border-radius:6px;background:#12100c;padding:8px;margin-bottom:6px;opacity:0.6">' +
-            '<span style="font-size:0.55rem;color:var(--green)">✔ ' + escHTML(m.marvel) + '</span>' +
-            '<span style="font-size:0.44rem;color:var(--text-dim);margin-left:8px">already caught — pieces no longer drop for it</span></div>';
-        }
+        if (isOwned(m.marvel)) return { marvel: m.marvel, chapter: m.chapter, owned: true };
         const held = Math.max(0, Math.min(8, +(_fishPieces[m.marvel] || 0)));
         const pieces = 9 - held;
         const evaluated = m.sources.map((sr) => {
@@ -19129,98 +18965,30 @@
         }).sort((a, b) => (a.best ? a.best.total : Infinity) - (b.best ? b.best.total : Infinity));
         const win = evaluated[0];
         if (win && win.best) planTotal += win.best.total; else planKnown = false;
-
         /*
-         * EVERY route is printed, not just the winner. A source can be reached by fishing for it,
-         * by a worm+chum pair, and by any Fish Market bait whose list contains it — and which of
-         * those is cheapest swings with the season, since the recipes change under you. Showing
-         * only the winner hides the fact that a route exists at all, which is exactly how a bait
-         * that could not be priced came to read "no bait forces it".
+         * EVERY route is listed, not just the winner: which is cheapest swings with the season,
+         * and hiding a route hides that it exists at all.
          */
-        const routeLine = (r, isBest, e) => {
-          const key = m.marvel + "|" + e.fish + "|" + r.kind + ":" + r.label;
-          const ticked = !!_fishPlan[key];
-          const n = Math.ceil(r.perPiece * pieces);
-          const units = r.kind === "random" ? fmt(n) + " casts, fishing normally" : fmt(n) + "× " + r.label;
-          /*
-           * Casts, not just FLOWER — on a crafted bait the two diverge violently. 180 Fish Stick
-           * reads as a mild ~1,100, but the fish inside them are 16,000 casts, the better part of
-           * a year. Quoting only the price makes an impossible plan look affordable.
-           */
-          const totalCasts = r.kind === "bait" ? n + n * itemCasts(r.bait.bait) : n;
-          const dayStr = totalCasts > 0 && (castsPerDay > 0 || activePerDay > 0)
-            ? " ≈ " + (activePerDay > 0 ? fmt(Math.ceil(totalCasts / activePerDay)) + " days fishing daily at " + Math.round(activePerDay) : "")
-                    + (activePerDay > 0 && castsPerDay > 0 ? ", " : "")
-                    + (castsPerDay > 0 ? fmt(Math.ceil(totalCasts / castsPerDay)) + " at your long-run " + Math.round(castsPerDay) + "/day" : "")
-            : "";
-          let bom = "";
-          if (r.kind === "bait") {
-            bom = '<div style="font-size:0.42rem;color:var(--text-secondary);line-height:1.7;padding-left:16px">🧾 ' +
-              r.bait.parts.map((pt) => '<b>' + fmt(pt.q * n) + '×</b> ' + escHTML(pt.ing) +
-                ' <span style="color:' + (pt.est ? "#e8a060" : "var(--text-dim)") + '">(' +
-                (pt.casts > 0
-                  ? fmt(Math.ceil(pt.casts * pt.q * n)) + " casts" + (pt.est ? ", est." : "")
-                  // A pot ingredient costs no casts but is not free: its own chum can be another
-                  // crafted bait, and 43 Oysters quietly means 86 Fish Stick.
-                  : pt.chum ? "pot + " + fmt(pt.chumQty * pt.q * n) + "× " + escHTML(pt.chum) : "pot, no chum") +
-                ")</span>").join(" + ") +
-              ' <span style="color:var(--text-dim)">· ' + r.bait.hours + 'h/batch</span></div>';
-          }
-          if (ticked) chosen.push({ marvel: m.marvel, fish: e.fish, r, n, totalCasts, key });
-          return '<div style="padding:2px 0 3px;' + (ticked ? "background:#1b2415;border-radius:4px" : "") + '">' +
-            '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:0.48rem">' +
-              '<div style="color:' + (ticked ? "var(--sunpetal)" : isBest ? "var(--green)" : "var(--text-dim)") + ';padding-left:4px">' +
-                '<input type="checkbox" ' + (ticked ? "checked" : "") + ' style="vertical-align:middle;margin-right:4px" ' +
-                'onchange="_fishPlanToggle(' + JSON.stringify(key).replace(/"/g, "&quot;") + ',this.checked)">' +
-                (isBest ? "▸ " : "") + escHTML(units) + '</div>' +
-              '<div style="color:' + (isBest ? "#e8a060" : "var(--text-dim)") + ';font-weight:' + (isBest ? "bold" : "normal") + '">' +
-                (r.est ? "~" : "") + fmt(r.total, 0) + " " + sflIcon() + '</div></div>' +
-            bom +
-            '<div style="font-size:0.42rem;color:var(--text-dim);padding-left:16px;line-height:1.6">⏱ ' +
-              fmt(Math.ceil(totalCasts)) + ' casts' + dayStr + '</div></div>';
-        };
-
-        const line = (e, isBest) => {
+        for (const e of evaluated) {
           const rec = FISH_COMMUNITY_CATCH[e.fish] || FISH_COMMUNITY_CATCH[_fishCanon(e.fish)];
-          const inSeason = rec ? rec.s.includes(fishSeasonLetter[season] || "") : true;
-          const head = '<div style="font-size:0.5rem;color:' + (isBest ? "var(--sunpetal)" : "var(--text-secondary)") + ';padding-top:3px">' +
-            (isBest ? "●" : "○") + " " + escHTML(e.fish) +
-            ' <span style="font-size:0.44rem;color:var(--text-dim)">' + (e.p * 100).toFixed(e.p < 0.01 ? 2 : 1) + '% per catch → ' +
-            fmt(1 / e.p) + ' needed per piece</span>' +
-            (rec && !inSeason
-              ? ' <span style="font-size:0.42rem;color:#e8a060">✖ out of season (' + escHTML(rec.s.split("").map((c) => ({ w: "winter", p: "spring", s: "summer", a: "autumn" })[c]).join("/")) + ') — bait only</span>'
-              : "") + '</div>';
-          if (!e.routes.length) {
-            return '<div style="padding:3px 0;border-top:1px solid #1a150e">' + head +
-              '<div style="font-size:0.44rem;color:var(--text-dim);padding-left:12px">no route at all — out of season, and no bait or pair lists it</div></div>';
-          }
-          return '<div style="padding:3px 0;border-top:1px solid #1a150e">' + head +
-            e.routes.map((r, i) => routeLine(r, i === 0, e)).join("") + '</div>';
-        };
-
-        return '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px;margin-bottom:6px">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">' +
-            '<div style="font-size:0.58rem;color:var(--sunpetal);font-weight:bold">' + escHTML(m.marvel) +
-              (m.chapter ? ' <span style="color:var(--text-dim);font-size:0.42rem;font-weight:normal">' + escHTML(m.chapter) + "</span>" : "") + '</div>' +
-            '<div style="font-size:0.44rem;color:var(--text-dim)">pieces held ' +
-              '<input type="number" min="0" max="8" value="' + held + '" style="width:38px;background:#0d0a06;border:1px solid var(--border-brown);color:var(--sunpetal);font-family:inherit;font-size:0.5rem;padding:1px 3px" ' +
-              'onchange="_fishSetPieces(\'' + escHTML(m.marvel).replace(/'/g, "\\'") + '\',this.value)"> / 9 &nbsp;→&nbsp; <b style="color:var(--text-secondary)">' + pieces + ' to go</b></div></div>' +
-          evaluated.map((e, i) => line(e, i === 0)).join("") + "</div>";
-      }).join("");
-
-      const _mMarv0 = h.length;                               // Marvels: planner + order
-      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
-        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🗺️ MARINE MARVEL PLANNER — what each map really costs</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Nine pieces per Marvel, dropping only from the two named fish. Catch rates are the community dump’s <b>107,310 catches</b>, inverted to P(fish|bait) and undiluted for <b>' + escHTML(season) + '</b> — not this farm’s log, which is sound on common fish and up to <b>20× out</b> on the rare ones that actually carry map pieces. A fish <b style="color:#e8a060">out of season cannot be fished for at all</b>, so its only route is a crafted bait, which ignores the season gate. The winner is marked ● and expanded into a shopping list. Only the permanent Marvels and the <b>' + escHTML(fishMarvelChapter) + '</b> chapter are listed; a past chapter’s Marvels cannot be obtained at all.</div>' +
-        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:0.5rem">' +
-        '<label><input type="checkbox" ' + (_fishMoon ? "checked" : "") + ' onchange="_fishToggle(\'moon\',this.checked)"> Full Moon</label>' +
-        '<label><input type="checkbox" ' + (_fishHelm ? "checked" : "") + ' onchange="_fishToggle(\'helm\',this.checked)"> Deep Sea Helm</label>' +
-        '<label><input type="checkbox" ' + (_fishGuardian ? "checked" : "") + ' onchange="_fishToggle(\'guardian\',this.checked)"> Guardian</label>' +
-        '<span style="color:var(--sunpetal)">= ' + mult + '× drop chance</span></div>' +
-        cards +
-        '<div style="font-size:0.5rem;color:var(--text-secondary);margin-top:6px;line-height:1.7">Every remaining Marvel by its cheapest route: <b style="color:#e8a060">' + fmt(planTotal, 0) + " " + sflIcon() + '</b>' +
-          (planKnown ? "" : ' <span style="color:var(--text-dim);font-size:0.44rem">(excluding sources with no route at all)</span>') + '</div>' +
-        '<div style="font-size:0.46rem;color:var(--text-dim);margin-top:4px;line-height:1.6">Piece counts are typed in because the farm API does not publish them — it exposes finished Marvels and a generic Treasure Map, but not per-Marvel progress. Pieces are consumed at 9, so 8 is the maximum you can hold.</div></div>';
+          e.inSeason = rec ? rec.s.includes(fishSeasonLetter[season] || "") : true;
+          e.seasons = rec ? rec.s.split("").map((c) => ({ w: "winter", p: "spring", s: "summer", a: "autumn" })[c]) : [];
+          e.routes.forEach((r, i) => {
+            r.isBest = i === 0;
+            r.key = m.marvel + "|" + e.fish + "|" + r.kind + ":" + r.label;
+            r.ticked = !!_fishPlan[r.key];
+            r.n = Math.ceil(r.perPiece * pieces);
+            /*
+             * Casts, not just FLOWER — on a crafted bait the two diverge violently. 180 Fish Stick
+             * reads as a mild ~1,100, but the fish inside them are 16,000 casts, the better part of
+             * a year. Quoting only the price makes an impossible plan look affordable.
+             */
+            r.totalCasts = r.kind === "bait" ? r.n + r.n * itemCasts(r.bait.bait) : r.n;
+            if (r.ticked) chosen.push({ marvel: m.marvel, fish: e.fish, r, n: r.n, totalCasts: r.totalCasts, key: r.key });
+          });
+        }
+        return { marvel: m.marvel, chapter: m.chapter, held, pieces, evaluated };
+      });
 
       /*
        * THE ORDER — every ticked route folded into one shopping list.
@@ -19236,15 +19004,8 @@
        * twice. Casts are summed the same way, which is what actually bounds the plan.
        */
       const order = { items: {}, casts: 0, flower: 0, rods: 0, baits: {} };
-      /*
-       * Requirements recurse, because the recipes do.
-       *
-       * A Crab Stick needs an Oyster, an Oyster is baited with 2x Fish Stick, and a Fish Stick is
-       * 6x Red Snapper + 2x Walleye + 2x Angelfish. Listing the Oyster and stopping leaves 86
-       * Fish Stick as a line with no ingredients behind it and no craft time counted -- the plan
-       * would read as 197 hours when it is really several times that. Depth is capped only as a
-       * backstop: no recipe closes a loop today, but one added upstream should not hang the page.
-       */
+      // Requirements recurse, because the recipes do (Crab Stick → Oyster → 2× Fish Stick → fish);
+      // depth is capped only as a backstop against a loop added upstream.
       const need = (name, qty, depth) => {
         if (!name || !(qty > 0)) return;
         order.items[name] = (order.items[name] || 0) + qty;
@@ -19276,107 +19037,46 @@
           need(r.bait.bait, c.n, 0);
         }
       }
-      /*
-       * How many casts an item costs. Zero for anything you do not fish for — a worm out of a
-       * composter, a crafted bait, a pot crustacean — since those are already expanded into their
-       * own ingredients and counting them again would double the total.
-       */
+      // Zero casts for anything not fished for (a composted worm, a crafted bait, a pot crustacean):
+      // those are already expanded into their own ingredients.
       const castsForItem = (name) =>
         (FISH_MARKET_RECIPES[name] || CRUSTACEAN_RECIPES[name] ||
          CRUSTACEAN_RECIPES[_fishCanon(name)] || BAIT_WORM_YIELD[name]) ? 0 : itemCasts(name);
       for (const [name, qty] of Object.entries(order.items)) order.casts += castsForItem(name) * qty;
       order.rods = order.casts;                  // one rod per cast, wherever the cast happens
-
-      const orderRows = Object.entries(order.items).sort((a, b) => b[1] - a[1]);
-      /*
-       * The order lists worms, chum and rods as well as fish, and ingredientCost() knows only how
-       * to price a fish or a pot — it read "Red Wiggler" as a species and reported it out of
-       * season at a tier-median cast rate, which is nonsense for something that comes out of a
-       * composter. So the order names each line's real source.
-       */
+      // Where each line comes from (a worm from a composter, a bait from the Fish Market, a pot from
+      // the workbench, a fish at its rate) — HTML, the items with their icons.
       const orderSource = (name) => {
         if (BAIT_WORM_YIELD[name]) return "composter · ~" + BAIT_WORM_YIELD[name] + " per cycle";
         if (FISH_MARKET_RECIPES[name]) return "Fish Market · " + (fishBaitHours[name] || 0) + "h per batch";
         if (TOOL_COSTS[name]) {
           const t = TOOL_COSTS[name];
-          return "workbench · " + t.coins + " coins" +
-                 Object.entries(t.materials || {}).map(([m, q]) => " + " + q + "× " + m).join("");
+          return "workbench · " + I("Coin") + t.coins + " coins" +
+                 Object.entries(t.materials || {}).map(([m, q]) => " + " + q + "× " + I(m) + escHTML(m)).join("");
         }
         const cr = CRUSTACEAN_RECIPES[name] || CRUSTACEAN_RECIPES[_fishCanon(name)];
-        if (cr) return cr.pot + (cr.chum ? " · " + cr.qty + "× " + cr.chum : " · no chum");
+        if (cr) return I(cr.pot) + escHTML(cr.pot) + (cr.chum ? " · " + cr.qty + "× " + I(cr.chum) + escHTML(cr.chum) : " · no chum");
         const com = fishBestBait(name, season);
-        if (com) return (com.per / (fishPerCast > 0 ? fishPerCast : 1)).toFixed(1) + " casts on " + com.bait + ", n=" + fmt(com.sample);
+        if (com) return (com.per / (fishPerCast > 0 ? fishPerCast : 1)).toFixed(1) + " casts on " + I(com.bait) + escHTML(com.bait) + ", n=" + fmt(com.sample);
         const mine = rowOf(name);
         if (mine) return mine.castsEach.toFixed(1) + " casts, your log only";
         const price = P(name);
         return price > 0 ? "buy · " + price.toFixed(3) + " each" : "—";
       };
-      const craftHours = Object.entries(order.baits)
-        .reduce((a, [b, n]) => a + (fishBaitHours[b] || 0) * n, 0);
+      order.rows = Object.entries(order.items).sort((a, b) => b[1] - a[1])
+        .map(([name, qty]) => ({ name, qty, have: +((ownedNow[name] || 0)), source: orderSource(name) }));
+      order.craftHours = Object.entries(order.baits).reduce((a, [b, n]) => a + (fishBaitHours[b] || 0) * n, 0);
+      order.chosen = chosen;
 
-      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px;border-color:' + (chosen.length ? "var(--sunpetal)" : "var(--border-brown)") + '">' +
-        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">🧺 YOUR ORDER — tick the routes above</div>' +
-        (!chosen.length
-          ? '<div style="font-size:0.5rem;color:var(--text-dim);line-height:1.6">Nothing ticked yet. Tick a route on any Marvel above and everything it needs is added up here — one list, with the shared ingredients merged, so two plans running through Fish Flake do not have you fish for the same Anchovy twice.</div>'
-          : '<div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:8px;line-height:1.7">' +
-              chosen.map((c) => '<div>✔ <b>' + escHTML(c.marvel) + '</b> <span style="color:var(--text-dim)">via ' + escHTML(c.fish) + ' — ' +
-                (c.r.kind === "random" ? fmt(c.n) + " casts" : fmt(c.n) + "× " + escHTML(c.r.label)) + '</span></div>').join("") +
-            '</div>' +
-            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:10px">' +
-              [["MARVELS", String(chosen.length), ""],
-               ["TOTAL COST", fmt(order.flower, 0) + " " + sflIcon(), ""],
-               ["TOTAL CASTS", fmt(Math.ceil(order.casts)), "one rod each"],
-               ["TIME FISHING", activePerDay > 0 ? fmt(Math.ceil(order.casts / activePerDay)) + " days" : "—",
-                 activePerDay > 0 ? "at your " + Math.round(activePerDay) + "/day" : ""],
-               ["CRAFTING", craftHours > 0 ? fmt(Math.ceil(craftHours)) + " h" : "—",
-                 craftHours > 0 ? "serial — divide by your slots" : ""]]
-                .map((t) => '<div style="border:1px solid var(--border-brown);border-radius:6px;background:#161009;padding:8px">' +
-                  '<div style="font-size:0.44rem;color:var(--text-dim)">' + t[0] + '</div>' +
-                  '<div style="font-size:0.7rem;color:var(--sunpetal);font-weight:bold">' + t[1] + '</div>' +
-                  (t[2] ? '<div style="font-size:0.42rem;color:var(--text-dim)">' + t[2] + '</div>' : "") + '</div>').join("") +
-            '</div>' +
-            (Object.keys(order.baits).length
-              ? '<div style="font-size:0.5rem;color:var(--text-secondary);margin-bottom:6px">🥣 <b>craft:</b> ' +
-                Object.entries(order.baits).sort((a, b) => b[1] - a[1])
-                  .map(([b, n]) => '<b style="color:var(--sunpetal)">' + fmt(n) + '×</b> ' + escHTML(b) +
-                    ' <span style="color:var(--text-dim);font-size:0.42rem">(' + (fishBaitHours[b] || 0) + 'h each)</span>').join(" &nbsp;·&nbsp; ") + '</div>'
-              : "") +
-            '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:0.52rem;min-width:360px">' +
-            '<tr style="color:var(--text-dim);font-size:0.45rem"><td style="padding:0 6px 3px 0">you need</td><td style="text-align:right;padding:0 6px 3px">qty</td><td style="padding:0 0 3px 8px">where it comes from</td></tr>' +
-            orderRows.map(([name, qty]) => {
-              const have = +((ownedNow[name] || 0));
-              return '<tr style="border-top:1px solid #20190f">' +
-                '<td style="padding:3px 6px 3px 0">' + escHTML(name) + '</td>' +
-                '<td style="text-align:right;padding:3px 6px;color:var(--sunpetal);font-weight:bold">' + fmt(Math.ceil(qty)) +
-                  (have > 0 ? '<div style="font-size:0.4rem;color:var(--green);font-weight:normal">have ' + fmt(have) + '</div>' : "") + '</td>' +
-                '<td style="padding:3px 0 3px 8px;color:var(--text-dim);font-size:0.44rem">' + escHTML(orderSource(name)) + '</td></tr>';
-            }).join("") +
-            '</table></div>' +
-            '<div style="margin-top:8px"><button class="refresh-btn" onclick="_fishPlanClear()">CLEAR</button></div>') +
-        '</div>';
-
-
-      const _mMarv1 = h.length;                               // treasure (goes with the history)
+      // TREASURE — counted only over the diffs where no shovel moved (digging drops the same things).
       const tr = d.treasure || { items: {}, rods: 0, diffs: 0, total: 0 };
       let trVal = 0;
       for (const [k, q] of Object.entries(tr.items || {})) trVal += q * P(k);
-      h += '<div class="pixel-panel" style="padding:12px;margin-bottom:12px">' +
-        '<div class="pixel-font" style="font-size:0.62rem;color:var(--sunpetal);margin-bottom:4px">💎 TREASURE — what fishing gives back</div>' +
-        '<div style="font-size:0.5rem;color:var(--text-dim);margin-bottom:8px;line-height:1.6">Clam Shell, Old Bottle, Pipi and friends drop from <b>digging too</b>, and a shovel moved in most of your fishing diffs. So this is counted <b>only</b> over the ' + tr.diffs + ' diffs where no shovel moved at all — ' + fmt(tr.rods) + " of " + fmt(d.rods) + ' rods. Honest, but a third of the sample.</div>' +
-        (tr.total > 0
-          ? '<div style="font-size:0.55rem;color:var(--text-secondary);line-height:1.9">' +
-            Object.entries(tr.items).sort((a, b) => b[1] - a[1]).map((e) => escHTML(e[0]) + ' <b style="color:var(--sunpetal)">' + fmt(e[1]) + '</b> <span style="color:var(--text-dim);font-size:0.45rem">(' + (e[1] / tr.rods).toFixed(3) + "/rod)</span>").join(" &nbsp;·&nbsp; ") +
-            '<div style="margin-top:6px;color:var(--green)">worth ' + trVal.toFixed(2) + " " + sflIcon() + " over " + fmt(tr.rods) + ' rods = <b>' + (trVal / tr.rods).toFixed(4) + " " + sflIcon() + ' back per cast</b>, offsetting ' + (costPerCast > 0 ? ((trVal / tr.rods) / costPerCast * 100).toFixed(0) : "—") + "% of what a cast costs.</div></div>"
-          : '<div style="font-size:0.5rem;color:var(--text-dim)">No clean sample yet.</div>') + "</div>";
-
-      const _mTreas1 = h.length;
-      h += '<div style="font-size:0.45rem;color:var(--text-dim);text-align:center;margin-bottom:10px;line-height:1.6">Catch rates and costs are YOUR history, not published drop tables. Guaranteed-catch pairs and map-piece chances are the game\'s published values; prices are live p2p.</div>';
 
       /*
-       * ☀️ DNES — the page's answer in one card: which worm to cast this season, what goes in the
-       * shed right now, and what (if anything) to make at the Fish Market. The plan behind it is the
-       * LEVELING page's own (its saved config: target, restarts, worm, bought salt), so the two pages
-       * cannot disagree about whether a bait pays.
+       * ☀️ TODAY — which worm to cast this season, what goes in the shed right now, and what (if
+       * anything) to make at the Fish Market. The plan behind it is the LEVELING page's own (its
+       * saved config), so the two pages cannot disagree about whether a bait pays.
        */
       // Which column decides the worm: a fish beyond what salt and slots can take is eaten raw.
       const wormMode = !lvPlan ? "aged" : lvPlan.bottleneck === "fish" ? "aged" : "raw";
@@ -19398,64 +19098,67 @@
       const wKey = wormMode === "aged" ? "agedPerFl" : "rawPerFl";
       const wsNow = wormStatsFor(season);
       const bestW = wsNow.slice().sort((a, b) => b[wKey] - a[wKey])[0];
-      const wormCell = (s, best) => '<td style="text-align:right;padding:2px 6px;' + (best ? "color:var(--green);font-weight:bold" : "color:var(--text-secondary)") + '">' + fmt(s[wKey]) +
-        '<div style="font-size:0.38rem;color:var(--text-dim);font-weight:normal">' + fmt(wormMode === "aged" ? s.aged : s.raw) + ' XP/ryba</div></td>';
-      const wormNowHtml = '<table style="border-collapse:collapse;font-size:0.5rem;margin:4px 0"><tr style="color:var(--text-dim);font-size:0.42rem"><td style="padding:0 6px 2px 0">červ</td>' +
-        '<td style="text-align:right;padding:0 6px 2px">ryba syrově</td><td style="text-align:right;padding:0 6px 2px">ryba stárnutá</td><td style="text-align:right;padding:0 6px 2px">hod</td>' +
-        '<td style="text-align:right;padding:0 6px 2px">XP za ' + sflIcon() + ' (' + (wormMode === "aged" ? "stárnuté, sůl v ceně" : "syrové") + ')</td></tr>' +
-        wsNow.map((s) => '<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0">' + _mIcon(s.worm, 12) + " " + escHTML(s.worm) + '</td>' +
-          '<td style="text-align:right;padding:2px 6px;color:var(--text-dim)">' + fmt(s.raw) + '</td><td style="text-align:right;padding:2px 6px;color:var(--text-dim)">' + fmt(s.aged) + '</td>' +
-          '<td style="text-align:right;padding:2px 6px;color:#e8a060">' + s.cast.toFixed(3) + '</td>' +
-          '<td style="text-align:right;padding:2px 6px;' + (s === bestW ? "color:var(--green);font-weight:bold" : "color:var(--text-secondary)") + '">' + fmt(s[wKey]) + '</td></tr>').join("") + '</table>';
-      const dnesSeasons = ["winter", "spring", "summer", "autumn"];
-      const wormYearHtml = '<details style="margin-top:2px"><summary style="cursor:pointer;color:var(--text-dim)">červi po sezónách</summary>' +
-        '<table style="border-collapse:collapse;font-size:0.48rem;margin-top:4px"><tr style="color:var(--text-dim);font-size:0.42rem"><td style="padding:0 6px 2px 0">XP za ' + sflIcon() + '</td>' +
-        ["Earthworm", "Grub", "Red Wiggler"].map((w) => '<td style="text-align:right;padding:0 6px 2px">' + escHTML(w) + '</td>').join("") + '</tr>' +
-        dnesSeasons.map((sn) => {
-          const st = wormStatsFor(sn), top = st.slice().sort((a, b) => b[wKey] - a[wKey])[0];
-          return '<tr style="border-top:1px solid #20190f"><td style="padding:2px 6px 2px 0;color:' + (sn === season ? "var(--sunpetal)" : "var(--text-dim)") + '">' + sn + (sn === season ? " · teď" : "") + '</td>' +
-            st.map((s) => wormCell(s, s === top)).join("") + '</tr>';
-        }).join("") + '</table>' +
-        '<div style="color:var(--text-dim);line-height:1.6">Podíly úlovků jsou z komunitních dat (107 tis. hodů), přepočtené na sezónu. Které ryby který červ a sezóna dávají, sedí se hrou (fishing.ts) u všech 38 ryb; samotné poměry hra losuje na serveru, takže jsou odhadem. Ryb na hod ' + fpc.toFixed(2) + ' je tvoje vlastní číslo.</div></details>';
-
-      // Do sudu: the "fishing-age-now" widget (widgets/fishing-age-now.mjs) — free fish, then the surplus
-      // beyond twice what the partner matches, then (when no baits are being made) the rest. Pinnable.
-      window._wRerender = renderFishing; window._wRefresh = () => { _fishData = null; _fishErr = null; renderFishing(); };
-      const ageHtml = typeof __widgets === "undefined" ? _wMissing("Do sudu teď") : __widgets.renderPage("fishing-age-now", {
-        data: { farm: _fishFarm, leveling: _fishLvl || null },
-        ctx: Object.assign(_wCtx("fishing-age-now"), { lvPlan, bestWorm: bestW.worm }),
-        fresh: __wFresh(__store.peek({ res: "farm", farm: FARM_ID })),
+      const year = ["winter", "spring", "summer", "autumn"].map((sn) => {
+        const stats = wormStatsFor(sn);
+        return { sn, stats, top: stats.slice().sort((a, b) => b[wKey] - a[wKey])[0].worm };
       });
+      // Fish Market now: the plan's baits this season, with what the current stock already covers.
+      const fmNow = lvPlan ? (lvPlan.fish.baitUse || []).filter((b) => b.season === season).map((b) => {
+        const bb = baits.find((x) => x.bait === b.bait), bs = bb && bb.bySeason[season];
+        return { bait: b.bait, fish: b.fish, perDay: b.perDay, canMake: bs ? bs.canMake : null, missing: bs ? bs.missing : [] };
+      }) : [];
+      const today = { wormMode, wKey, wsNow, bestW, year, fpc, fmNow,
+        lvState: _fishLvl === null ? "loading" : _fishLvl === false ? "failed" : "ok",
+        baitLine: lvPlan ? lvlBaitLine(lvPlan) : "", bottleneck: lvPlan ? (lvlBottleneck[lvPlan.bottleneck] || "nothing") : "",
+        restarts: lvCfg ? lvCfg.restarts : null, worm: lvCfg ? lvCfg.fish.worm : null, buySalt: lvCfg ? !!lvCfg.fish.buySalt : false };
 
-      // Fish Market: the plan's verdict, and what this season's recipe lets you make now.
-      const fmNow = lvPlan ? (lvPlan.fish.baitUse || []).filter((b) => b.season === season) : [];
-      const fmHtml = !lvPlan ? '<span style="color:var(--text-dim)">' + (_fishLvl === null ? "Načítám plán z LEVELINGu…" : "Plán z LEVELINGu se nenačetl.") + '</span>'
-        : 'celý rok: ' + lvlBaitLine(lvPlan) +
-          (fmNow.length ? '<br>teď (' + escHTML(season) + '): ' + fmNow.map((b) => {
-            const bb = baits.find((x) => x.bait === b.bait), bs = bb && bb.bySeason[season];
-            return '<b>' + escHTML(b.bait) + '</b> → ' + escHTML(b.fish) + ' ~' + (b.perDay * 4).toFixed(1) + '/den' +
-              (bs ? ' · máš na <b>' + fmt(bs.canMake) + '</b>' + (bs.missing.length ? ' <span style="color:#e8a060">(chybí ' + bs.missing.map((m) => fmt(m.n) + "× " + escHTML(m.ing)).join(", ") + ')</span>' : "") : "");
-          }).join(" · ") : "") +
-          '<br><span style="color:var(--text-dim)">Bait ti dá jednu rybu podle výběru za ~10 ryb na vstupu a jeden hod. Za sůl dá každá ryba stárnutím zhruba stejně XP, takže bait na XP pomůže, jen když stárnutí brzdí sloty nebo ryby, ne sůl. Baity na Marvely řeší sekce Marvely níže.</span>';
+      return { d, season, casts, baitRatio, fishPerCast, costPerCast, rodP, baitAvg, days, saltP, primeFactor, primeChance, agedXpMult, agedBoostNote,
+        rows, gr, bestRandom, baits, lvPlan, lvCfg, ownedNow, aging, today, treasure: { tr, trVal },
+        marvels: { mult, moon: !!opts.moon, helm: !!opts.helm, guardian: !!opts.guardian, castsPerDay, activePerDay, chapter: fishMarvelChapter,
+          cards, planTotal, planKnown, itemCasts },
+        order, baitHours: fishBaitHours, marvelPlanned: Object.keys(_fishPlan).length > 0 };
+    }
 
-      const dnesHtml = '<div class="pixel-panel" style="padding:10px 12px;margin-bottom:12px;border-color:var(--sunpetal);font-size:0.52rem;line-height:1.6">' +
-        '<div class="pixel-font" style="font-size:0.66rem;color:var(--sunpetal);margin-bottom:4px">☀️ DNES</div>' +
-        (lvPlan ? '<div style="color:var(--text-dim);margin-bottom:4px">Podle plánu z LEVELINGu (restarty ' + lvCfg.restarts + (lvCfg.fish.worm ? ", červ " + escHTML(lvCfg.fish.worm) : "") + (lvCfg.fish.buySalt ? ", dokupovaná sůl" : "") + '): stárnutí brzdí <b>' + escHTML(lvlBottleneck[lvPlan.bottleneck] || "nic") + '</b>' +
-          (wormMode === "raw" ? " — další ryba se sní syrová, červ se volí podle syrového XP." : " — každá další ryba jde do sudu, červ se volí podle stárnutého XP.") + '</div>' : "") +
-        '<div class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal);margin-top:6px">🪱 NAHAZUJ: ' + escHTML(bestW.worm) + '</div>' + wormNowHtml + wormYearHtml +
-        ageHtml +
-        '<div class="pixel-font" style="font-size:0.5rem;color:var(--sunpetal);margin-top:8px">🏪 FISH MARKET</div><div>' + fmHtml + '</div></div>';
-
-      // DNES first, then the bait and the shed tables; the history and the Marvels fold away.
-      const fishDetails = (key, title, inner, dflt) => '<details class="pixel-panel" style="padding:8px 12px;margin-bottom:12px"' +
-        ((key in _fishOpen ? _fishOpen[key] : dflt) ? " open" : "") + ' ontoggle="_fishOpen[\'' + key + '\']=this.open">' +
-        '<summary class="pixel-font" style="font-size:0.6rem;color:var(--sunpetal);cursor:pointer">' + title + '</summary><div style="margin-top:8px">' + inner + '</div></details>';
-      h = h.slice(0, _mHist0) + dnesHtml + h.slice(_mHist1, _mMarv0) +
-        fishDetails("marv", "🗺️ MARINE MARVELY — plánovač map a objednávka", h.slice(_mMarv0, _mMarv1), Object.keys(_fishPlan).length > 0) +
-        fishDetails("hist", "📜 HISTORIE — co tě rybaření stálo, ceny ryb, poklady", h.slice(_mHist0, _mHist1) + h.slice(_mMarv1, _mTreas1), false) +
-        h.slice(_mTreas1);
-      h += '<div class="footer"><button class="refresh-btn" onclick="_fishData=null;_fishErr=null;_fishLvl=null;renderFishing()">REFRESH</button></div>';
-      app.innerHTML = h;
+    // FISHING: every panel is a widget (widgets/fishing.mjs, fishing-age-now.mjs) over _fishModelNow();
+    // the Marvels and the history fold away as before.
+    function renderFishing() {
+      const app = document.getElementById("app");
+      _fishMemo = null;
+      const boosts = { moon: _fishMoon, helm: _fishHelm, guardian: _fishGuardian };
+      _wSeedOpts("fishing-marvels", boosts);
+      _wSeedOpts("fishing-order", boosts);
+      const model = _fishModelNow();
+      const head = _wPageHead("🎣 Fishing", `Farm #${escHTML(FARM_ID)} · what to cast, what to age, what baits and map pieces cost`);
+      window._wRerender = renderFishing; window._wRefresh = () => { _fishData = null; _fishErr = null; _fishLvl = null; renderFishing(); };
+      if (model && model.error) {
+        app.innerHTML = head + '<div class="w-card w-error">Could not load the fishing history (' + escHTML(model.error) + ").</div>";
+        return;
+      }
+      if (!model) {
+        app.innerHTML = head + '<div class="w-card v-dim">Reading your fishing history from the raw snapshot diffs…</div>';
+        return;
+      }
+      if (typeof __widgets === "undefined") { app.innerHTML = head + _wMissing("Fishing"); return; }
+      const fresh = __wFresh(__store.peek({ res: "farm", farm: FARM_ID }));
+      const data = { farm: _fishFarm, leveling: _fishLvl || null };
+      const w = (type) => __widgets.renderPage(type, { data, ctx: _wCtx(type), fresh });
+      // the "fishing-age-now" widget: free fish, then the surplus beyond twice what the partner
+      // matches, then (when no baits are being made) the rest — on this page's plan and worm
+      const ageHtml = __widgets.renderPage("fishing-age-now", { data,
+        ctx: Object.assign(_wCtx("fishing-age-now"), { lvPlan: model.lvPlan, bestWorm: model.today.bestW.worm }), fresh });
+      const fold = (key, title, inner, dflt) => '<details class="w-fold"' + ((key in _fishOpen ? _fishOpen[key] : dflt) ? " open" : "") +
+        ' ontoggle="_fishOpen[\'' + key + '\']=this.open"><summary>' + title + '</summary>' + inner + '</details>';
+      app.innerHTML = head + w("fishing-today") + ageHtml + w("fishing-bait") + w("fishing-safe-age") +
+        fold("marv", "🗺️ Marine Marvels — map planner and the order", w("fishing-marvels") + w("fishing-order"), model.marvelPlanned) +
+        fold("hist", "📜 History — what fishing cost you, fish prices, treasure",
+          w("fishing-cost") + w("fishing-per-fish") + w("fishing-guaranteed") + w("fishing-treasure"), false) +
+        '<div class="v-note" style="text-align:center">Catch rates and costs are YOUR history, not published drop tables. Guaranteed-catch pairs and map-piece chances are the game\'s published values; prices are live p2p.</div>';
+    }
+    // What the FISHING widgets need from the page: the model (for the copy's options; on a board it
+    // starts the history fetch and repaints when it lands) and the icons.
+    for (const t of ["fishing-today", "fishing-bait", "fishing-safe-age", "fishing-marvels", "fishing-order",
+      "fishing-cost", "fishing-per-fish", "fishing-guaranteed", "fishing-treasure"]) {
+      _wCtxMap[t] = () => ({ model: (opts) => _fishModelNow(opts), icon: _wIcon });
     }
 
     /* ═══════════════════════════════════════════════════════════════════
@@ -24637,7 +24340,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
       const inputs = levelingInputsWithBook(d.inputs, book);
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem("sfl_leveling") || "null"); } catch (e) { saved = null; }
-      window._lvl = { farm, inputs, book, front: null, showAll: false, ...levelingInit(farm, inputs, saved) };
+      window._lvl = { farm, inputs, book, front: null, ...levelingInit(farm, inputs, saved) };
       app.innerHTML = head + `<div id="lvl-body"></div>`;
       _lvlRender();
     }
@@ -24679,7 +24382,6 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
         _lvlRender();
       }, 30);
     }
-    function _lvlShowAll(on) { window._lvl.showAll = on; _lvlRender(); }
     // Compact FLOWER: 950, 1.2k, 14k.
     const lvlK = (v) => {
       if (!Number.isFinite(v)) return v > 0 ? "∞" : v < 0 ? "−∞" : "—";
@@ -24760,7 +24462,7 @@ ${planCapped ? `<div style="font-size:0.5rem;color:var(--sunpetal);margin-top:8p
 
       // ── the widgets, on the page's own state; a ladder row click sets the target ──
       window._wRerender = _lvlRender; window._wRefresh = renderLeveling;
-      const state = { farm: L.farm, inputs: L.inputs, book: L.book, cfg: c, free, plan, bare, impacts, ladder, steps: L.steps, front: L.front, showAll: L.showAll };
+      const state = { farm: L.farm, inputs: L.inputs, book: L.book, cfg: c, free, plan, bare, impacts, ladder, steps: L.steps, front: L.front };
       const fresh = __wFresh(__store.peek({ res: "leveling", farm: FARM_ID }));
       const wctx = { state, interactive: true, icon: _wIcon };
       const w = (type) => __widgets.renderPage(type, { data: { farm: L.farm }, ctx: wctx, fresh });
