@@ -2901,6 +2901,8 @@
         frame.bindFrames(document.body, (id, action, value, e) => (action === "pin" && window._wPinMenu
           ? window._wPinMenu(id, null, e && e.target) : window.__widgets.handle(id, action, value)));
       }).catch((e) => console.error("[widgets] did not load", e));
+    const _iconsReady = import("/app/item-icons.mjs").then((m) => { window.__itemIcons = m.ITEM_ICONS; })
+      .catch((e) => console.error("[icons] did not load", e));
     Promise.all([import("/core/browser-engine.mjs"), import("/app/store.mjs")]).then(async ([engine, store]) => {
       // The last good results of the shared resources survive a reload (sfl_wcache:*, never synced):
       // the board paints them at once with their age and refreshes them in the background.
@@ -2908,6 +2910,7 @@
       try { _persist = window.localStorage; } catch (e) { _persist = null; }
       window.__store = store.createStore({ persist: _persist });
       await _widgetsReady;
+      await _iconsReady;
       window.__engine = engine;
       for (const [k, v] of Object.entries(engine)) if (!(k in window)) window[k] = v;
       window.dispatchEvent(new Event("sfl-engine"));
@@ -12192,6 +12195,9 @@
       // Pet NFTs ("Pet #262") have real per-token images on the SFL pet CDN (sfl.world only has a generic placeholder).
       const pet = /^Pet #(\d+)$/.exec(name);
       if (pet) return `https://pets.sunflower-land.com/marketplace/${pet[1]}_animated.webp`;
+      // The game's own image map (app/item-icons.mjs, generated from its images.ts): sfl.world answers
+      // names it does not know with a "?" image (status 200, so onerror never fires).
+      if (window.__itemIcons && window.__itemIcons[name]) return window.__itemIcons[name];
       if (ITEM_IMAGE_MAP[name]) return ITEM_IMAGE_MAP[name];
       // Wearables: pull straight from the game repo via jsDelivr (covers brand-new ones sfl.world hasn't indexed).
       const wid = (typeof WEARABLE_IDS !== "undefined") && WEARABLE_IDS[name];
