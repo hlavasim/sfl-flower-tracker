@@ -580,11 +580,11 @@ test("section=wishlist handles a category with nothing listed, and an unknown on
     assert.ok(empty, "a category with no listings still appears rather than vanishing");
     assert.equal(empty.floor, 0);
     assert.equal(empty.perDay, null, "unpriceable → null, which the page renders as ?");
-    assert.match(empty.name, /nic v prodeji/);
+    assert.match(empty.name, /nothing for sale/);
 
     const bogus = rows.find((r) => r.key === "budboost:Nonsense");
     assert.ok(bogus, "an unknown filter does not throw");
-    assert.match(bogus.name, /neznámý boost/);
+    assert.match(bogus.name, /unknown boost/);
   } finally {
     globalThis.fetch = orig;
   }

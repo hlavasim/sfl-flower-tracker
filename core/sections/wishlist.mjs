@@ -146,7 +146,7 @@ export function buildWishlistSection(farm, nftData, settings = {}) {
         key, collection: "budboost", id: hit ? hit.bud.id : null,
         name: hit
           ? `🌱 ${filter} → ${budLabel(hit.bud, cats)}`
-          : `🌱 ${filter}${known ? " — nic v prodeji" : " — neznámý boost"}`,
+          : `🌱 ${filter}${known ? " — nothing for sale" : " — unknown boost"}`,
         floor: hit ? hit.floor : 0,
         lastSale: 0, supply: 0,
         boost: cats.length ? `+${cats.join("+")}` : "",
@@ -198,7 +198,7 @@ export function buildWishlistSection(farm, nftData, settings = {}) {
     catalog.push({
       name: `${filter} (bud boost)`, key: `budboost:${filter}`, collection: "budboost",
       id: null, floor: hit ? hit.floor : 0, lastSale: 0, supply: n,
-      boost: n ? `nejlevnější z ${n} v prodeji` : "nic v prodeji",
+      boost: n ? `the cheapest of ${n} for sale` : "nothing for sale",
       owned: false, active: false,
     });
   }
