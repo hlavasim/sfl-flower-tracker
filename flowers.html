@@ -5578,7 +5578,7 @@
             Created by 0xStableFarmer - #155498<br>
             Based on data from <a href="https://sfl.world" target="_blank" style="color:var(--sunpetal);text-decoration:none">sfl.world</a><br>
             <a href="/swagger.html" target="_blank" style="color:var(--sunpetal);text-decoration:none">API docs</a><br>
-            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.54</span>
+            <span class="changelog-toggle" onclick="toggleChangelog()"><span id="changelog-arrow">▶</span> v6.56</span>
             <div id="changelog-content" class="changelog-content" style="display:none">
               ${renderChangelog()}
             </div>
@@ -5605,6 +5605,12 @@
 
     function renderChangelog() {
       const log = [
+        { ver: "v6.56", items: [
+          { t: "fix", text: "WORLD: the first visit after each new daily dump no longer times out while the statistics are being counted (that one query may now take up to 55 s; everything else keeps the 20 s limit)." },
+        ] },
+        { ver: "v6.55", items: [
+          { t: "fix", text: "WORLD loads again: its dataset statistics took longer than the database allows and the whole page stayed empty. They are now counted in one pass, once per daily dump, and served from the cache." },
+        ] },
         { ver: "v6.54", items: [
           { t: "fix", text: "TICKETY loads again: a Pig bounty (Cave Dwellers) crashed the ticket model, so the page failed whenever your recorded weeks were sent. Pigs are now priced by their Slop feed; an animal the model does not know yet is left unpriced instead of breaking the page." },
         ] },
