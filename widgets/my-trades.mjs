@@ -6,6 +6,7 @@
 //   🧾 Recent trades: date, side, price, quantity, total and the counterparty.
 import { esc, icon, kf, sflIcon, pausedNotice } from "./market-common.mjs";
 import { kpis, bar, pill } from "../ui/viz.mjs";
+import { big, meter, rows as gRows } from "../ui/glance.mjs";
 
 const need = (farmId) => ({ trades: { res: "myTrades", farm: farmId } });
 const signed = (v) => `${(v || 0) >= 0 ? "+" : ""}${kf(v || 0)}`;
@@ -87,4 +88,53 @@ export const myTradesRecent = {
       dateText: new Date(tr.date).toLocaleDateString("en-GB") }));
     return { rows, footer: "", empty: "No trades yet." };
   },
+};
+
+// ── iPhone glance faces ──
+const gTone = (v) => ((v || 0) >= 0 ? "ok" : "bad");
+// totals: S = the cash net with the sold share of the volume as a bar; M = bought / sold / trades beside it
+myTradesSummary.sizes = ["s", "m"];
+myTradesSummary.size = "s";
+myTradesSummary.glance = ({ trades: d } = {}, ctx = {}, opts = {}, size = "s") => {
+  if (!d || !d.totals) return { empty: NO_DATA };
+  const t = d.totals;
+  if (!t.tradeCount) return { empty: "No trades yet." };
+  const bought = t.boughtSfl || 0, sold = t.soldSfl || 0;
+  const head = big(signed(t.cashNet), { unit: " SFL", tone: gTone(t.cashNet), cap: `cash net · ${t.tradeCount} trades` }) +
+    meter(bought + sold > 0 ? (sold / (bought + sold)) * 100 : 0, gTone(t.cashNet));
+  if (size === "s") return { html: head };
+  return { html: `<div class="g-split"><div>${head}</div>` + gRows([
+    { name: "Bought", sub: `${t.buyCount || 0}×`, value: kf(bought), tone: "bad" },
+    { name: "Sold", sub: `${t.sellCount || 0}×`, value: kf(sold), tone: "ok" }]) + `</div>` };
+};
+
+// per item: S = the realized P&L over all items; M / L = the items that moved the most SFL
+myTradesItems.sizes = ["s", "m", "l"];
+myTradesItems.size = "m";
+myTradesItems.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = myTradesItems.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const realized = out.rows.reduce((s, r) => s + (r.realized || 0), 0), n = out.rows.filter((r) => r.realized != null).length;
+  const head = big(signed(realized), { unit: " SFL", tone: gTone(realized), cap: `realized on ${n} of ${out.rows.length} items` });
+  if (size === "s") return { html: head };
+  const list = gRows(out.rows.slice().sort((a, b) => Math.abs(b.cashNet || 0) - Math.abs(a.cashNet || 0)).slice(0, size === "m" ? 3 : 6)
+    .map((r) => ({ icon: r.iconHtml, name: r.name || `#${r.itemId}`, sub: `${r.boughtQty || 0} bought · ${r.soldQty || 0} sold`, value: signed(r.cashNet), tone: gTone(r.cashNet) })));
+  return { html: (size === "l" ? head : "") + list };
+};
+
+// recent: S = the latest trade; M / L = the latest trades
+myTradesRecent.sizes = ["s", "m", "l"];
+myTradesRecent.size = "m";
+myTradesRecent.glance = (data = {}, ctx = {}, opts = {}, size = "s") => {
+  const out = myTradesRecent.build(data, ctx, opts);
+  if (!out.rows.length) return { empty: out.empty };
+  const list = out.rows.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+  const amt = (r) => `${r.side === "buy" ? "−" : "+"}${kf(r.sfl)}`;
+  if (size === "s") {
+    const r = list[0];
+    return { html: `<div class="g-hero">${r.iconHtml}</div>` + big(amt(r), { unit: " SFL", tone: r.side === "buy" ? "bad" : "ok",
+      cap: `${r.side === "buy" ? "bought" : "sold"} ${r.name || "#" + r.itemId} · ${r.dateText}` }) };
+  }
+  return { html: gRows(list.slice(0, size === "m" ? 3 : 7).map((r) => ({ icon: r.iconHtml, name: r.name || `#${r.itemId}`,
+    sub: `${r.side === "buy" ? "bought" : "sold"} · ${r.dateText}`, value: amt(r), tone: r.side === "buy" ? "bad" : "ok" }))) };
 };

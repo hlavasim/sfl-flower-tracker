@@ -101,3 +101,38 @@ test("page wiring: FLIPS and MY TRADES render widgets, no Czech left", () => {
   assert.match(SRC, /\["my-trades-summary", "my-trades-items", "my-trades-recent"\]\s*\.map\(\(t\) => __widgets\.renderPage\(t, /);
   assert.doesNotMatch(SRC, /POSLEDNÍ OBCHODY|boostovaných NFT|Marketplace API omezeno/);
 });
+
+test("📱 glance: trade totals S = cash net + sold-share bar; M = bought / sold beside it; no trades → empty", () => {
+  const s = myTradesSummary.glance({ trades: MT }, ctx, {}, "s").html;
+  assert.match(s, /<div class="g-big g-ok">\+301<small> SFL<\/small><\/div><div class="g-cap">cash net · 5 trades<\/div><div class="g-meter"><i class="g-ok" style="width:55%">/);
+  const m = myTradesSummary.glance({ trades: MT }, ctx, {}, "m").html;
+  assert.match(m, /^<div class="g-split">.*Bought<div>3×<\/div><\/div><span class="g-v g-bad">1\.5k<.*Sold<div>2×<\/div><\/div><span class="g-v g-ok">1\.8k</);
+  assert.match(myTradesSummary.glance({ trades: null }, ctx, {}, "s").empty, /unavailable/);
+  assert.strictEqual(myTradesSummary.glance({ trades: { totals: { tradeCount: 0 } } }, ctx, {}, "s").empty, "No trades yet.");
+});
+
+test("📱 glance: per item S = realized P&L; M = biggest cash movers; recent S = the latest trade, M = the latest rows", () => {
+  assert.match(myTradesItems.glance({ trades: MT }, ctx, {}, "s").html, /<div class="g-big g-ok">\+300<small> SFL<\/small><\/div><div class="g-cap">realized on 1 of 2 items<\/div>/);
+  const m = myTradesItems.glance({ trades: MT }, ctx, {}, "m").html;
+  assert.match(m, /Bad &lt;Hat&gt;<div>0 bought · 1 sold<\/div><\/div><span class="g-v g-ok">\+1\.0k<.*Gnome<div>2 bought · 1 sold<\/div><\/div><span class="g-v g-bad">-200</);
+  assert.match(myTradesItems.glance({ trades: MT }, ctx, {}, "l").html, /^<div class="g-big g-ok">\+300.*g-rows/);
+  assert.strictEqual(myTradesItems.glance({ trades: { ...MT, items: [] } }, ctx, {}, "s").empty, "No trades yet.");
+  const rs = myTradesRecent.glance({ trades: MT }, ctx, {}, "s").html;
+  assert.match(rs, /<div class="g-hero"><img data-i="Gnome"><\/div><div class="g-big g-ok">\+800<small> SFL<\/small><\/div><div class="g-cap">sold Gnome · 30\/08\/2026<\/div>/);
+  assert.match(myTradesRecent.glance({ trades: MT }, ctx, {}, "m").html, /sold · 30\/08\/2026.*g-ok">\+800<.*bought · 20\/08\/2026.*g-bad">−1\.0k</);
+  assert.match(myTradesRecent.glance({ trades: null }, ctx, {}, "s").empty, /unavailable/);
+});
+
+test("📱 glance: flips S = the top flip by score; M = best flips; overview S = healthy margins, M = the best one", () => {
+  const s = flipTable.glance({ flips: FLIPS }, ctx, {}, "s").html;
+  assert.match(s, /<div class="g-hero"><img data-i="Gnome"><\/div><div class="g-big g-ok">26%<\/div><div class="g-cap">Gnome · net 26<\/div>/);
+  const m = flipTable.glance({ flips: FLIPS }, ctx, {}, "m").html;
+  assert.match(m, /Gnome<div>100→140 · net 26<\/div><\/div><span class="g-v g-ok">26%<.*Hat<div>10→11 · net -0\.55<\/div><\/div><span class="g-v g-bad">-5%</);
+  const old = { ...FLIPS, items: FLIPS.items.map((i) => ({ ...i, updatedAt: "2026-09-01T00:00:00Z" })) };
+  assert.match(flipTable.glance({ flips: old }, ctx, {}, "s").html, /⏸ paused/);
+  assert.match(flipTable.glance({ flips: old }, ctx, {}, "l").html, /g-foot">⏸ collection paused/);
+  assert.strictEqual(flipTable.glance({ flips: { count: 0, items: [] } }, ctx, {}, "s").empty, "No NFTs with both a bid and an ask.");
+  assert.match(flipSummary.glance({ flips: FLIPS }, ctx, {}, "s").html, /<div class="g-big g-ok">1<small>\/2<\/small><\/div><div class="g-cap">margin ≥ 15 %<\/div>/);
+  assert.match(flipSummary.glance({ flips: FLIPS }, ctx, {}, "m").html, /^<div class="g-split">.*Gnome<div>best margin<\/div>.*Net ≤ 0<\/div><span class="g-v g-bad">1</);
+  assert.match(flipSummary.glance({ flips: null }, ctx, {}, "s").empty, /did not load/);
+});
