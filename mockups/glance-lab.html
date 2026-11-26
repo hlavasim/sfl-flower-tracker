@@ -76,7 +76,7 @@ html += `</table>`;
 for (const { title, m } of MODELS) {
   const looks = looksFor(m);
   html += `<h2>${title} — ${looks.length} looks</h2><div class="sub">Desktop board, 8 columns</div>` + board(m, title, looks, { cols: 8, cell: 170 }) +
-    `<div class="sub">Phone, 2 columns (wide looks switch to their narrow twin)</div><div class="phone">` + board(m, title, looks, { cols: 2, cell: 165 }) + `</div>`;
+    `<div class="sub">Phone, 2 columns (wide looks switch to their narrow twin)</div><div class="phone">` + board(m, title, looksFor(m, { cols: 2 }), { cols: 2, cell: 165 }) + `</div>`;
 }
 document.getElementById("out").innerHTML = html;
 // the automatic checks: overflow and text under 11 px

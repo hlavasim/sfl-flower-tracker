@@ -36,8 +36,11 @@ function ringSvg(p, t = "ok") {
 // The ring sits in the top-right corner of the box the head is in (the card, or its half of a
 // split), never next to the number wherever that ends up; top = the head opens the box, so its text
 // keeps clear of the ring.
-function headBlock(h, { ring = true, big = "", top = false } = {}) {
+// meter = a split or dashboard: the ring's share becomes a bar under the number instead.
+function headBlock(h, { ring = true, big = "", top = false, meter = false } = {}) {
   if (!h) return "";
+  if (meter && h.ring != null && h.meter == null) h = { ...h, meter: h.ring, meterTone: h.ringTone || "ok" };
+  if (meter) ring = false;
   return (ring && h.ring != null ? `<div class="gx-corner">${ringSvg(h.ring, h.ringTone || "ok")}</div>` : "") +
     `<div class="gx-head${big ? ` gx-head-${big}` : ""}${top && ring && h.ring != null ? " gx-head-top" : ""}">` +
     `<div class="gx-num${tone(h.tone)}">${esc(h.value)}${h.unit ? `<small>${esc(h.unit)}</small>` : ""}</div>` +
@@ -70,7 +73,8 @@ function iconsBlock(items, cap, cols, now) {
       (t ? `<small class="gx-tag${tone(t.tone)}">${t.html}</small>` : "") + `</div>`;
   }).join("") + (over ? `<div class="gx-cell gx-more"><span>+${items.length - shown.length}</span></div>` : "") + `</div>`;
 }
-function tilesBlock(tiles, n, cols) {
+function tilesBlock(tiles, n, cols, asList = false) {
+  if (asList) return `<div class="gx-numlist">` + tiles.slice(0, n).map((t) => `<div><span>${esc(t.label)}</span><b>${esc(t.value)}</b></div>`).join("") + `</div>`;
   return `<div class="gx-tiles" style="--c:${cols}">` + tiles.slice(0, n).map((t) =>
     `<div><span>${esc(t.label)}</span><b>${esc(t.value)}</b>${t.sub ? `<small>${esc(t.sub)}</small>` : ""}</div>`).join("") + `</div>`;
 }
@@ -90,7 +94,7 @@ function sparkSvg(values, t = "ok") {
   return `<svg class="gx-spark${tone(t)}" viewBox="0 0 300 46" preserveAspectRatio="none"><path d="${line} L300 46 L0 46Z" class="g-spark-fill"/><path d="${line}" class="g-spark-line"/></svg>`;
 }
 function gaugeBlock(h) {
-  return `<div class="gx-gauge">${ringSvg(h.ring, h.ringTone || "ok")}<div class="gx-gauge-in"><b class="${tone(h.tone).trim()}">${esc(h.value)}${h.unit ? `<small>${esc(h.unit)}</small>` : ""}</b></div></div>` +
+  return `<div class="gx-gauge">${ringSvg(h.ring, h.ringTone || "ok")}<div class="gx-gauge-in"><b class="${tone(h.tone).trim()}">${esc(h.value)}</b>${h.unit ? `<small>${esc(h.unit)}</small>` : ""}</div></div>` +
     (h.cap ? `<div class="gx-cap gx-center">${esc(h.cap)}</div>` : "");
 }
 function nextBlock(it, now, wide) {
@@ -116,46 +120,44 @@ export const TEMPLATES = [
   // 1×1 — one piece of information
   T("number", "1x1", "number", ["head"], null, (m) => headBlock(m.head), { name: "Number" }),
   T("gauge", "1x1", "gauge", ["ring"], null, (m) => gaugeBlock(m.head), { name: "Gauge" }),
-  T("hero", "1x1", "hero", ["head", "icon"], null, (m) => `<div class="gx-hero"><span class="gx-ic gx-ic-xl">${m.head.hero || iconsOf(m)[0].icon}</span></div>${headBlock(m.head, { ring: false })}`, { name: "Hero" }),
   T("next", "1x1", "next", ["items"], null, (m, now) => nextBlock(it(m)[0], now, false), { name: "Next up" }),
   T("icons-1", "1x1", "icons", ["icons"], () => 6, (m, now) => iconsBlock(iconsOf(m), 6, iconCols(Math.min(6, iconsOf(m).length), 1, 1), now), { fill: GRID, name: "Icons" }),
   T("list-1", "1x1", "list", ["items"], () => 3, (m, now) => rowsBlock(it(m), 3, now, 1, true), { name: "List" }),
   T("lines-1", "1x1", "lines", ["items"], () => 4, (m, now) => linesBlock(it(m), 4, now), { name: "Lines" }),
-  T("tiles-1", "1x1", "tiles", ["tiles"], () => 4, (m) => tilesBlock(tl(m), 4, 2), { fill: GRID, name: "Tiles" }),
+  T("tiles-1", "1x1", "tiles", ["tiles3"], () => 4, (m) => tilesBlock(tl(m), 4, 1, true), { fill: GRID, name: "Numbers" }),
   // 2×1 — the number with one more layer
-  T("number-list-2", "2x1", "number-list", ["head", "items"], () => 3, (m, now) => `<div class="gx-split"><div>${headBlock(m.head)}</div>${rowsBlock(it(m), 3, now, 1, true)}</div>`, { name: "Number + list" }),
-  T("number-tiles-2", "2x1", "number-tiles", ["head", "tiles"], () => 4, (m) => `<div class="gx-split"><div>${headBlock(m.head)}</div>${tilesBlock(tl(m), 4, 2)}</div>`, { fill: GRID, name: "Number + tiles" }),
-  T("strip-2", "2x1", "strip", ["icons"], () => 5, (m, now) => iconsBlock(iconsOf(m), 5, Math.min(5, iconsOf(m).length) <= 4 ? Math.min(4, iconsOf(m).length) : 5, now), { fill: 0.6, name: "Icon strip" }),
+  T("number-list-2", "2x1", "number-list", ["head", "items"], () => 3, (m, now) => `<div class="gx-split"><div>${headBlock(m.head, { meter: true })}</div>${rowsBlock(it(m), 3, now, 1, true)}</div>`, { name: "Number + list" }),
+  T("number-tiles-2", "2x1", "number-tiles", ["head", "tiles"], () => 4, (m) => `<div class="gx-split"><div>${headBlock(m.head, { meter: true })}</div>${tilesBlock(tl(m), 4, 2)}</div>`, { fill: GRID, name: "Number + tiles" }),
+  T("strip-2", "2x1", "strip", ["icons"], () => 6, (m, now) => iconsBlock(iconsOf(m), 6, Math.min(6, iconsOf(m).length), now), { fill: 0.6, name: "Icon strip" }),
   T("next-2", "2x1", "next-list", ["items"], () => 3, (m, now) => `<div class="gx-split">${nextBlock(it(m)[0], now, true)}${rowsBlock(it(m).slice(1), 2, now, 1, true)}</div>`, { name: "Next up + list" }),
-  T("list-2", "2x1", "list", ["items"], () => 6, (m, now) => rowsBlock(it(m), 6, now, 2), { name: "List" }),
+  T("list-2", "2x1", "list", ["items"], () => 6, (m, now) => rowsBlock(it(m), 6, now, 2, true), { name: "List" }),
   T("chart-2", "2x1", "chart", ["head", "series"], null, (m) => `<div class="gx-split gx-split-chart"><div>${headBlock(m.head, { ring: false })}</div>${sparkSvg(m.series)}</div>`, { name: "Chart" }),
-  T("bars-2", "2x1", "bars", ["pct"], () => 3, (m, now) => barsBlock(it(m), 3, now), { name: "Bars" }),
   // 1×2 — a column
-  T("number-list-t", "1x2", "number-list", ["head", "items"], () => 5, (m, now) => headBlock(m.head, { top: true }) + rowsBlock(it(m), 5, now, 1, true), { name: "Number + list" }),
+  T("number-list-t", "1x2", "number-list", ["head", "items"], () => 6, (m, now) => headBlock(m.head, { top: true }) + rowsBlock(it(m), 6, now, 1, true), { name: "Number + list" }),
   T("icons-t", "1x2", "icons", ["icons"], () => 8, (m, now) => iconsBlock(iconsOf(m), 8, 2, now), { fill: GRID, name: "Icons" }),
-  T("bars-t", "1x2", "bars", ["pct"], () => 6, (m, now) => barsBlock(it(m), 6, now), { name: "Bars" }),
-  T("lines-t", "1x2", "lines", ["items"], () => 10, (m, now) => linesBlock(it(m), 10, now), { name: "Lines" }),
+  T("bars-t", "1x2", "bars", ["pct"], () => 7, (m, now) => barsBlock(it(m), 7, now), { name: "Bars" }),
+  T("lines-t", "1x2", "lines", ["items"], () => 12, (m, now) => linesBlock(it(m), 12, now), { name: "Lines" }),
   T("tiles-t", "1x2", "tiles", ["tiles"], () => 6, (m) => tilesBlock(tl(m), 6, 2), { fill: GRID, name: "Tiles" }),
   // 2×2 — the overview
-  T("overview-4", "2x2", "overview", ["head", "items", "tiles"], () => 4, (m, now) => headBlock(m.head, { top: true }) + tilesBlock(tl(m), 3, 3) + rowsBlock(it(m), 4, now), { fill: 0.5, name: "Overview" }),
+  T("overview-4", "2x2", "overview", ["head", "items", "tiles"], () => 3, (m, now) => headBlock(m.head, { top: true }) + tilesBlock(tl(m), 3, 3) + rowsBlock(it(m), 3, now), { fill: 0.5, name: "Overview" }),
   T("icons-4", "2x2", "icons", ["icons"], () => 16, (m, now) => iconsBlock(iconsOf(m), 16, iconCols(Math.min(16, iconsOf(m).length), 2, 2), now), { fill: GRID, name: "Icons" }),
   T("chart-4", "2x2", "chart-list", ["head", "series"], () => 3, (m, now) => headBlock(m.head, { ring: false }) + sparkSvg(m.series) + rowsBlock(it(m), 3, now), { fill: 0, name: "Chart + list" }),
   T("list-4", "2x2", "list", ["items"], () => 8, (m, now) => rowsBlock(it(m), 8, now), { name: "List" }),
   T("gauge-list-4", "2x2", "gauge-list", ["ring", "items"], () => 5, (m, now) => `<div class="gx-split gx-split-gauge">${`<div>${gaugeBlock(m.head)}</div>`}${rowsBlock(it(m), 5, now, 1, true)}</div>`, { name: "Gauge + list" }),
-  T("bars-4", "2x2", "number-bars", ["head", "pct"], () => 5, (m, now) => headBlock(m.head, { top: true }) + barsBlock(it(m), 5, now), { name: "Number + bars" }),
+  T("bars-4", "2x2", "number-bars", ["head", "pct"], () => 6, (m, now) => headBlock(m.head, { top: true }) + barsBlock(it(m), 6, now), { name: "Number + bars" }),
   // 4×1 — a wide band (a narrow board shows its twin)
   T("strip-w", "4x1", "strip", ["icons"], () => 8, (m, now) => iconsBlock(iconsOf(m), 8, Math.min(8, iconsOf(m).length), now), { fill: 0.6, narrow: "icons-4", name: "Icon strip" }),
-  T("number-list-w", "4x1", "number-list", ["head", "items"], () => 6, (m, now) => `<div class="gx-split gx-split-w">${`<div>${headBlock(m.head)}</div>`}${rowsBlock(it(m), 6, now, 2)}</div>`, { narrow: "number-list-t", name: "Number + list" }),
+  T("number-list-w", "4x1", "number-list", ["head", "items"], () => 6, (m, now) => `<div class="gx-split gx-split-w">${`<div>${headBlock(m.head, { meter: true })}</div>`}${rowsBlock(it(m), 6, now, 2)}</div>`, { narrow: "number-list-t", name: "Number + list" }),
   T("tiles-w", "4x1", "tiles", ["tiles"], () => 6, (m) => tilesBlock(tl(m), 6, Math.min(6, tl(m).length)), { fill: 0.6, narrow: "tiles-t", name: "Tiles" }),
   T("chart-w", "4x1", "chart", ["head", "series"], null, (m) => `<div class="gx-split gx-split-w gx-split-chart"><div>${headBlock(m.head, { ring: false })}</div>${sparkSvg(m.series)}</div>`, { narrow: "chart-4", name: "Chart" }),
   T("list-w", "4x1", "list", ["items"], () => 9, (m, now) => rowsBlock(it(m), 9, now, 3), { narrow: "list-4", name: "List" }),
   // 1×4 — a tall column
-  T("list-tall", "1x4", "list", ["items"], () => 12, (m, now) => rowsBlock(it(m), 12, now, 1, true), { narrow: null, name: "List" }),
+  T("list-tall", "1x4", "list", ["items"], () => 17, (m, now) => rowsBlock(it(m), 17, now, 1, true), { narrow: null, name: "List" }),
   T("icons-tall", "1x4", "icons", ["icons"], () => 16, (m, now) => iconsBlock(iconsOf(m), 16, 2, now), { fill: GRID, name: "Icons" }),
   // 4×2 / 2×4 — everything
-  T("dashboard", "4x2", "dashboard", ["head", "items", "tiles"], () => 8, (m, now) => `<div class="gx-dash"><div>${headBlock(m.head, { top: true })}${tilesBlock(tl(m), 4, 2)}${m.series ? sparkSvg(m.series) : ""}</div>${rowsBlock(it(m), 8, now, 2)}</div>`, { fill: 0.75, narrow: "overview-4", name: "Dashboard" }),
+  T("dashboard", "4x2", "dashboard", ["head", "items", "tiles", "series"], () => 8, (m, now) => `<div class="gx-dash"><div>${headBlock(m.head, { meter: true })}${tilesBlock(tl(m), 4, 2)}${m.series ? sparkSvg(m.series) : ""}</div>${rowsBlock(it(m), 8, now, 1, true)}</div>`, { fill: 0.75, narrow: "overview-4", name: "Dashboard" }),
   T("icons-wall", "4x2", "icons", ["icons"], () => 32, (m, now) => iconsBlock(iconsOf(m), 32, 8, now), { fill: GRID, narrow: "icons-4", name: "Icon wall" }),
-  T("long-list", "2x4", "list", ["items"], () => 18, (m, now) => headBlock(m.head, { top: true }) + rowsBlock(it(m), 16, now) + foot(m), { name: "Long list" }),
+  T("long-list", "2x4", "list", ["items"], () => 15, (m, now) => headBlock(m.head, { top: true }) + rowsBlock(it(m), 15, now) + foot(m), { name: "Long list" }),
 ];
 export const TEMPLATE_IDS = TEMPLATES.map((t) => t.id);
 const byId = new Map(TEMPLATES.map((t) => [t.id, t]));
@@ -178,6 +180,7 @@ function has(m, need) {
   if (need === "icons") return iconsOf(m).length >= 2;
   if (need === "pct") return withPct(m).length >= 2;
   if (need === "tiles") return tl(m).length >= 2;
+  if (need === "tiles3") return tl(m).length >= 3;
   if (need === "series") return (m.series || []).length >= 2;
   return false;
 }
@@ -187,7 +190,7 @@ export const renderable = (t, m) => t.needs.every((n) => has(m, n));
 
 // The looks worth offering for this model: needs present, filled well, and showing more than any
 // smaller look of the same presentation. In catalogue order (by size).
-export function looksFor(m) {
+export function looksFor(m, { cols = 12 } = {}) {
   const out = [], seen = new Map();   // pres → the most things a look of it already shows
   for (const t of TEMPLATES) {
     if (!renderable(t, m)) continue;
@@ -202,7 +205,9 @@ export function looksFor(m) {
     seen.set(t.pres, Math.max(seen.get(t.pres) || 0, shown));
     out.push(t.id);
   }
-  return out;
+  if (cols >= 4) return out;
+  const twin = (id) => { const t = byId.get(id); return Number(t.size[0]) > cols && t.narrow ? t.narrow : id; };
+  return [...new Set(out.map(twin))].filter((id) => Number(byId.get(id).size[0]) <= cols);
 }
 
 // One look rendered: the template (or its narrow twin when the board is too narrow), falling back to
