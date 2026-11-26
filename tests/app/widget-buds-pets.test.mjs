@@ -7,7 +7,6 @@ import { petsSummary, petsNftCollection, petsMarket, petCards, petFetches, petPr
 import { WIDGETS } from "../../widgets/registry.mjs";
 import { renderTable } from "../../ui/table.mjs";
 import { buildBudsSection } from "../../core/sections/buds.mjs";
-import { renderLook, looksFor } from "../../ui/glance-templates.mjs";
 import { buildPetsSection } from "../../core/sections/pets.mjs";
 import { PET_FETCH_DATA } from "../../core/data/pets.mjs";
 import { petFetchYield } from "../../core/engine/pets.mjs";
