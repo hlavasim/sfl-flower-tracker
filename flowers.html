@@ -16221,7 +16221,8 @@
       const I = (n) => _wIcon(n);
       const P = (n) => (_fishPrices && _fishPrices[n]) || 0;
       const d = _fishData;
-      const rodP = P("Rod");
+      // the farm's rod: Reel Deal's coins off (once the coin rate is in), 0 with Ancient Rod worn
+      const rodP = farmRodCost(_fishFarm, P("Rod"), (_fishLvl && _fishLvl.inputs && _fishLvl.inputs.coinsPerSFL) || 0);
       /*
        * Casts are derived from BAIT, not from rods.
        *

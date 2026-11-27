@@ -127,6 +127,13 @@ test("Ancient Rod: casts need no Rod (castRod getRodCost = 0), so a cast costs o
   assert.ok(LEVELING_ITEMS.some((i) => i.name === "Ancient Rod" && i.kind === "wearable"));
 });
 
+test("Reel Deal ranks are catalogue rows; rank 3 over the farm's rank 1 cuts the rod's coins from ×0.5 to ×0.4", () => {
+  assert.deepStrictEqual(LEVELING_ITEMS.filter((i) => i.skill === "Reel Deal").map((i) => [i.name, i.rank]),
+    [["Reel Deal", 1], ["Reel Deal 2", 2], ["Reel Deal 3", 3]]);
+  const c = cfg(), a = plan(c), b = plan({ ...c, ticked: ["Reel Deal 3"] });
+  assert.ok(Math.abs(a.fish.castCost - b.fish.castCost - 20 * (0.5 - 0.4) / inputs.coinsPerSFL) < 1e-9);
+});
+
 test("target already reached: 0 days, 0 FLOWER", () => {
   const p = plan(cfg({ target: { ascension: 1, level: 1 } }));
   assert.equal(p.days, 0);

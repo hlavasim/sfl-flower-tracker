@@ -44,6 +44,7 @@ export const LEVELING_ITEMS = [
   ...skill("Fisherman's 10 Fold", "fishing", "+10/+18/+25 daily reels", 3),
   ...skill("More With Less", "fishing", "+10/+25/+50 daily reels", 3),
   ...skill("Fishy Feast", "fishing", "+20/30/40% fish XP", 3),
+  ...skill("Reel Deal", "fishing", "rod coins ×0.5/×0.45/×0.4", 3),
   // ── SŮL ──
   item("Salt Worker Gnome", "salt", C, "-30% salt node recovery, +2 salt per harvest"),
   item("Ascended Idol", "salt", C, "harvest salt without rakes"),

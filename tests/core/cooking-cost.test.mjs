@@ -7,7 +7,7 @@ import {
   computeSaltRakeCoinMult,
   computeFishYieldPerCast,
 } from "../../core/engine/cooking-cost.mjs";
-import { computeRodCostSFL, itemProductionCost, itemMarketValue, computeFishEffectiveCost, computeWaterTrapCostSFL } from "../../core/engine/item-value.mjs";
+import { computeRodCostSFL, itemProductionCost, itemMarketValue, computeFishEffectiveCost, computeWaterTrapCostSFL, farmRodCost } from "../../core/engine/item-value.mjs";
 
 const wrap = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url)));
 const farm = wrap.farm || wrap;
@@ -80,6 +80,24 @@ test("rod cost per cast = coins/rate + materials, Reel Deal halves the coin part
   const mats = p2p["Wood"] * 3 + p2p["Stone"] * 1;
   assert.ok(Math.abs(plain - (20 / COINS_PER_SFL + mats)) < 1e-9, `rod was ${plain}`);
   assert.ok(Math.abs(reel - (10 / COINS_PER_SFL + mats)) < 1e-9, `rod w/ Reel Deal was ${reel}`);
+});
+
+test("Reel Deal by rank: the rod's coins ×0.5 / ×0.45 / ×0.4 (bumpkinSkills.ts costMultiplier ranks)", () => {
+  const mats = p2p["Wood"] * 3 + p2p["Stone"] * 1;
+  for (const [rank, mult] of [[1, 0.5], [2, 0.45], [3, 0.4]]) {
+    const r = computeRodCostSFL(p2p, COINS_PER_SFL, { "Reel Deal": rank });
+    assert.ok(Math.abs(r - (20 * mult / COINS_PER_SFL + mats)) < 1e-9, `rank ${rank}: ${r}`);
+  }
+});
+
+test("farmRodCost: the page's Rod price less Reel Deal's coins; 0 with Ancient Rod worn", () => {
+  const bare = { bumpkin: { skills: {}, equipped: {} } };
+  assert.strictEqual(farmRodCost(bare, 0.08, 1000), 0.08);
+  const rd3 = { bumpkin: { skills: { "Reel Deal": 3 }, equipped: {} } };
+  assert.ok(Math.abs(farmRodCost(rd3, 0.08, 1000) - (0.08 - 20 * 0.6 / 1000)) < 1e-12);
+  assert.strictEqual(farmRodCost(rd3, 0.08, 0), 0.08, "no coin rate: the price as it is");
+  const ancient = { bumpkin: { skills: { "Reel Deal": 3 }, equipped: { tool: "Ancient Rod" } } };
+  assert.strictEqual(farmRodCost(ancient, 0.08, 1000), 0);
 });
 
 test("Salt prices off the rake cost and honours yield/coin-mult extras", () => {

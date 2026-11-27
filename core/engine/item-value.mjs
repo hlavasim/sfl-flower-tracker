@@ -4,6 +4,7 @@ import { PET_FETCH_DATA } from "../data/pets.mjs";
 import { CRAFTED_INGREDIENT_RECIPES, TREASURE_SELL_PRICES, COMPOST_RECIPES, CRUSTACEAN_RECIPES } from "../data/crafting.mjs";
 import { FISH_MARKET_RECIPES, FISH_BAIT_CATCH, FISH_DATA, FISH_TIER_MAP, BAIT_WORM_YIELD, FISHING_ROD_COST } from "../data/fishing.mjs";
 import { COOKING_INGREDIENTS, SALT_RAKE_COST, SALT_BASE_YIELD } from "../data/cooking.mjs";
+import { isWearableEquipped } from "../derive/items.mjs";
 
 // Trace sink for the item-value resolvers. When a caller passes a `trace` array as the
 // last argument, each traced function pushes ONE node per return path describing how
@@ -707,10 +708,28 @@ export function computeWaterTrapCostSFL(potName, p2pPrices, coinsPerSFL) {
   return coinSFL + matSFL;
 }
 
-// SFL rod cost per cast — Reel Deal skill applies to COIN part only (skill text: "-50% rod coin cost")
+// Reel Deal: the rod's coin price ×0.5 / ×0.45 / ×0.4 by rank (bumpkinSkills.ts costMultiplier ranks;
+// craftTool.ts applies it to the Rod's coins only). A skill saved as `true` is rank 1.
+const REEL_DEAL_RANKS = [0.5, 0.45, 0.4];
+function reelDealCoinMult(skills) {
+  const v = skills && skills["Reel Deal"];
+  const rank = Number(v) > 0 ? Number(v) : v ? 1 : 0;
+  return rank ? REEL_DEAL_RANKS[Math.min(rank, REEL_DEAL_RANKS.length) - 1] : 1;
+}
+
+// The rod one cast burns, for a farm, from a Rod price without its boosts (section=prices' tool cost):
+// 0 with Ancient Rod worn (castRod.ts getRodCost), else Reel Deal's share of the coins taken off
+// (no coin rate known: the price as it is).
+export function farmRodCost(farm, rodPrice, coinsPerSFL) {
+  if (farm && isWearableEquipped(farm, "Ancient Rod")) return 0;
+  const off = coinsPerSFL > 0 ? (FISHING_ROD_COST.coins * (1 - reelDealCoinMult(farm && farm.bumpkin && farm.bumpkin.skills))) / coinsPerSFL : 0;
+  return Math.max(0, (rodPrice || 0) - off);
+}
+
+// SFL rod cost per cast — Reel Deal skill applies to COIN part only
 export function computeRodCostSFL(p2pPrices, coinsPerSFL, skills) {
-  const reelDealCoinMult = (skills && skills["Reel Deal"]) ? 0.5 : 1;
-  const coinSFL = coinsPerSFL > 0 ? (FISHING_ROD_COST.coins * reelDealCoinMult) / coinsPerSFL : 0;
+  const reelDealCoinMult_ = reelDealCoinMult(skills);
+  const coinSFL = coinsPerSFL > 0 ? (FISHING_ROD_COST.coins * reelDealCoinMult_) / coinsPerSFL : 0;
   let matSFL = 0;
   for (const [m, q] of Object.entries(FISHING_ROD_COST.materials)) {
     matSFL += (p2pPrices[m] || 0) * q;

@@ -40,3 +40,7 @@ test("a worm+chum route carries its pair, which the order reads (r.pair.bait) â€
   assert.match(SRC, /out\.push\(\{ kind: "pair", pair, label: pair\.bait/);
   assert.match(SRC, /need\(r\.pair\.bait, c\.n, 0\);/);
 });
+
+test("the rod per cast is the farm's: Reel Deal's coins off, 0 with Ancient Rod worn (core farmRodCost)", () => {
+  assert.match(SRC, /const rodP = farmRodCost\(_fishFarm, P\("Rod"\), \(_fishLvl && _fishLvl\.inputs && _fishLvl\.inputs\.coinsPerSFL\) \|\| 0\);/);
+});
