@@ -33,6 +33,7 @@ export const LEVELING_ITEMS = [
   item("Saw Fish", "fishing", W, "+5 daily reels"),
   item("Angler Waders", "fishing", W, "+10 daily reels", { tradeable: false }),
   item("Bubble Aura", "fishing", W, "20% chance +1 bait from Fish Market"),
+  item("Ancient Rod", "fishing", W, "cast without a Rod (only the worm is paid)"),
   item("Port bud", "fishing", "bud", "+10% XP from fish (aged too)", { budType: "Port" }),
   item("Sea bud", "fishing", "bud", "10% chance +1 fish", { budType: "Sea" }),
   item("Skill Shrimpy", "fishing", C, "+20% fish XP"),

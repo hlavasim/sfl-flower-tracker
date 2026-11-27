@@ -492,7 +492,9 @@ export function levelingPlan(farm, inputs, config) {
   // it yields, fertiliser included), so this page and FISHING agree; the whole composter only if that fails.
   const wormPrice = (k) => itemMarketValue(k, inputs.prices || {}) || computeBaitCostSFL(k, inputs.prices || {});
   const wormCost = Object.entries(wormMix).reduce((a, [k, v]) => a + v * wormPrice(k), 0);
-  const castCost = computeRodCostSFL(inputs.prices || {}, inputs.coinsPerSFL || 0, skills) + wormCost;
+  // Ancient Rod worn: the cast takes no Rod (castRod.ts getRodCost → 0), only the worm.
+  const rodCost = hasItem(w, "Ancient Rod") ? 0 : computeRodCostSFL(inputs.prices || {}, inputs.coinsPerSFL || 0, skills);
+  const castCost = rodCost + wormCost;
   // Rakes only for the salt the shed uses: salt the nodes could give beyond that is not raked.
   const raked = saltPerDay > 0 ? Math.min(1, saltUsed / saltPerDay) : 0;
   const saltBought = buySalt ? Math.max(0, saltUsed - saltPerDay) : 0;

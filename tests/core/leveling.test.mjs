@@ -5,6 +5,7 @@ import { applyWhatIf, ownedLevelingItems } from "../../core/engine/leveling-what
 import { LEVELING_ITEMS } from "../../core/data/leveling-items.mjs";
 import { computeFishYieldPerCast } from "../../core/engine/cooking-cost.mjs";
 import { detectCookingBoosts } from "../../core/engine/cooking.mjs";
+import { computeRodCostSFL } from "../../core/engine/item-value.mjs";
 import { findCollectible, isWearableEquipped } from "../../core/derive/items.mjs";
 
 const farm = JSON.parse(readFileSync(new URL("../fixtures/farm-155498.json", import.meta.url))).farm;
@@ -115,6 +116,15 @@ test("Walrus adds fish without adding running cost (casts are paid per cast, not
   assert.ok(b.fish.perDay > a.fish.perDay + c.fish.reels * 0.99);
   assert.ok(Math.abs(b.costPerDay - a.costPerDay) < 1e-9);
   assert.ok(Math.abs(b.resaleLoss - (1399 - 1155)) < 1e-9);
+});
+
+test("Ancient Rod: casts need no Rod (castRod getRodCost = 0), so a cast costs only its worm", () => {
+  const c = cfg(), a = plan(c), b = plan({ ...c, ticked: ["Ancient Rod"] });
+  const rod = computeRodCostSFL(prices, inputs.coinsPerSFL, (farm.bumpkin || {}).skills || {});
+  assert.ok(rod > 0);
+  assert.ok(Math.abs(a.fish.castCost - b.fish.castCost - rod) < 1e-9, `${a.fish.castCost} - ${b.fish.castCost} vs ${rod}`);
+  assert.ok(b.costPerDay < a.costPerDay);
+  assert.ok(LEVELING_ITEMS.some((i) => i.name === "Ancient Rod" && i.kind === "wearable"));
 });
 
 test("target already reached: 0 days, 0 FLOWER", () => {
