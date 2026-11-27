@@ -34,7 +34,7 @@ async function renderBoardWith(boardsJson, { slowLeveling = false, page = "board
     : slowLeveling ? new Promise(() => {}) : Promise.resolve({ ok: false, status: 503, json: async () => ({}) })) });
   globalThis.__widgets = createHost({ registry: WIDGETS, storage });
   const app = { innerHTML: "", querySelector: () => null };
-  const stub = () => ({ innerHTML: "", style: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
+  const stub = () => ({ innerHTML: "", style: { setProperty() {} }, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     appendChild() {}, addEventListener() {}, setAttribute() {}, querySelector: () => null, querySelectorAll: () => [], dataset: {} });
   const els = { app };
   const doc = { getElementById: (id) => els[id] || (els[id] = stub()), querySelector: () => null, querySelectorAll: () => [],
@@ -229,4 +229,14 @@ test("Columns: the control says when the screen fits fewer than set, and − sta
   assert.match(fit({ clientWidth: 900 }, "main"), /· 4 fit</);       // a tablet: 4 of the 6 set
   assert.strictEqual(fit({ clientWidth: 1400 }, "main"), "");          // a desktop shows all 6
   assert.match(SRC, /__widgets\.setBoardCols\(b\.id, d < 0 \? Math\.min\(cur, live\) - 1 : cur \+ 1\)/);
+});
+
+test("a board widens the page to its columns at full size (170 px + 16 px gap each), other pages keep 960 px", () => {
+  assert.match(SRC, /document\.body\.classList\.toggle\("board-page", page === "board"\);/);
+  assert.match(SRC, /body\.board-page \.container \{ max-width: max\(960px, min\(96vw, var\(--board-w, 960px\)\)\); \}/);
+  assert.match(SRC, /document\.body\.style\.setProperty\("--board-w", __widgets\.colsOf\(boardId\) \* 186 \+ 8 \+ "px"\);/);
+  // 7 columns: the app is 1310 − 24 = 1286 px, which fits all 7 (none "· N fit")
+  const grab = (name) => { const a = SRC.indexOf(`function ${name}(`); let d = 0, k = SRC.indexOf("{", a); for (; k < SRC.length; k++) { if (SRC[k] === "{") d++; else if (SRC[k] === "}" && !--d) break; } return SRC.slice(a, k + 1); };
+  const live = new Function("window", `${grab("_wLiveCols")}\nreturn _wLiveCols;`)({ innerWidth: 1906 });
+  assert.strictEqual(live({ clientWidth: 7 * 186 + 8 - 24 }, 7), 7);
 });

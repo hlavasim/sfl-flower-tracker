@@ -69,6 +69,8 @@
     /* Wide mode (ultrawide monitors): the 960px column is a phone-first default. A small ↔ toggle,
        only shown on wide screens, lets the page use the window; the choice is kept per browser. */
     body.wide .container { max-width: min(96vw, 2400px); }
+    /* A board is as wide as its columns at full size (renderBoard sets --board-w), up to the window. */
+    body.board-page .container { max-width: max(960px, min(96vw, var(--board-w, 960px))); }
     #wide-toggle { position: fixed; top: 6px; right: 8px; z-index: 50; background: rgba(0,0,0,0.35); color: var(--text-dim);
       border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; font: 11px monospace; padding: 2px 6px; cursor: pointer; opacity: 0.45; }
     #wide-toggle:hover { opacity: 1; }
@@ -16005,6 +16007,8 @@
       const want = new URLSearchParams(window.location.search).get("board") || d0.last;
       const board = d0.boards.find((b) => b.id === want) || d0.boards[0];
       const boardId = board.id;
+      // the page widens to fit the set columns at full size: 170 px a cell + 16 px gap, + the padding
+      document.body.style.setProperty("--board-w", __widgets.colsOf(boardId) * 186 + 8 + "px");
       __widgets.visit(boardId);   // the 📌 menu lists this board first next time
       const head = '<div class="w-page-head"><h1>📌 ' + escHTML(board.name) + '</h1><div class="sub">Farm #' + escHTML(FARM_ID) +
           ' · your widgets, each with its own ⚙ settings</div>' + _wBoardSwitcher(boardId, `<span class="w-cols-ctl" title="how many small widgets fit side by side on this board">Columns ` +
@@ -19069,6 +19073,7 @@
       if (!FARM_ID || _welcomeOpen) { renderWelcome(); return; }
       renderNavBar(page);
       renderDonate();
+      document.body.classList.toggle("board-page", page === "board");
 
       // WORLD describes every farm in the game, not the configured one, so it renders
       // without a farm id and without paying for the personal farm fetch.

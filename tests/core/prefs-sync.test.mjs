@@ -18,7 +18,7 @@ const SCRIPT = SRC.slice(SRC.indexOf("<script>") + 8, SRC.lastIndexOf("</script>
 function page(store, server, opts = {}) {
   const posts = [], inits = [], listeners = {};
   const stubEl = (id) => ({
-    id: id || "", innerHTML: "", textContent: "", className: "", style: { cssText: "" },
+    id: id || "", innerHTML: "", textContent: "", className: "", style: { cssText: "", setProperty() {} },
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     appendChild() {}, insertBefore() {}, addEventListener() {}, setAttribute() {},
     removeAttribute() {}, focus() {}, scrollIntoView() {}, querySelector: () => null, querySelectorAll: () => [],
